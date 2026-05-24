@@ -7,7 +7,7 @@ The package is intended for users who want to run the exported streaming Zipform
 ## Directory Layout
 
 ```text
-deployment/
+X-ASR-zh-en/deployment/
 ├── requirements.txt                 # Python dependencies
 ├── infer_and_client/
 │   ├── sherpa_streaming_infer.py    # sherpa-onnx wrapper and text formatting
@@ -301,7 +301,7 @@ Each WebSocket connection creates one streaming ASR session. Long-running sessio
 Run the server with the 160 ms model:
 
 ```bash
-cd deployment
+cd X-ASR-zh-en/deployment
 source .venv/bin/activate
 
 python infer_and_client/sherpa_streaming_server.py \
@@ -322,7 +322,7 @@ python infer_and_client/sherpa_streaming_server.py \
 In another terminal, test it with a WAV file:
 
 ```bash
-cd deployment
+cd X-ASR-zh-en/deployment
 source .venv/bin/activate
 
 python infer_and_client/sherpa_streaming_client.py \
@@ -504,7 +504,7 @@ For a simple server deployment, use `tmux`:
 
 ```bash
 tmux new-session -d -s streaming-asr \
-  'cd /path/to/deployment && source .venv/bin/activate && python infer_and_client/sherpa_streaming_server.py \
+  'cd /path/to/X-ASR-Series/X-ASR-zh-en/deployment && source .venv/bin/activate && python infer_and_client/sherpa_streaming_server.py \
     --host 0.0.0.0 \
     --port 8766 \
     --tokens models/chunk-160ms-model/tokens.txt \

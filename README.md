@@ -130,7 +130,7 @@ python -m pip install -r requirements.txt
 Run the server with the 160 ms model:
 
 ```bash
-cd deployment
+cd X-ASR-zh-en/deployment
 source .venv/bin/activate
 
 python infer_and_client/sherpa_streaming_server.py \
@@ -153,7 +153,7 @@ python infer_and_client/sherpa_streaming_server.py \
 In another terminal:
 
 ```bash
-cd deployment
+cd X-ASR-zh-en/deployment
 source .venv/bin/activate
 
 python infer_and_client/sherpa_streaming_client.py \
@@ -168,20 +168,21 @@ The client sends 16 kHz mono int16 PCM chunks over WebSocket and prints partial 
 ## Directory Layout
 
 ```text
-deployment/
-├── infer_and_client/
-│   ├── sherpa_streaming_infer.py    # sherpa-onnx wrapper and text formatting
-│   ├── sherpa_streaming_server.py   # WebSocket streaming ASR server
-│   └── sherpa_streaming_client.py   # WAV-file WebSocket test client
-└── models/
-    ├── chunk-160ms-model/
-    │   ├── encoder-160ms.onnx
-    │   ├── decoder-160ms.onnx
-    │   ├── joiner-160ms.onnx
-    │   └── tokens.txt
-    ├── chunk-480ms-model/
-    ├── chunk-960ms-model/
-    └── chunk-1920ms-model/
+X-ASR-zh-en/
+└── deployment/
+    ├── infer_and_client/
+    │   ├── sherpa_streaming_infer.py    # sherpa-onnx wrapper and text formatting
+    │   ├── sherpa_streaming_server.py   # WebSocket streaming ASR server
+    │   └── sherpa_streaming_client.py   # WAV-file WebSocket test client
+    └── models/
+        ├── chunk-160ms-model/
+        │   ├── encoder-160ms.onnx
+        │   ├── decoder-160ms.onnx
+        │   ├── joiner-160ms.onnx
+        │   └── tokens.txt
+        ├── chunk-480ms-model/
+        ├── chunk-960ms-model/
+        └── chunk-1920ms-model/
 ```
 
 ## Model Variants
