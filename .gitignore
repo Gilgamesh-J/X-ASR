@@ -11,11 +11,3 @@ venv/
 *.log
 logs/
 *.tmp
-
-# Keep large model artifacts on Hugging Face instead of GitHub.
-*.onnx
-*.pt
-*.pth
-*.ckpt
-*.safetensors
-
