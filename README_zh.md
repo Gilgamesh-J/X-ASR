@@ -62,7 +62,7 @@
 ## 📅 时间线
 
 | 状态 | 事项 | 说明 |
-|---|---|---|
+|:---:|:---:|:---:|
 | ✅ 已发布 | `X-ASR-zh-en` 初始版本 | 已发布中英文离线-流式一体化 ASR 模型、sherpa-onnx 部署文件和在线 Demo。 |
 | 📄 Coming Soon | `X-ASR-zh-en` 工作报告 | 将补充训练方案、模型结构、评测协议、部署细节和消融分析。 |
 | 🌏 近期计划 | 泰语、印尼语、越南语 ASR | 下一批流式 ASR 语言模型正在准备中。 |
@@ -73,13 +73,13 @@
 ## 📦 模型发布
 
 | 模型 | 语言 | 类型 | 流式 chunk | 部署 | 工作报告 | 模型文件 |
-|---|---|---|---|---|---|---|
+|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | `X-ASR-zh-en` | 中文、英文 | 离线-流式一体化 transducer ASR | 160 ms, 480 ms, 960 ms, 1920 ms | sherpa-onnx | **Coming Soon** | [GitHub](X-ASR-zh-en/deployment), [Hugging Face](https://huggingface.co/GilgameshWind/icefall_X_ASR_streaming) |
 
 ## ⭐ 核心特性
 
 | 类别 | 说明 |
-|---|---|
+|:---:|:---:|
 | **训练框架** | icefall / k2 |
 | **模型架构** | Zipformer transducer |
 | **训练规模** | 约 100 万小时开源及收集语音数据 |
@@ -99,64 +99,64 @@
 <table>
   <thead>
     <tr>
-      <th rowspan="2">模式</th>
-      <th rowspan="2">Chunk size</th>
-      <th colspan="2">LibriSpeech</th>
-      <th rowspan="2">GigaSpeech</th>
-      <th colspan="2">WenetSpeech</th>
+      <th align="center" rowspan="2">模式</th>
+      <th align="center" rowspan="2">Chunk size</th>
+      <th align="center" colspan="2">LibriSpeech</th>
+      <th align="center" rowspan="2">GigaSpeech</th>
+      <th align="center" colspan="2">WenetSpeech</th>
     </tr>
     <tr>
-      <th>clean</th>
-      <th>other</th>
-      <th>net</th>
-      <th>meeting</th>
+      <th align="center">clean</th>
+      <th align="center">other</th>
+      <th align="center">net</th>
+      <th align="center">meeting</th>
     </tr>
   </thead>
   <tbody>
     <tr>
-      <td>Streaming</td>
-      <td>160 ms</td>
-      <td>3.91</td>
-      <td>10.17</td>
-      <td>10.97</td>
-      <td>9.45</td>
-      <td>12.04</td>
+      <td align="center">Streaming</td>
+      <td align="center">160 ms</td>
+      <td align="center">3.91</td>
+      <td align="center">10.17</td>
+      <td align="center">10.97</td>
+      <td align="center">9.45</td>
+      <td align="center">12.04</td>
     </tr>
     <tr>
-      <td>Streaming</td>
-      <td>480 ms</td>
-      <td>3.14</td>
-      <td>7.57</td>
-      <td>9.77</td>
-      <td>7.38</td>
-      <td>9.31</td>
+      <td align="center">Streaming</td>
+      <td align="center">480 ms</td>
+      <td align="center">3.14</td>
+      <td align="center">7.57</td>
+      <td align="center">9.77</td>
+      <td align="center">7.38</td>
+      <td align="center">9.31</td>
     </tr>
     <tr>
-      <td>Streaming</td>
-      <td>960 ms</td>
-      <td>3.12</td>
-      <td>7.22</td>
-      <td>9.62</td>
-      <td>6.96</td>
-      <td>8.84</td>
+      <td align="center">Streaming</td>
+      <td align="center">960 ms</td>
+      <td align="center">3.12</td>
+      <td align="center">7.22</td>
+      <td align="center">9.62</td>
+      <td align="center">6.96</td>
+      <td align="center">8.84</td>
     </tr>
     <tr>
-      <td>Streaming</td>
-      <td>1920 ms</td>
-      <td>2.84</td>
-      <td>6.47</td>
-      <td>9.46</td>
-      <td>6.42</td>
-      <td>8.03</td>
+      <td align="center">Streaming</td>
+      <td align="center">1920 ms</td>
+      <td align="center">2.84</td>
+      <td align="center">6.47</td>
+      <td align="center">9.46</td>
+      <td align="center">6.42</td>
+      <td align="center">8.03</td>
     </tr>
     <tr>
-      <td>Offline</td>
-      <td>-</td>
-      <td><b>2.69</b></td>
-      <td><b>5.76</b></td>
-      <td><b>9.23</b></td>
-      <td><b>5.96</b></td>
-      <td><b>7.20</b></td>
+      <td align="center">Offline</td>
+      <td align="center">-</td>
+      <td align="center"><b>2.69</b></td>
+      <td align="center"><b>5.76</b></td>
+      <td align="center"><b>9.23</b></td>
+      <td align="center"><b>5.96</b></td>
+      <td align="center"><b>7.20</b></td>
     </tr>
   </tbody>
 </table>

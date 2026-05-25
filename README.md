@@ -62,7 +62,7 @@
 ## 📅 Timeline
 
 | Status | Item | Details |
-|---|---|---|
+|:---:|:---:|:---:|
 | ✅ Released | `X-ASR-zh-en` initial release | Chinese-English offline-streaming unified ASR models, sherpa-onnx deployment artifacts, and online demo are available. |
 | 📄 Coming Soon | `X-ASR-zh-en` technical report | Training recipe, model architecture, evaluation protocol, deployment details, and ablation analysis will be released. |
 | 🌏 Upcoming | Thai, Indonesian, and Vietnamese ASR | Streaming ASR models for the next language releases are under preparation. |
@@ -73,13 +73,13 @@
 ## 📦 Model Releases
 
 | Model | Languages | Type | Streaming chunks | Deployment | Report | Model files |
-|---|---|---|---|---|---|---|
+|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | `X-ASR-zh-en` | Chinese, English | Offline-streaming unified transducer ASR | 160 ms, 480 ms, 960 ms, 1920 ms | sherpa-onnx | **Coming Soon** | [GitHub](X-ASR-zh-en/deployment), [Hugging Face](https://huggingface.co/GilgameshWind/icefall_X_ASR_streaming) |
 
 ## ⭐ Highlights
 
 | Category | Description |
-|---|---|
+|:---:|:---:|
 | **Framework** | icefall / k2 |
 | **Architecture** | Zipformer transducer |
 | **Training scale** | Approximately 1 million hours of open-source and collected speech data |
@@ -99,64 +99,64 @@ The following results are for the current **X-ASR-zh-en** release. Values are **
 <table>
   <thead>
     <tr>
-      <th rowspan="2">Mode</th>
-      <th rowspan="2">Chunk size</th>
-      <th colspan="2">LibriSpeech</th>
-      <th rowspan="2">GigaSpeech</th>
-      <th colspan="2">WenetSpeech</th>
+      <th align="center" rowspan="2">Mode</th>
+      <th align="center" rowspan="2">Chunk size</th>
+      <th align="center" colspan="2">LibriSpeech</th>
+      <th align="center" rowspan="2">GigaSpeech</th>
+      <th align="center" colspan="2">WenetSpeech</th>
     </tr>
     <tr>
-      <th>clean</th>
-      <th>other</th>
-      <th>net</th>
-      <th>meeting</th>
+      <th align="center">clean</th>
+      <th align="center">other</th>
+      <th align="center">net</th>
+      <th align="center">meeting</th>
     </tr>
   </thead>
   <tbody>
     <tr>
-      <td>Streaming</td>
-      <td>160 ms</td>
-      <td>3.91</td>
-      <td>10.17</td>
-      <td>10.97</td>
-      <td>9.45</td>
-      <td>12.04</td>
+      <td align="center">Streaming</td>
+      <td align="center">160 ms</td>
+      <td align="center">3.91</td>
+      <td align="center">10.17</td>
+      <td align="center">10.97</td>
+      <td align="center">9.45</td>
+      <td align="center">12.04</td>
     </tr>
     <tr>
-      <td>Streaming</td>
-      <td>480 ms</td>
-      <td>3.14</td>
-      <td>7.57</td>
-      <td>9.77</td>
-      <td>7.38</td>
-      <td>9.31</td>
+      <td align="center">Streaming</td>
+      <td align="center">480 ms</td>
+      <td align="center">3.14</td>
+      <td align="center">7.57</td>
+      <td align="center">9.77</td>
+      <td align="center">7.38</td>
+      <td align="center">9.31</td>
     </tr>
     <tr>
-      <td>Streaming</td>
-      <td>960 ms</td>
-      <td>3.12</td>
-      <td>7.22</td>
-      <td>9.62</td>
-      <td>6.96</td>
-      <td>8.84</td>
+      <td align="center">Streaming</td>
+      <td align="center">960 ms</td>
+      <td align="center">3.12</td>
+      <td align="center">7.22</td>
+      <td align="center">9.62</td>
+      <td align="center">6.96</td>
+      <td align="center">8.84</td>
     </tr>
     <tr>
-      <td>Streaming</td>
-      <td>1920 ms</td>
-      <td>2.84</td>
-      <td>6.47</td>
-      <td>9.46</td>
-      <td>6.42</td>
-      <td>8.03</td>
+      <td align="center">Streaming</td>
+      <td align="center">1920 ms</td>
+      <td align="center">2.84</td>
+      <td align="center">6.47</td>
+      <td align="center">9.46</td>
+      <td align="center">6.42</td>
+      <td align="center">8.03</td>
     </tr>
     <tr>
-      <td>Offline</td>
-      <td>-</td>
-      <td><b>2.69</b></td>
-      <td><b>5.76</b></td>
-      <td><b>9.23</b></td>
-      <td><b>5.96</b></td>
-      <td><b>7.20</b></td>
+      <td align="center">Offline</td>
+      <td align="center">-</td>
+      <td align="center"><b>2.69</b></td>
+      <td align="center"><b>5.76</b></td>
+      <td align="center"><b>9.23</b></td>
+      <td align="center"><b>5.96</b></td>
+      <td align="center"><b>7.20</b></td>
     </tr>
   </tbody>
 </table>
