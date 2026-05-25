@@ -49,7 +49,7 @@ This repository currently releases an initial batch of **Chinese-English streami
 
 ### X-ASR-zh-en
 
-**X-ASR-zh-en** is trained on approximately **1 million hours** of open-source and collected speech data. It is designed as an **offline-streaming unified transducer ASR model**, supporting both **offline decoding** and **true streaming decoding**.
+**X-ASR-zh-en** is trained on approximately **1 million hours** of open-source and collected speech data. It is designed as an **offline-streaming unified transducer ASR model**, supporting both **offline decoding** and **streaming decoding**.
 
 The model supports multiple streaming chunk sizes: **160 ms**, **480 ms**, **960 ms**, and **1920 ms**. It supports **punctuation and casing**, and can be deployed with **sherpa-onnx**.
 
