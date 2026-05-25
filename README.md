@@ -23,6 +23,7 @@
   <a href="#overview">Overview</a> |
   <a href="#timeline">Timeline</a> |
   <a href="#model-releases">Model Releases</a> |
+  <a href="#organizations">Organizations</a> |
   <a href="#evaluation">Evaluation</a> |
   <a href="#quick-start">Quick Start</a> |
   <a href="#roadmap">Roadmap</a>
@@ -74,6 +75,17 @@ The model supports multiple streaming chunk sizes: **160 ms**, **480 ms**, **960
 | **Runtime** | sherpa-onnx |
 | **Interface** | WebSocket streaming server and WAV-file client |
 
+## Organizations
+
+The X-ASR series is developed and maintained with contributions from the following institutions:
+
+| Institution | Abbreviation |
+|---|---|
+| Shanghai Jiao Tong University | SJTU |
+| Fudan University | Fudan |
+| Shanghai Innovation Institute | SII |
+| Huazhong University of Science and Technology | HUST |
+
 ## Evaluation
 
 The following results are for the current **X-ASR-zh-en** release. Values are **WER/CER percentages**; lower is better. All results are reported with **greedy search**.
@@ -97,15 +109,6 @@ The following results are for the current **X-ASR-zh-en** release. Values are **
     </tr>
   </thead>
   <tbody>
-    <tr>
-      <td>Offline</td>
-      <td align="center">-</td>
-      <td align="right"><b>2.69</b></td>
-      <td align="right"><b>5.76</b></td>
-      <td align="right"><b>9.23</b></td>
-      <td align="right"><b>5.96</b></td>
-      <td align="right"><b>7.20</b></td>
-    </tr>
     <tr>
       <td>Streaming</td>
       <td align="center">160 ms</td>
@@ -141,6 +144,15 @@ The following results are for the current **X-ASR-zh-en** release. Values are **
       <td align="right">9.46</td>
       <td align="right">6.42</td>
       <td align="right">8.03</td>
+    </tr>
+    <tr>
+      <td>Offline</td>
+      <td align="center">-</td>
+      <td align="right"><b>2.69</b></td>
+      <td align="right"><b>5.76</b></td>
+      <td align="right"><b>9.23</b></td>
+      <td align="right"><b>5.96</b></td>
+      <td align="right"><b>7.20</b></td>
     </tr>
   </tbody>
 </table>

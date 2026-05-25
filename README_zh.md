@@ -23,6 +23,7 @@
   <a href="#项目概览">项目概览</a> |
   <a href="#时间线">时间线</a> |
   <a href="#模型发布">模型发布</a> |
+  <a href="#参与机构">参与机构</a> |
   <a href="#评测结果">评测结果</a> |
   <a href="#快速开始">快速开始</a> |
   <a href="#后续计划">后续计划</a>
@@ -74,6 +75,17 @@
 | **部署运行时** | sherpa-onnx |
 | **接口形式** | WebSocket 流式服务端和 WAV 文件测试客户端 |
 
+## 参与机构
+
+X-ASR 系列由以下机构共同参与开发与维护：
+
+| 机构 | 简称 |
+|---|---|
+| 上海交通大学 | 上交 |
+| 复旦大学 | 复旦 |
+| 上海创智学院 | 上海创智 |
+| 华中科技大学 | 华科 |
+
 ## 评测结果
 
 以下结果对应当前 **X-ASR-zh-en** 版本。表中数值为 **WER/CER 百分比**，越低越好。所有结果均使用 **greedy search**。
@@ -97,15 +109,6 @@
     </tr>
   </thead>
   <tbody>
-    <tr>
-      <td>Offline</td>
-      <td align="center">-</td>
-      <td align="right"><b>2.69</b></td>
-      <td align="right"><b>5.76</b></td>
-      <td align="right"><b>9.23</b></td>
-      <td align="right"><b>5.96</b></td>
-      <td align="right"><b>7.20</b></td>
-    </tr>
     <tr>
       <td>Streaming</td>
       <td align="center">160 ms</td>
@@ -141,6 +144,15 @@
       <td align="right">9.46</td>
       <td align="right">6.42</td>
       <td align="right">8.03</td>
+    </tr>
+    <tr>
+      <td>Offline</td>
+      <td align="center">-</td>
+      <td align="right"><b>2.69</b></td>
+      <td align="right"><b>5.76</b></td>
+      <td align="right"><b>9.23</b></td>
+      <td align="right"><b>5.96</b></td>
+      <td align="right"><b>7.20</b></td>
     </tr>
   </tbody>
 </table>
