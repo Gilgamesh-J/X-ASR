@@ -42,11 +42,15 @@
 
 ## 🔍 Overview
 
-**X-ASR** is a series of automatic speech recognition models based on the **icefall** framework. The series focuses on **streaming ASR** with **low-latency deployment**, and also supports offline recognition. This repository currently releases an initial batch of **Chinese-English streaming ASR models**. The X-ASR series will be continuously updated and scaled across **languages**, **model architectures**, and **training data**.
+**X-ASR** is a series of automatic speech recognition models built with the **icefall** framework. The series focuses on **streaming ASR** and **low-latency deployment**, while also supporting offline recognition.
+
+This repository currently releases an initial batch of **Chinese-English streaming ASR models**. The X-ASR series will be continuously maintained, updated, and scaled across **languages**, **model architectures**, and **training data**.
 
 ### X-ASR-zh-en
 
-**X-ASR-zh-en** is trained on approximately **1 million hours** of open-source and collected speech data. It is designed as an **offline-streaming unified transducer ASR model** with **zipformer architecture**", supporting both **offline decoding** and **streaming decoding**. The model supports multiple streaming chunk sizes: **160 ms**, **480 ms**, **960 ms**, and **1920 ms**. It supports **punctuation and casing**, and can be deployed with **sherpa-onnx**.
+**X-ASR-zh-en** is trained on approximately **1 million hours** of open-source and collected speech data. It is designed as an **offline-streaming unified transducer ASR model** with the **Zipformer architecture**, supporting both **offline decoding** and **true streaming decoding**.
+
+The model supports multiple streaming chunk sizes: **160 ms**, **480 ms**, **960 ms**, and **1920 ms**. It supports **punctuation and casing**, and can be conveniently deployed with **sherpa-onnx**.
 
 <p align="center">
   <img src="assets/figures/zipformer.png" width="700" alt="Zipformer architecture">
