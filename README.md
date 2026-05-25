@@ -1,4 +1,4 @@
-<h1 align="center">X-ASR Series</h1>
+<h1 align="center">🎙️ X-ASR Series</h1>
 
 <p align="center">
   <b>Streaming-focused automatic speech recognition models based on icefall/k2, Zipformer, and sherpa-onnx.</b>
@@ -6,15 +6,18 @@
 
 <p align="center">
   <sub>
-    Shanghai Jiao Tong University &nbsp;·&nbsp; Fudan University &nbsp;·&nbsp; Shanghai Innovation Institute &nbsp;·&nbsp; Huazhong University of Science and Technology
+    🏛️ Shanghai Jiao Tong University &nbsp;·&nbsp; Fudan University &nbsp;·&nbsp; Shanghai Innovation Institute &nbsp;·&nbsp; Huazhong University of Science and Technology
   </sub>
 </p>
 
 <p align="center">
-  <a href="README_zh.md">中文版</a> |
-  <a href="https://huggingface.co/GilgameshWind/icefall_X_ASR_streaming">Hugging Face</a> |
-  <a href="https://stream-asr.sjtuxlance.com/">Online Demo</a> |
-  <a href="X-ASR-zh-en/deployment/README.md">Deployment Guide</a>
+  <b>🌐 <a href="README_zh.md">中文版 README</a></b>
+</p>
+
+<p align="center">
+  <a href="https://huggingface.co/GilgameshWind/icefall_X_ASR_streaming">🤗 Hugging Face</a> |
+  <a href="https://stream-asr.sjtuxlance.com/">🎧 Online Demo</a> |
+  <a href="X-ASR-zh-en/deployment/README.md">🚀 Deployment Guide</a>
 </p>
 
 <p align="center">
@@ -26,17 +29,19 @@
 </p>
 
 <p align="center">
-  <a href="#overview">Overview</a> |
-  <a href="#timeline">Timeline</a> |
-  <a href="#model-releases">Model Releases</a> |
-  <a href="#evaluation">Evaluation</a> |
-  <a href="#quick-start">Quick Start</a> |
-  <a href="#roadmap">Roadmap</a>
+  <a href="#overview">🔍 Overview</a> |
+  <a href="#timeline">📅 Timeline</a> |
+  <a href="#model-releases">📦 Model Releases</a> |
+  <a href="#evaluation">📊 Evaluation</a> |
+  <a href="#quick-start">🚀 Quick Start</a> |
+  <a href="#roadmap">🧭 Roadmap</a>
 </p>
 
 ---
 
-## Overview
+<a id="overview"></a>
+
+## 🔍 Overview
 
 **X-ASR** is a series of automatic speech recognition models based on the **icefall** framework. The series focuses on **streaming ASR** and **low-latency deployment**, while also supporting offline recognition.
 
@@ -52,7 +57,9 @@ The model supports multiple streaming chunk sizes: **160 ms**, **480 ms**, **960
   <img src="https://huggingface.co/GilgameshWind/icefall_X_ASR_streaming/resolve/main/figure/zipformer.png" width="700" alt="Zipformer architecture">
 </p>
 
-## Timeline
+<a id="timeline"></a>
+
+## 📅 Timeline
 
 | Time | Update |
 |---|---|
@@ -60,13 +67,15 @@ The model supports multiple streaming chunk sizes: **160 ms**, **480 ms**, **960
 | Coming soon | Streaming ASR releases for Thai, Indonesian, and Vietnamese. |
 | Ongoing | Model scaling, architecture improvements, data refinement, and more stable punctuation/casing. |
 
-## Model Releases
+<a id="model-releases"></a>
+
+## 📦 Model Releases
 
 | Model | Languages | Type | Streaming chunks | Deployment | Model files |
 |---|---|---|---|---|---|
 | `X-ASR-zh-en` | Chinese, English | Offline-streaming unified transducer ASR | 160 ms, 480 ms, 960 ms, 1920 ms | sherpa-onnx | [GitHub](X-ASR-zh-en/deployment), [Hugging Face](https://huggingface.co/GilgameshWind/icefall_X_ASR_streaming) |
 
-## Highlights
+## ⭐ Highlights
 
 | Category | Description |
 |---|---|
@@ -80,7 +89,9 @@ The model supports multiple streaming chunk sizes: **160 ms**, **480 ms**, **960
 | **Runtime** | sherpa-onnx |
 | **Interface** | WebSocket streaming server and WAV-file client |
 
-## Evaluation
+<a id="evaluation"></a>
+
+## 📊 Evaluation
 
 The following results are for the current **X-ASR-zh-en** release. Values are **WER/CER percentages**; lower is better. All results are reported with **greedy search**.
 
@@ -155,7 +166,7 @@ The following results are for the current **X-ASR-zh-en** release. Values are **
 
 **Note:** Bold numbers indicate the best result among the listed modes for each benchmark column.
 
-## Demo
+## 🎧 Demo
 
 A **sherpa-onnx based online demo** is available here:
 
@@ -165,7 +176,9 @@ Demo video:
 
 <video controls width="70%" src="https://huggingface.co/GilgameshWind/icefall_X_ASR_streaming/resolve/main/demo/demo.mov"></video>
 
-## Quick Start
+<a id="quick-start"></a>
+
+## 🚀 Quick Start
 
 ### 1. Clone the repository
 
@@ -234,7 +247,7 @@ The client sends **16 kHz mono int16 PCM chunks** over WebSocket and prints part
 
 For full deployment options, see [X-ASR-zh-en/deployment/README.md](X-ASR-zh-en/deployment/README.md).
 
-## Repository Layout
+## 🗂️ Repository Layout
 
 ```text
 X-ASR/
@@ -256,7 +269,7 @@ X-ASR/
             `-- chunk-1920ms-model/
 ```
 
-## Model Variants
+## 🧩 Model Variants
 
 | Directory | Intended chunk size | Recommended use |
 |---|---:|---|
@@ -265,7 +278,9 @@ X-ASR/
 | `X-ASR-zh-en/deployment/models/chunk-960ms-model` | 960 ms | More stable output, higher latency |
 | `X-ASR-zh-en/deployment/models/chunk-1920ms-model` | 1920 ms | Highest context among the provided models, highest latency |
 
-## Roadmap
+<a id="roadmap"></a>
+
+## 🧭 Roadmap
 
 The X-ASR series will be continuously maintained and expanded in the following directions:
 
@@ -275,7 +290,7 @@ The X-ASR series will be continuously maintained and expanded in the following d
 - **Punctuation and casing**: Improve the stability of punctuation and casing prediction in future releases.
 - **Deployment**: Improve sherpa-onnx based deployment examples and production usability.
 
-## Contributing
+## 🤝 Contributing
 
 We welcome feedback and contributions in the following areas:
 
@@ -287,11 +302,11 @@ We welcome feedback and contributions in the following areas:
 
 When reporting deployment problems, please include the **environment**, **command**, **input audio format**, and **error log**.
 
-## License
+## 📜 License
 
 This project is released under the **Apache-2.0 License**.
 
-## Acknowledgements
+## 🙏 Acknowledgements
 
 This model series is trained with **icefall** and deployed with **sherpa-onnx**.
 

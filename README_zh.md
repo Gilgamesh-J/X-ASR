@@ -1,4 +1,4 @@
-<h1 align="center">X-ASR 系列</h1>
+<h1 align="center">🎙️ X-ASR 系列</h1>
 
 <p align="center">
   <b>基于 icefall/k2、Zipformer 和 sherpa-onnx 的流式语音识别模型系列。</b>
@@ -6,15 +6,18 @@
 
 <p align="center">
   <sub>
-    上海交通大学 &nbsp;·&nbsp; 复旦大学 &nbsp;·&nbsp; 上海创智学院 &nbsp;·&nbsp; 华中科技大学
+    🏛️ 上海交通大学 &nbsp;·&nbsp; 复旦大学 &nbsp;·&nbsp; 上海创智学院 &nbsp;·&nbsp; 华中科技大学
   </sub>
 </p>
 
 <p align="center">
-  <a href="README.md">English</a> |
-  <a href="https://huggingface.co/GilgameshWind/icefall_X_ASR_streaming">Hugging Face</a> |
-  <a href="https://stream-asr.sjtuxlance.com/">在线 Demo</a> |
-  <a href="X-ASR-zh-en/deployment/README.md">部署文档</a>
+  <b>🌐 <a href="README.md">English README</a></b>
+</p>
+
+<p align="center">
+  <a href="https://huggingface.co/GilgameshWind/icefall_X_ASR_streaming">🤗 Hugging Face</a> |
+  <a href="https://stream-asr.sjtuxlance.com/">🎧 在线 Demo</a> |
+  <a href="X-ASR-zh-en/deployment/README.md">🚀 部署文档</a>
 </p>
 
 <p align="center">
@@ -26,17 +29,19 @@
 </p>
 
 <p align="center">
-  <a href="#项目概览">项目概览</a> |
-  <a href="#时间线">时间线</a> |
-  <a href="#模型发布">模型发布</a> |
-  <a href="#评测结果">评测结果</a> |
-  <a href="#快速开始">快速开始</a> |
-  <a href="#后续计划">后续计划</a>
+  <a href="#项目概览">🔍 项目概览</a> |
+  <a href="#时间线">📅 时间线</a> |
+  <a href="#模型发布">📦 模型发布</a> |
+  <a href="#评测结果">📊 评测结果</a> |
+  <a href="#快速开始">🚀 快速开始</a> |
+  <a href="#后续计划">🧭 后续计划</a>
 </p>
 
 ---
 
-## 项目概览
+<a id="项目概览"></a>
+
+## 🔍 项目概览
 
 **X-ASR** 是一个基于 **icefall** 框架的自动语音识别模型系列，重点面向 **流式 ASR** 和 **低延迟部署**，同时支持离线识别。
 
@@ -52,7 +57,9 @@
   <img src="https://huggingface.co/GilgameshWind/icefall_X_ASR_streaming/resolve/main/figure/zipformer.png" width="700" alt="Zipformer architecture">
 </p>
 
-## 时间线
+<a id="时间线"></a>
+
+## 📅 时间线
 
 | 时间 | 更新 |
 |---|---|
@@ -60,13 +67,15 @@
 | 近期计划 | 发布泰语、印尼语、越南语流式 ASR 模型。 |
 | 持续迭代 | 持续进行模型 scaling、架构优化、数据 refine，以及更稳定的标点和大小写预测。 |
 
-## 模型发布
+<a id="模型发布"></a>
+
+## 📦 模型发布
 
 | 模型 | 语言 | 类型 | 流式 chunk | 部署 | 模型文件 |
 |---|---|---|---|---|---|
 | `X-ASR-zh-en` | 中文、英文 | 离线-流式一体化 transducer ASR | 160 ms, 480 ms, 960 ms, 1920 ms | sherpa-onnx | [GitHub](X-ASR-zh-en/deployment), [Hugging Face](https://huggingface.co/GilgameshWind/icefall_X_ASR_streaming) |
 
-## 核心特性
+## ⭐ 核心特性
 
 | 类别 | 说明 |
 |---|---|
@@ -80,7 +89,9 @@
 | **部署运行时** | sherpa-onnx |
 | **接口形式** | WebSocket 流式服务端和 WAV 文件测试客户端 |
 
-## 评测结果
+<a id="评测结果"></a>
+
+## 📊 评测结果
 
 以下结果对应当前 **X-ASR-zh-en** 版本。表中数值为 **WER/CER 百分比**，越低越好。所有结果均使用 **greedy search**。
 
@@ -155,7 +166,7 @@
 
 **说明：** 加粗数值表示该评测列中当前列出的最佳结果。
 
-## Demo
+## 🎧 Demo
 
 基于 **sherpa-onnx** 的在线 Demo：
 
@@ -165,7 +176,9 @@ Demo 视频：
 
 <video controls width="70%" src="https://huggingface.co/GilgameshWind/icefall_X_ASR_streaming/resolve/main/demo/demo.mov"></video>
 
-## 快速开始
+<a id="快速开始"></a>
+
+## 🚀 快速开始
 
 ### 1. 克隆仓库
 
@@ -234,7 +247,7 @@ python infer_and_client/sherpa_streaming_client.py \
 
 完整部署参数见 [X-ASR-zh-en/deployment/README.md](X-ASR-zh-en/deployment/README.md)。
 
-## 仓库结构
+## 🗂️ 仓库结构
 
 ```text
 X-ASR/
@@ -256,7 +269,7 @@ X-ASR/
             `-- chunk-1920ms-model/
 ```
 
-## 模型变体
+## 🧩 模型变体
 
 | 目录 | 目标 chunk size | 推荐场景 |
 |---|---:|---|
@@ -265,7 +278,9 @@ X-ASR/
 | `X-ASR-zh-en/deployment/models/chunk-960ms-model` | 960 ms | 输出更稳定，延迟更高 |
 | `X-ASR-zh-en/deployment/models/chunk-1920ms-model` | 1920 ms | 上下文最长，延迟最高 |
 
-## 后续计划
+<a id="后续计划"></a>
+
+## 🧭 后续计划
 
 X-ASR 系列会持续维护，并重点扩展以下方向：
 
@@ -275,7 +290,7 @@ X-ASR 系列会持续维护，并重点扩展以下方向：
 - **标点与大小写**：持续优化标点和大小写预测的稳定性。
 - **部署能力**：继续完善 sherpa-onnx 部署示例和生产可用性。
 
-## 贡献
+## 🤝 贡献
 
 欢迎围绕以下方向反馈或贡献：
 
@@ -287,11 +302,11 @@ X-ASR 系列会持续维护，并重点扩展以下方向：
 
 如果反馈部署问题，请提供 **运行环境**、**执行命令**、**输入音频格式** 和 **错误日志**。
 
-## 许可证
+## 📜 许可证
 
 本项目使用 **Apache-2.0 License**。
 
-## 致谢
+## 🙏 致谢
 
 本模型系列基于 **icefall** 训练，并使用 **sherpa-onnx** 部署。
 
