@@ -42,15 +42,11 @@
 
 ## 🔍 Overview
 
-**X-ASR** is a series of automatic speech recognition models built with the **icefall** framework. The series focuses on **streaming ASR** and **low-latency deployment**, while also supporting offline recognition.
-
-This repository currently releases an initial batch of **Chinese-English streaming ASR models**. The X-ASR series will be continuously maintained, updated, and scaled across **languages**, **model architectures**, and **training data**.
+**X-ASR** is a series of automatic speech recognition models built with the **icefall** framework. The series focuses on **streaming ASR** and **low-latency deployment**, while also supporting offline recognition. This repository currently releases an initial batch of **Chinese-English streaming ASR models**, and the X-ASR series will be continuously maintained, updated, and scaled across **languages**, **model architectures**, and **training data**.
 
 ### X-ASR-zh-en
 
-**X-ASR-zh-en** is trained on approximately **1 million hours** of open-source and collected speech data. It is designed as an **offline-streaming unified transducer ASR model** with the **Zipformer architecture**, supporting both **offline decoding** and **true streaming decoding**.
-
-The model supports multiple streaming chunk sizes: **160 ms**, **480 ms**, **960 ms**, and **1920 ms**. It supports **punctuation and casing**, and can be conveniently deployed with **sherpa-onnx**.
+**X-ASR-zh-en** is trained on approximately **1 million hours** of open-source and collected speech data. It is designed as an **offline-streaming unified transducer ASR model** with the **Zipformer architecture**, supporting both **offline decoding** and **true streaming decoding**. The model provides multiple streaming chunk sizes: **160 ms**, **480 ms**, **960 ms**, and **1920 ms**, supports **punctuation and casing**, and can be conveniently deployed with **sherpa-onnx**.
 
 <p align="center">
   <img src="assets/figures/zipformer.png" width="700" alt="Zipformer architecture">
@@ -94,8 +90,6 @@ The model supports multiple streaming chunk sizes: **160 ms**, **480 ms**, **960
 
 The following results are for the current **X-ASR-zh-en** release. Values are **WER/CER percentages**; lower is better. All results are reported with **greedy search**.
 
-<div align="center">
-
 <table>
   <thead>
     <tr>
@@ -108,60 +102,58 @@ The following results are for the current **X-ASR-zh-en** release. Values are **
     <tr>
       <th>clean</th>
       <th>other</th>
-      <th>test net</th>
-      <th>test meeting</th>
+      <th>net</th>
+      <th>meeting</th>
     </tr>
   </thead>
   <tbody>
     <tr>
       <td>Streaming</td>
-      <td align="center">160 ms</td>
-      <td align="right">3.91</td>
-      <td align="right">10.17</td>
-      <td align="right">10.97</td>
-      <td align="right">9.45</td>
-      <td align="right">12.04</td>
+      <td>160 ms</td>
+      <td>3.91</td>
+      <td>10.17</td>
+      <td>10.97</td>
+      <td>9.45</td>
+      <td>12.04</td>
     </tr>
     <tr>
       <td>Streaming</td>
-      <td align="center">480 ms</td>
-      <td align="right">3.14</td>
-      <td align="right">7.57</td>
-      <td align="right">9.77</td>
-      <td align="right">7.38</td>
-      <td align="right">9.31</td>
+      <td>480 ms</td>
+      <td>3.14</td>
+      <td>7.57</td>
+      <td>9.77</td>
+      <td>7.38</td>
+      <td>9.31</td>
     </tr>
     <tr>
       <td>Streaming</td>
-      <td align="center">960 ms</td>
-      <td align="right">3.12</td>
-      <td align="right">7.22</td>
-      <td align="right">9.62</td>
-      <td align="right">6.96</td>
-      <td align="right">8.84</td>
+      <td>960 ms</td>
+      <td>3.12</td>
+      <td>7.22</td>
+      <td>9.62</td>
+      <td>6.96</td>
+      <td>8.84</td>
     </tr>
     <tr>
       <td>Streaming</td>
-      <td align="center">1920 ms</td>
-      <td align="right">2.84</td>
-      <td align="right">6.47</td>
-      <td align="right">9.46</td>
-      <td align="right">6.42</td>
-      <td align="right">8.03</td>
+      <td>1920 ms</td>
+      <td>2.84</td>
+      <td>6.47</td>
+      <td>9.46</td>
+      <td>6.42</td>
+      <td>8.03</td>
     </tr>
     <tr>
       <td>Offline</td>
-      <td align="center">-</td>
-      <td align="right"><b>2.69</b></td>
-      <td align="right"><b>5.76</b></td>
-      <td align="right"><b>9.23</b></td>
-      <td align="right"><b>5.96</b></td>
-      <td align="right"><b>7.20</b></td>
+      <td>-</td>
+      <td><b>2.69</b></td>
+      <td><b>5.76</b></td>
+      <td><b>9.23</b></td>
+      <td><b>5.96</b></td>
+      <td><b>7.20</b></td>
     </tr>
   </tbody>
 </table>
-
-</div>
 
 **Note:** Bold numbers indicate the best result among the listed modes for each benchmark column.
 

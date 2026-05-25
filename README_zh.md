@@ -42,15 +42,11 @@
 
 ## 🔍 项目概览
 
-**X-ASR** 是一个基于 **icefall** 框架构建的自动语音识别模型系列，重点面向 **流式 ASR** 和 **低延迟部署**，同时支持离线识别。
-
-当前仓库释放的是第一批 **中英文流式 ASR 模型**。后续 X-ASR 系列会围绕 **语言覆盖**、**模型架构** 和 **训练数据** 持续维护、更新与扩展。
+**X-ASR** 是一个基于 **icefall** 框架构建的自动语音识别模型系列，重点面向 **流式 ASR** 和 **低延迟部署**，同时支持离线识别。当前仓库释放的是第一批 **中英文流式 ASR 模型**，后续 X-ASR 系列会围绕 **语言覆盖**、**模型架构** 和 **训练数据** 持续维护、更新与扩展。
 
 ### X-ASR-zh-en
 
-**X-ASR-zh-en** 基于约 **100 万小时**开源及收集语音数据训练。模型设计为采用 **Zipformer 架构** 的 **离线-流式一体化 transducer ASR 模型**，同时支持 **离线解码** 和 **真流式解码**。
-
-该模型支持多个流式 chunk size：**160 ms**、**480 ms**、**960 ms** 和 **1920 ms**。模型支持 **标点与大小写**，并可基于 **sherpa-onnx** 便捷部署。
+**X-ASR-zh-en** 基于约 **100 万小时**开源及收集语音数据训练。模型设计为采用 **Zipformer 架构** 的 **离线-流式一体化 transducer ASR 模型**，同时支持 **离线解码** 和 **真流式解码**。该模型提供多个流式 chunk size：**160 ms**、**480 ms**、**960 ms** 和 **1920 ms**，支持 **标点与大小写**，并可基于 **sherpa-onnx** 便捷部署。
 
 <p align="center">
   <img src="assets/figures/zipformer.png" width="700" alt="Zipformer architecture">
@@ -94,8 +90,6 @@
 
 以下结果对应当前 **X-ASR-zh-en** 版本。表中数值为 **WER/CER 百分比**，越低越好。所有结果均使用 **greedy search**。
 
-<div align="center">
-
 <table>
   <thead>
     <tr>
@@ -108,60 +102,58 @@
     <tr>
       <th>clean</th>
       <th>other</th>
-      <th>test net</th>
-      <th>test meeting</th>
+      <th>net</th>
+      <th>meeting</th>
     </tr>
   </thead>
   <tbody>
     <tr>
       <td>Streaming</td>
-      <td align="center">160 ms</td>
-      <td align="right">3.91</td>
-      <td align="right">10.17</td>
-      <td align="right">10.97</td>
-      <td align="right">9.45</td>
-      <td align="right">12.04</td>
+      <td>160 ms</td>
+      <td>3.91</td>
+      <td>10.17</td>
+      <td>10.97</td>
+      <td>9.45</td>
+      <td>12.04</td>
     </tr>
     <tr>
       <td>Streaming</td>
-      <td align="center">480 ms</td>
-      <td align="right">3.14</td>
-      <td align="right">7.57</td>
-      <td align="right">9.77</td>
-      <td align="right">7.38</td>
-      <td align="right">9.31</td>
+      <td>480 ms</td>
+      <td>3.14</td>
+      <td>7.57</td>
+      <td>9.77</td>
+      <td>7.38</td>
+      <td>9.31</td>
     </tr>
     <tr>
       <td>Streaming</td>
-      <td align="center">960 ms</td>
-      <td align="right">3.12</td>
-      <td align="right">7.22</td>
-      <td align="right">9.62</td>
-      <td align="right">6.96</td>
-      <td align="right">8.84</td>
+      <td>960 ms</td>
+      <td>3.12</td>
+      <td>7.22</td>
+      <td>9.62</td>
+      <td>6.96</td>
+      <td>8.84</td>
     </tr>
     <tr>
       <td>Streaming</td>
-      <td align="center">1920 ms</td>
-      <td align="right">2.84</td>
-      <td align="right">6.47</td>
-      <td align="right">9.46</td>
-      <td align="right">6.42</td>
-      <td align="right">8.03</td>
+      <td>1920 ms</td>
+      <td>2.84</td>
+      <td>6.47</td>
+      <td>9.46</td>
+      <td>6.42</td>
+      <td>8.03</td>
     </tr>
     <tr>
       <td>Offline</td>
-      <td align="center">-</td>
-      <td align="right"><b>2.69</b></td>
-      <td align="right"><b>5.76</b></td>
-      <td align="right"><b>9.23</b></td>
-      <td align="right"><b>5.96</b></td>
-      <td align="right"><b>7.20</b></td>
+      <td>-</td>
+      <td><b>2.69</b></td>
+      <td><b>5.76</b></td>
+      <td><b>9.23</b></td>
+      <td><b>5.96</b></td>
+      <td><b>7.20</b></td>
     </tr>
   </tbody>
 </table>
-
-</div>
 
 **说明：** 加粗数值表示该评测列中当前列出的最佳结果。
 
