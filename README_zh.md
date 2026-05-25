@@ -54,7 +54,7 @@
 该模型支持多个流式 chunk size：**160 ms**、**480 ms**、**960 ms** 和 **1920 ms**。模型支持 **标点与大小写**，并可基于 **sherpa-onnx** 快速部署。
 
 <p align="center">
-  <img src="https://huggingface.co/GilgameshWind/icefall_X_ASR_streaming/resolve/main/figure/zipformer.png" width="700" alt="Zipformer architecture">
+  <img src="assets/figures/zipformer.png" width="700" alt="Zipformer architecture">
 </p>
 
 <a id="时间线"></a>
@@ -174,7 +174,7 @@
 
 Demo 视频：
 
-<video controls width="70%" src="https://huggingface.co/GilgameshWind/icefall_X_ASR_streaming/resolve/main/demo/demo.mov"></video>
+<video controls width="70%" src="assets/demos/demo.mov"></video>
 
 <a id="快速开始"></a>
 
@@ -182,7 +182,7 @@ Demo 视频：
 
 ### 1. 克隆仓库
 
-本仓库使用 **Git LFS** 管理 ONNX 模型文件。克隆或拉取模型文件前需要先安装并初始化 Git LFS。
+本仓库使用 **Git LFS** 管理 ONNX 模型文件和 demo 媒体文件。克隆或拉取大文件前需要先安装并初始化 Git LFS。
 
 ```bash
 git lfs install
@@ -254,6 +254,11 @@ X-ASR/
 |-- README.md
 |-- README_zh.md
 |-- LICENSE
+|-- assets/
+|   |-- figures/
+|   |   `-- zipformer.png
+|   `-- demos/
+|       `-- demo.mov
 `-- X-ASR-zh-en/
     `-- deployment/
         |-- README.md

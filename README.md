@@ -50,7 +50,7 @@
 **X-ASR-zh-en** is trained on approximately **1 million hours** of open-source and collected speech data. It is designed as an **offline-streaming unified transducer ASR model** with **zipformer architecture**", supporting both **offline decoding** and **streaming decoding**. The model supports multiple streaming chunk sizes: **160 ms**, **480 ms**, **960 ms**, and **1920 ms**. It supports **punctuation and casing**, and can be deployed with **sherpa-onnx**.
 
 <p align="center">
-  <img src="https://huggingface.co/GilgameshWind/icefall_X_ASR_streaming/resolve/main/figure/zipformer.png" width="700" alt="Zipformer architecture">
+  <img src="assets/figures/zipformer.png" width="700" alt="Zipformer architecture">
 </p>
 
 <a id="timeline"></a>
@@ -170,7 +170,7 @@ A **sherpa-onnx based online demo** is available here:
 
 Demo video:
 
-<video controls width="70%" src="https://huggingface.co/GilgameshWind/icefall_X_ASR_streaming/resolve/main/demo/demo.mov"></video>
+<video controls width="70%" src="assets/demos/demo.mov"></video>
 
 <a id="quick-start"></a>
 
@@ -178,7 +178,7 @@ Demo video:
 
 ### 1. Clone the repository
 
-This repository uses **Git LFS** for ONNX model artifacts. Install Git LFS before cloning or before pulling model files.
+This repository uses **Git LFS** for ONNX model artifacts and demo media. Install Git LFS before cloning or before pulling large files.
 
 ```bash
 git lfs install
@@ -250,6 +250,11 @@ X-ASR/
 |-- README.md
 |-- README_zh.md
 |-- LICENSE
+|-- assets/
+|   |-- figures/
+|   |   `-- zipformer.png
+|   `-- demos/
+|       `-- demo.mov
 `-- X-ASR-zh-en/
     `-- deployment/
         |-- README.md
