@@ -165,7 +165,11 @@
 
 Demo 视频：
 
-<video controls width="70%" src="assets/demos/demo.mov"></video>
+<a href="assets/demos/demo.mov">
+  <img src="assets/figures/demo-preview.png" width="700" alt="X-ASR demo video preview">
+</a>
+
+[打开 Demo 视频](assets/demos/demo.mov)
 
 <a id="快速开始"></a>
 
@@ -247,6 +251,7 @@ X-ASR/
 |-- LICENSE
 |-- assets/
 |   |-- figures/
+|   |   |-- demo-preview.png
 |   |   `-- zipformer.png
 |   `-- demos/
 |       `-- demo.mov

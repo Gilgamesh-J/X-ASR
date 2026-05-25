@@ -165,7 +165,11 @@ A **sherpa-onnx based online demo** is available here:
 
 Demo video:
 
-<video controls width="70%" src="assets/demos/demo.mov"></video>
+<a href="assets/demos/demo.mov">
+  <img src="assets/figures/demo-preview.png" width="700" alt="X-ASR demo video preview">
+</a>
+
+[Open demo video](assets/demos/demo.mov)
 
 <a id="quick-start"></a>
 
@@ -247,6 +251,7 @@ X-ASR/
 |-- LICENSE
 |-- assets/
 |   |-- figures/
+|   |   |-- demo-preview.png
 |   |   `-- zipformer.png
 |   `-- demos/
 |       `-- demo.mov
