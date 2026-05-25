@@ -5,6 +5,12 @@
 </p>
 
 <p align="center">
+  <sub>
+    上海交通大学 &nbsp;·&nbsp; 复旦大学 &nbsp;·&nbsp; 上海创智学院 &nbsp;·&nbsp; 华中科技大学
+  </sub>
+</p>
+
+<p align="center">
   <a href="README.md">English</a> |
   <a href="https://huggingface.co/GilgameshWind/icefall_X_ASR_streaming">Hugging Face</a> |
   <a href="https://stream-asr.sjtuxlance.com/">在线 Demo</a> |
@@ -23,7 +29,6 @@
   <a href="#项目概览">项目概览</a> |
   <a href="#时间线">时间线</a> |
   <a href="#模型发布">模型发布</a> |
-  <a href="#参与机构">参与机构</a> |
   <a href="#评测结果">评测结果</a> |
   <a href="#快速开始">快速开始</a> |
   <a href="#后续计划">后续计划</a>
@@ -74,17 +79,6 @@
 | **文本输出** | 支持标点和大小写 |
 | **部署运行时** | sherpa-onnx |
 | **接口形式** | WebSocket 流式服务端和 WAV 文件测试客户端 |
-
-## 参与机构
-
-X-ASR 系列由以下机构共同参与开发与维护：
-
-| 机构 | 简称 |
-|---|---|
-| 上海交通大学 | 上交 |
-| 复旦大学 | 复旦 |
-| 上海创智学院 | 上海创智 |
-| 华中科技大学 | 华科 |
 
 ## 评测结果
 

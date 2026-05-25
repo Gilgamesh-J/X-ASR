@@ -5,6 +5,12 @@
 </p>
 
 <p align="center">
+  <sub>
+    Shanghai Jiao Tong University &nbsp;·&nbsp; Fudan University &nbsp;·&nbsp; Shanghai Innovation Institute &nbsp;·&nbsp; Huazhong University of Science and Technology
+  </sub>
+</p>
+
+<p align="center">
   <a href="README_zh.md">中文版</a> |
   <a href="https://huggingface.co/GilgameshWind/icefall_X_ASR_streaming">Hugging Face</a> |
   <a href="https://stream-asr.sjtuxlance.com/">Online Demo</a> |
@@ -23,7 +29,6 @@
   <a href="#overview">Overview</a> |
   <a href="#timeline">Timeline</a> |
   <a href="#model-releases">Model Releases</a> |
-  <a href="#organizations">Organizations</a> |
   <a href="#evaluation">Evaluation</a> |
   <a href="#quick-start">Quick Start</a> |
   <a href="#roadmap">Roadmap</a>
@@ -74,17 +79,6 @@ The model supports multiple streaming chunk sizes: **160 ms**, **480 ms**, **960
 | **Text output** | Supports punctuation and casing |
 | **Runtime** | sherpa-onnx |
 | **Interface** | WebSocket streaming server and WAV-file client |
-
-## Organizations
-
-The X-ASR series is developed and maintained with contributions from the following institutions:
-
-| Institution | Abbreviation |
-|---|---|
-| Shanghai Jiao Tong University | SJTU |
-| Fudan University | Fudan |
-| Shanghai Innovation Institute | SII |
-| Huazhong University of Science and Technology | HUST |
 
 ## Evaluation
 
