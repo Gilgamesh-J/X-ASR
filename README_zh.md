@@ -21,10 +21,15 @@
 </p>
 
 <p align="center">
+  <b>📄 X-ASR-zh-en 工作报告：Coming Soon</b>
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/当前发布-X--ASR--zh--en-blue" alt="Current release">
   <img src="https://img.shields.io/badge/语言-zh%20%7C%20en-green" alt="Languages">
   <img src="https://img.shields.io/badge/流式-160ms%20%7C%20480ms%20%7C%20960ms%20%7C%201920ms-orange" alt="Streaming chunks">
   <img src="https://img.shields.io/badge/运行时-sherpa--onnx-red" alt="Runtime">
+  <img src="https://img.shields.io/badge/工作报告-coming%20soon-purple" alt="Report status">
   <img src="https://img.shields.io/badge/许可证-Apache--2.0-lightgrey" alt="License">
 </p>
 
@@ -59,6 +64,7 @@
 | 时间 | 更新 |
 |---|---|
 | 2026-05 | 首次发布 `X-ASR-zh-en`，包含离线-流式一体化模型和 sherpa-onnx 部署文件。 |
+| Coming Soon | 发布 `X-ASR-zh-en` 工作报告，补充训练、评测与部署细节。 |
 | 近期计划 | 发布泰语、印尼语、越南语流式 ASR 模型。 |
 | 持续迭代 | 持续进行模型 scaling、架构优化、数据 refine，以及更稳定的标点和大小写预测。 |
 
@@ -66,9 +72,9 @@
 
 ## 📦 模型发布
 
-| 模型 | 语言 | 类型 | 流式 chunk | 部署 | 模型文件 |
-|---|---|---|---|---|---|
-| `X-ASR-zh-en` | 中文、英文 | 离线-流式一体化 transducer ASR | 160 ms, 480 ms, 960 ms, 1920 ms | sherpa-onnx | [GitHub](X-ASR-zh-en/deployment), [Hugging Face](https://huggingface.co/GilgameshWind/icefall_X_ASR_streaming) |
+| 模型 | 语言 | 类型 | 流式 chunk | 部署 | 工作报告 | 模型文件 |
+|---|---|---|---|---|---|---|
+| `X-ASR-zh-en` | 中文、英文 | 离线-流式一体化 transducer ASR | 160 ms, 480 ms, 960 ms, 1920 ms | sherpa-onnx | **Coming Soon** | [GitHub](X-ASR-zh-en/deployment), [Hugging Face](https://huggingface.co/GilgameshWind/icefall_X_ASR_streaming) |
 
 ## ⭐ 核心特性
 

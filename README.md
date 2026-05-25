@@ -21,10 +21,15 @@
 </p>
 
 <p align="center">
+  <b>📄 X-ASR-zh-en Technical Report: Coming Soon</b>
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/Current%20release-X--ASR--zh--en-blue" alt="Current release">
   <img src="https://img.shields.io/badge/Languages-zh%20%7C%20en-green" alt="Languages">
   <img src="https://img.shields.io/badge/Streaming-160ms%20%7C%20480ms%20%7C%20960ms%20%7C%201920ms-orange" alt="Streaming chunks">
   <img src="https://img.shields.io/badge/Runtime-sherpa--onnx-red" alt="Runtime">
+  <img src="https://img.shields.io/badge/Report-coming%20soon-purple" alt="Report status">
   <img src="https://img.shields.io/badge/License-Apache--2.0-lightgrey" alt="License">
 </p>
 
@@ -59,16 +64,17 @@
 | Time | Update |
 |---|---|
 | 2026-05 | Initial `X-ASR-zh-en` release with offline-streaming unified models and sherpa-onnx deployment artifacts. |
-| Coming soon | Streaming ASR releases for Thai, Indonesian, and Vietnamese. |
+| Coming Soon | `X-ASR-zh-en` technical report with training, evaluation, and deployment details. |
+| Coming Soon | Streaming ASR releases for Thai, Indonesian, and Vietnamese. |
 | Ongoing | Model scaling, architecture improvements, data refinement, and more stable punctuation/casing. |
 
 <a id="model-releases"></a>
 
 ## 📦 Model Releases
 
-| Model | Languages | Type | Streaming chunks | Deployment | Model files |
-|---|---|---|---|---|---|
-| `X-ASR-zh-en` | Chinese, English | Offline-streaming unified transducer ASR | 160 ms, 480 ms, 960 ms, 1920 ms | sherpa-onnx | [GitHub](X-ASR-zh-en/deployment), [Hugging Face](https://huggingface.co/GilgameshWind/icefall_X_ASR_streaming) |
+| Model | Languages | Type | Streaming chunks | Deployment | Report | Model files |
+|---|---|---|---|---|---|---|
+| `X-ASR-zh-en` | Chinese, English | Offline-streaming unified transducer ASR | 160 ms, 480 ms, 960 ms, 1920 ms | sherpa-onnx | **Coming Soon** | [GitHub](X-ASR-zh-en/deployment), [Hugging Face](https://huggingface.co/GilgameshWind/icefall_X_ASR_streaming) |
 
 ## ⭐ Highlights
 
