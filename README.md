@@ -61,12 +61,12 @@
 
 ## 📅 Timeline
 
-| Time | Update |
-|---|---|
-| 2026-05 | Initial `X-ASR-zh-en` release with offline-streaming unified models and sherpa-onnx deployment artifacts. |
-| Coming Soon | `X-ASR-zh-en` technical report with training, evaluation, and deployment details. |
-| Coming Soon | Streaming ASR releases for Thai, Indonesian, and Vietnamese. |
-| Ongoing | Model scaling, architecture improvements, data refinement, and more stable punctuation/casing. |
+| Status | Item | Details |
+|---|---|---|
+| ✅ Released | `X-ASR-zh-en` initial release | Chinese-English offline-streaming unified ASR models, sherpa-onnx deployment artifacts, and online demo are available. |
+| 📄 Coming Soon | `X-ASR-zh-en` technical report | Training recipe, model architecture, evaluation protocol, deployment details, and ablation analysis will be released. |
+| 🌏 Upcoming | Thai, Indonesian, and Vietnamese ASR | Streaming ASR models for the next language releases are under preparation. |
+| 🔄 Ongoing | Model and data updates | Continued work on model scaling, architecture improvements, data refinement, latency, stability, punctuation, and casing. |
 
 <a id="model-releases"></a>
 
