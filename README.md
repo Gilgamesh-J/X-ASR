@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <b>🌐 <a href="README_zh.md">中文版 README</a></b>
+  <b>🌐 <a href="README_zh.md">中文版</a></b>
 </p>
 
 <p align="center">
