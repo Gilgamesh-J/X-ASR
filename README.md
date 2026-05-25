@@ -33,8 +33,7 @@
   <a href="#timeline">📅 Timeline</a> |
   <a href="#model-releases">📦 Model Releases</a> |
   <a href="#evaluation">📊 Evaluation</a> |
-  <a href="#quick-start">🚀 Quick Start</a> |
-  <a href="#roadmap">🧭 Roadmap</a>
+  <a href="#quick-start">🚀 Quick Start</a>
 </p>
 
 ---
@@ -270,27 +269,6 @@ X-ASR/
             `-- chunk-1920ms-model/
 ```
 
-## 🧩 Model Variants
-
-| Directory | Intended chunk size | Recommended use |
-|---|---:|---|
-| `X-ASR-zh-en/deployment/models/chunk-160ms-model` | 160 ms | Lowest latency, useful for real-time demos |
-| `X-ASR-zh-en/deployment/models/chunk-480ms-model` | 480 ms | Low latency with slightly more context |
-| `X-ASR-zh-en/deployment/models/chunk-960ms-model` | 960 ms | More stable output, higher latency |
-| `X-ASR-zh-en/deployment/models/chunk-1920ms-model` | 1920 ms | Highest context among the provided models, highest latency |
-
-<a id="roadmap"></a>
-
-## 🧭 Roadmap
-
-The X-ASR series will be continuously maintained and expanded in the following directions:
-
-- **Languages**: Release streaming ASR models for Thai, Indonesian, and Vietnamese in the short term, with more languages in future updates.
-- **Model architecture**: Continue scaling model sizes and exploring architecture improvements based on the k2/icefall ecosystem.
-- **Training data**: Refine part of the training data based on current models and continue improving data quality and coverage.
-- **Punctuation and casing**: Improve the stability of punctuation and casing prediction in future releases.
-- **Deployment**: Improve sherpa-onnx based deployment examples and production usability.
-
 ## 🤝 Contributing
 
 We welcome feedback and contributions in the following areas:
@@ -298,7 +276,7 @@ We welcome feedback and contributions in the following areas:
 - Deployment issues on different CPU/GPU environments
 - Streaming latency and stability reports
 - Evaluation results on new datasets or domains
-- Requests for new languages or model variants
+- Requests for new languages or future releases
 - Improvements to documentation and examples
 
 When reporting deployment problems, please include the **environment**, **command**, **input audio format**, and **error log**.
