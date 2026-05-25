@@ -76,15 +76,78 @@
 
 ## 评测结果
 
-以下结果对应当前 **X-ASR-zh-en** 版本。表中数值为 **WER/CER 百分比**，越低越好。
+以下结果对应当前 **X-ASR-zh-en** 版本。表中数值为 **WER/CER 百分比**，越低越好。所有结果均使用 **greedy search**。
 
-| 模式 | Chunk size | 解码方式 | LibriSpeech clean | LibriSpeech other | GigaSpeech | WenetSpeech test net | WenetSpeech test meeting |
-|---|---:|---|---:|---:|---:|---:|---:|
-| Offline | - | greedy search | 2.69 | 5.76 | 9.23 | 5.96 | 7.20 |
-| Streaming | 160 ms | greedy search | 3.91 | 10.17 | 10.97 | 9.45 | 12.04 |
-| Streaming | 480 ms | greedy search | 3.14 | 7.57 | 9.77 | 7.38 | 9.31 |
-| Streaming | 960 ms | greedy search | 3.12 | 7.22 | 9.62 | 6.96 | 8.84 |
-| Streaming | 1920 ms | greedy search | 2.84 | 6.47 | 9.46 | 6.42 | 8.03 |
+<div align="center">
+
+<table>
+  <thead>
+    <tr>
+      <th rowspan="2">模式</th>
+      <th rowspan="2">Chunk size</th>
+      <th colspan="2">LibriSpeech</th>
+      <th rowspan="2">GigaSpeech</th>
+      <th colspan="2">WenetSpeech</th>
+    </tr>
+    <tr>
+      <th>clean</th>
+      <th>other</th>
+      <th>test net</th>
+      <th>test meeting</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Offline</td>
+      <td align="center">-</td>
+      <td align="right"><b>2.69</b></td>
+      <td align="right"><b>5.76</b></td>
+      <td align="right"><b>9.23</b></td>
+      <td align="right"><b>5.96</b></td>
+      <td align="right"><b>7.20</b></td>
+    </tr>
+    <tr>
+      <td>Streaming</td>
+      <td align="center">160 ms</td>
+      <td align="right">3.91</td>
+      <td align="right">10.17</td>
+      <td align="right">10.97</td>
+      <td align="right">9.45</td>
+      <td align="right">12.04</td>
+    </tr>
+    <tr>
+      <td>Streaming</td>
+      <td align="center">480 ms</td>
+      <td align="right">3.14</td>
+      <td align="right">7.57</td>
+      <td align="right">9.77</td>
+      <td align="right">7.38</td>
+      <td align="right">9.31</td>
+    </tr>
+    <tr>
+      <td>Streaming</td>
+      <td align="center">960 ms</td>
+      <td align="right">3.12</td>
+      <td align="right">7.22</td>
+      <td align="right">9.62</td>
+      <td align="right">6.96</td>
+      <td align="right">8.84</td>
+    </tr>
+    <tr>
+      <td>Streaming</td>
+      <td align="center">1920 ms</td>
+      <td align="right">2.84</td>
+      <td align="right">6.47</td>
+      <td align="right">9.46</td>
+      <td align="right">6.42</td>
+      <td align="right">8.03</td>
+    </tr>
+  </tbody>
+</table>
+
+</div>
+
+**说明：** 加粗数值表示该评测列中当前列出的最佳结果。
 
 ## Demo
 
