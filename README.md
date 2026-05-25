@@ -25,11 +25,10 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Current%20release-X--ASR--zh--en-blue" alt="Current release">
+  <img src="https://img.shields.io/badge/Model%20Released-X--ASR--zh--en-blue" alt="Model released">
   <img src="https://img.shields.io/badge/Languages-zh%20%7C%20en-green" alt="Languages">
-  <img src="https://img.shields.io/badge/Streaming-160ms%20%7C%20480ms%20%7C%20960ms%20%7C%201920ms-orange" alt="Streaming chunks">
-  <img src="https://img.shields.io/badge/Runtime-sherpa--onnx-red" alt="Runtime">
-  <img src="https://img.shields.io/badge/Report-coming%20soon-purple" alt="Report status">
+  <img src="https://img.shields.io/badge/Streaming-low%20latency%20%7C%20multi--mode-orange" alt="Streaming">
+  <img src="https://img.shields.io/badge/Deployment-sherpa--onnx-red" alt="Deployment">
   <img src="https://img.shields.io/badge/License-Apache--2.0-lightgrey" alt="License">
 </p>
 
