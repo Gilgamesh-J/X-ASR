@@ -5,6 +5,7 @@
 </p>
 
 <p align="center">
+  <a href="README_zh.md">中文版</a> |
   <a href="https://huggingface.co/GilgameshWind/icefall_X_ASR_streaming">Hugging Face</a> |
   <a href="https://stream-asr.sjtuxlance.com/">Online Demo</a> |
   <a href="X-ASR-zh-en/deployment/README.md">Deployment Guide</a>
@@ -31,15 +32,15 @@
 
 ## Overview
 
-X-ASR is a series of automatic speech recognition models based on the icefall framework, with a focus on streaming ASR and low-latency deployment while also supporting offline recognition.
+**X-ASR** is a series of automatic speech recognition models based on the **icefall** framework. The series focuses on **streaming ASR** and **low-latency deployment**, while also supporting offline recognition.
 
-This repository currently releases an initial batch of Chinese-English streaming ASR models. The X-ASR series will be continuously updated and scaled across languages, model architectures, and training data.
+This repository currently releases an initial batch of **Chinese-English streaming ASR models**. The X-ASR series will be continuously updated and scaled across **languages**, **model architectures**, and **training data**.
 
 ### X-ASR-zh-en
 
-`X-ASR-zh-en` is trained on approximately 1 million hours of open-source and collected speech data. It is designed as an offline-streaming unified transducer ASR model, supporting both offline decoding and true streaming decoding.
+**X-ASR-zh-en** is trained on approximately **1 million hours** of open-source and collected speech data. It is designed as an **offline-streaming unified transducer ASR model**, supporting both **offline decoding** and **true streaming decoding**.
 
-The model supports multiple streaming chunk sizes, including 160 ms, 480 ms, 960 ms, and 1920 ms. It supports punctuation and casing, and can be deployed with sherpa-onnx.
+The model supports multiple streaming chunk sizes: **160 ms**, **480 ms**, **960 ms**, and **1920 ms**. It supports **punctuation and casing**, and can be deployed with **sherpa-onnx**.
 
 <p align="center">
   <img src="https://huggingface.co/GilgameshWind/icefall_X_ASR_streaming/resolve/main/figure/zipformer.png" width="700" alt="Zipformer architecture">
@@ -47,9 +48,11 @@ The model supports multiple streaming chunk sizes, including 160 ms, 480 ms, 960
 
 ## Timeline
 
-> 2026-05 - Initial `X-ASR-zh-en` release with offline-streaming unified models and sherpa-onnx deployment artifacts.
-> Coming soon - Streaming ASR releases for Thai, Indonesian, and Vietnamese.
-> Ongoing - Scaling model size, improving architecture, refining training data, and improving punctuation/casing stability.
+| Time | Update |
+|---|---|
+| 2026-05 | Initial `X-ASR-zh-en` release with offline-streaming unified models and sherpa-onnx deployment artifacts. |
+| Coming soon | Streaming ASR releases for Thai, Indonesian, and Vietnamese. |
+| Ongoing | Model scaling, architecture improvements, data refinement, and more stable punctuation/casing. |
 
 ## Model Releases
 
@@ -61,19 +64,19 @@ The model supports multiple streaming chunk sizes, including 160 ms, 480 ms, 960
 
 | Category | Description |
 |---|---|
-| Framework | icefall / k2 |
-| Architecture | Zipformer transducer |
-| Training scale | Approximately 1 million hours of open-source and collected speech data |
-| Current languages | Chinese and English |
-| Decoding modes | Offline decoding and true streaming decoding |
-| Streaming chunks | 160 ms, 480 ms, 960 ms, 1920 ms |
-| Text output | Supports punctuation and casing |
-| Runtime | sherpa-onnx |
-| Interface | WebSocket streaming server and WAV-file client |
+| **Framework** | icefall / k2 |
+| **Architecture** | Zipformer transducer |
+| **Training scale** | Approximately 1 million hours of open-source and collected speech data |
+| **Current languages** | Chinese and English |
+| **Decoding modes** | Offline decoding and true streaming decoding |
+| **Streaming chunks** | 160 ms, 480 ms, 960 ms, 1920 ms |
+| **Text output** | Supports punctuation and casing |
+| **Runtime** | sherpa-onnx |
+| **Interface** | WebSocket streaming server and WAV-file client |
 
 ## Evaluation
 
-The following results are for the current `X-ASR-zh-en` release. Values are WER/CER percentages; lower is better.
+The following results are for the current **X-ASR-zh-en** release. Values are **WER/CER percentages**; lower is better.
 
 | Mode | Chunk size | Decoding method | LibriSpeech clean | LibriSpeech other | GigaSpeech | WenetSpeech test net | WenetSpeech test meeting |
 |---|---:|---|---:|---:|---:|---:|---:|
@@ -85,7 +88,7 @@ The following results are for the current `X-ASR-zh-en` release. Values are WER/
 
 ## Demo
 
-A sherpa-onnx based online demo is available here:
+A **sherpa-onnx based online demo** is available here:
 
 - [https://stream-asr.sjtuxlance.com/](https://stream-asr.sjtuxlance.com/)
 
@@ -97,12 +100,12 @@ Demo video:
 
 ### 1. Clone the repository
 
-This repository uses Git LFS for ONNX model artifacts. Install Git LFS before cloning or before pulling model files.
+This repository uses **Git LFS** for ONNX model artifacts. Install Git LFS before cloning or before pulling model files.
 
 ```bash
 git lfs install
-git clone https://github.com/Gilgamesh-J/X-ASR-Series.git
-cd X-ASR-Series
+git clone https://github.com/Gilgamesh-J/X-ASR.git
+cd X-ASR
 git lfs pull
 ```
 
@@ -125,7 +128,7 @@ python -m pip install -r requirements.txt
 
 ### 3. Start the streaming server
 
-The example below starts the 160 ms streaming model on CPU.
+The example below starts the **160 ms streaming model** on CPU.
 
 ```bash
 python infer_and_client/sherpa_streaming_server.py \
@@ -158,15 +161,16 @@ python infer_and_client/sherpa_streaming_client.py \
   --simulate-realtime 1
 ```
 
-The client sends 16 kHz mono int16 PCM chunks over WebSocket and prints partial and final results returned by the server.
+The client sends **16 kHz mono int16 PCM chunks** over WebSocket and prints partial and final results returned by the server.
 
 For full deployment options, see [X-ASR-zh-en/deployment/README.md](X-ASR-zh-en/deployment/README.md).
 
 ## Repository Layout
 
 ```text
-X-ASR-Series/
+X-ASR/
 |-- README.md
+|-- README_zh.md
 |-- LICENSE
 `-- X-ASR-zh-en/
     `-- deployment/
@@ -196,11 +200,11 @@ X-ASR-Series/
 
 The X-ASR series will be continuously maintained and expanded in the following directions:
 
-- **Languages**: We plan to release streaming ASR models for Thai, Indonesian, and Vietnamese in the short term. More languages will be added in future updates.
-- **Model architecture**: We aim to continue scaling model sizes and exploring architecture improvements based on the k2/icefall ecosystem.
-- **Training data**: We plan to refine part of the training data based on the current models and continue improving data quality and coverage.
-- **Punctuation and casing**: We will improve the stability of punctuation and casing prediction in future releases.
-- **Deployment**: We will keep improving sherpa-onnx based deployment examples and production usability.
+- **Languages**: Release streaming ASR models for Thai, Indonesian, and Vietnamese in the short term, with more languages in future updates.
+- **Model architecture**: Continue scaling model sizes and exploring architecture improvements based on the k2/icefall ecosystem.
+- **Training data**: Refine part of the training data based on current models and continue improving data quality and coverage.
+- **Punctuation and casing**: Improve the stability of punctuation and casing prediction in future releases.
+- **Deployment**: Improve sherpa-onnx based deployment examples and production usability.
 
 ## Contributing
 
@@ -212,15 +216,15 @@ We welcome feedback and contributions in the following areas:
 - Requests for new languages or model variants
 - Improvements to documentation and examples
 
-Please open a GitHub issue with the environment, command, input audio format, and error log when reporting deployment problems.
+When reporting deployment problems, please include the **environment**, **command**, **input audio format**, and **error log**.
 
 ## License
 
-This project is released under the Apache-2.0 License.
+This project is released under the **Apache-2.0 License**.
 
 ## Acknowledgements
 
-This model series is trained with icefall and deployed with sherpa-onnx.
+This model series is trained with **icefall** and deployed with **sherpa-onnx**.
 
 - icefall: https://github.com/k2-fsa/icefall
 - sherpa-onnx: https://github.com/k2-fsa/sherpa-onnx
