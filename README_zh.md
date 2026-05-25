@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <b>🌐 <a href="README.md">English README</a></b>
+  <b>🌐 <a href="README.md">English</a></b>
 </p>
 
 <p align="center">
