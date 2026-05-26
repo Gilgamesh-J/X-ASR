@@ -8,9 +8,26 @@
   <b>参与机构</b>
 </p>
 
-<p align="center">
-  <img src="assets/institutions/institutions-zh.png" width="900" alt="参与机构：上海交通大学、上海创智学院、复旦大学、华中科技大学">
-</p>
+<table align="center" border="0" cellspacing="0" cellpadding="0">
+  <tr>
+    <td align="center" width="25%" style="border: none; padding: 0 14px;">
+      <a href="https://www.sjtu.edu.cn/"><img src="assets/institutions/sjtu.png" height="54" alt="上海交通大学"></a><br>
+      <sub>上海交通大学</sub>
+    </td>
+    <td align="center" width="25%" style="border: none; padding: 0 14px;">
+      <a href="https://www.sii.edu.cn/"><img src="assets/institutions/sii.png" height="54" alt="上海创智学院"></a><br>
+      <sub>上海创智学院</sub>
+    </td>
+    <td align="center" width="25%" style="border: none; padding: 0 14px;">
+      <a href="https://www.fudan.edu.cn/"><img src="assets/institutions/fudan.png" height="54" alt="复旦大学"></a><br>
+      <sub>复旦大学</sub>
+    </td>
+    <td align="center" width="25%" style="border: none; padding: 0 14px;">
+      <a href="https://www.hust.edu.cn/"><img src="assets/institutions/hust.png" height="54" alt="华中科技大学"></a><br>
+      <sub>华中科技大学</sub>
+    </td>
+  </tr>
+</table>
 
 <p align="center">
   <b>🌐 <a href="README.md">English</a></b>
