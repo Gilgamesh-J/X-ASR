@@ -1,4 +1,4 @@
-<h1 align="center">🎙️ X-ASR Series</h1>
+<h1 align="center">🎙️ X-ASR</h1>
 
 <p align="center">
   <b>Streaming-focused automatic speech recognition models based on icefall/k2, Zipformer, and sherpa-onnx.</b>
