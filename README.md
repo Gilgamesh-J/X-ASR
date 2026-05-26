@@ -5,9 +5,11 @@
 </p>
 
 <p align="center">
-  <sub>
-    🏛️ Shanghai Jiao Tong University &nbsp;·&nbsp; Fudan University &nbsp;·&nbsp; Shanghai Innovation Institute &nbsp;·&nbsp; Huazhong University of Science and Technology
-  </sub>
+  <b>Participating Institutions</b>
+</p>
+
+<p align="center">
+  <img src="assets/institutions/institutions-en.png" width="900" alt="Participating institutions: Shanghai Jiao Tong University, Shanghai Innovation Institute, Fudan University, and Huazhong University of Science and Technology">
 </p>
 
 <p align="center">

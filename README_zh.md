@@ -5,9 +5,11 @@
 </p>
 
 <p align="center">
-  <sub>
-    🏛️ 上海交通大学 &nbsp;·&nbsp; 复旦大学 &nbsp;·&nbsp; 上海创智学院 &nbsp;·&nbsp; 华中科技大学
-  </sub>
+  <b>参与机构</b>
+</p>
+
+<p align="center">
+  <img src="assets/institutions/institutions-zh.png" width="900" alt="参与机构：上海交通大学、上海创智学院、复旦大学、华中科技大学">
 </p>
 
 <p align="center">
