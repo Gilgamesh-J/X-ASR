@@ -179,6 +179,68 @@
 
 **说明：** 加粗数值表示该评测列中当前列出的最佳结果。
 
+### GigaSpeechBench 垂直领域评测
+
+以下结果为当前 **X-ASR-zh-en** 版本在 **GigaSpeechBench vertical-domain** 上的评测结果。表中数值为 **WER/CER 百分比**，越低越好。领域缩写沿用 GigaSpeechBench 的 vertical-domain 标注。
+
+#### CH
+
+<table>
+  <thead>
+    <tr>
+      <th align="center">领域</th>
+      <th align="center">160 ms</th>
+      <th align="center">480 ms</th>
+      <th align="center">960 ms</th>
+      <th align="center">1920 ms</th>
+      <th align="center">离线</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td align="center"><b>ARG</b></td><td align="center">9.88</td><td align="center">8.67</td><td align="center">8.00</td><td align="center">7.24</td><td align="center"><b>6.56</b></td></tr>
+    <tr><td align="center"><b>AIT</b></td><td align="center">6.76</td><td align="center">6.17</td><td align="center">5.69</td><td align="center">5.58</td><td align="center"><b>4.54</b></td></tr>
+    <tr><td align="center"><b>ART</b></td><td align="center">4.39</td><td align="center">3.60</td><td align="center">3.44</td><td align="center">3.27</td><td align="center"><b>2.77</b></td></tr>
+    <tr><td align="center"><b>BIO</b></td><td align="center">7.32</td><td align="center">6.22</td><td align="center">6.10</td><td align="center">5.82</td><td align="center"><b>5.04</b></td></tr>
+    <tr><td align="center"><b>ECM</b></td><td align="center">4.13</td><td align="center">3.78</td><td align="center">3.69</td><td align="center">3.48</td><td align="center"><b>2.99</b></td></tr>
+    <tr><td align="center"><b>ENG</b></td><td align="center">3.58</td><td align="center">3.04</td><td align="center">2.88</td><td align="center">2.74</td><td align="center"><b>2.32</b></td></tr>
+    <tr><td align="center"><b>ENT</b></td><td align="center">8.45</td><td align="center">7.04</td><td align="center">6.71</td><td align="center">6.55</td><td align="center"><b>6.02</b></td></tr>
+    <tr><td align="center"><b>FIN</b></td><td align="center">3.23</td><td align="center">2.78</td><td align="center">2.72</td><td align="center">2.57</td><td align="center"><b>1.94</b></td></tr>
+    <tr><td align="center"><b>HUM</b></td><td align="center">10.42</td><td align="center">9.43</td><td align="center">9.07</td><td align="center">8.59</td><td align="center"><b>7.64</b></td></tr>
+    <tr><td align="center"><b>LAW</b></td><td align="center">6.58</td><td align="center">5.84</td><td align="center">5.58</td><td align="center">4.97</td><td align="center"><b>4.20</b></td></tr>
+    <tr><td align="center"><b>MED</b></td><td align="center">4.25</td><td align="center">3.76</td><td align="center">3.69</td><td align="center">3.53</td><td align="center"><b>2.90</b></td></tr>
+    <tr><td align="center"><b>MIL</b></td><td align="center">2.55</td><td align="center">2.11</td><td align="center">2.11</td><td align="center">1.94</td><td align="center"><b>1.68</b></td></tr>
+  </tbody>
+</table>
+
+#### EN
+
+<table>
+  <thead>
+    <tr>
+      <th align="center">领域</th>
+      <th align="center">160 ms</th>
+      <th align="center">480 ms</th>
+      <th align="center">960 ms</th>
+      <th align="center">1920 ms</th>
+      <th align="center">离线</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td align="center"><b>ARG</b></td><td align="center">5.29</td><td align="center">4.62</td><td align="center">4.58</td><td align="center">4.33</td><td align="center"><b>4.09</b></td></tr>
+    <tr><td align="center"><b>AIT</b></td><td align="center">8.57</td><td align="center">8.40</td><td align="center">8.35</td><td align="center">8.32</td><td align="center"><b>8.28</b></td></tr>
+    <tr><td align="center"><b>ART</b></td><td align="center">8.55</td><td align="center">7.73</td><td align="center">7.45</td><td align="center">6.90</td><td align="center"><b>6.73</b></td></tr>
+    <tr><td align="center"><b>BIO</b></td><td align="center">7.31</td><td align="center">6.12</td><td align="center">6.00</td><td align="center">5.89</td><td align="center"><b>5.48</b></td></tr>
+    <tr><td align="center"><b>ECM</b></td><td align="center">4.33</td><td align="center">4.19</td><td align="center">4.13</td><td align="center"><b>4.00</b></td><td align="center">4.12</td></tr>
+    <tr><td align="center"><b>ENG</b></td><td align="center">5.01</td><td align="center">4.65</td><td align="center">4.44</td><td align="center">4.37</td><td align="center"><b>4.30</b></td></tr>
+    <tr><td align="center"><b>ENT</b></td><td align="center">16.25</td><td align="center">14.50</td><td align="center">13.99</td><td align="center">13.61</td><td align="center"><b>12.30</b></td></tr>
+    <tr><td align="center"><b>FIN</b></td><td align="center">5.58</td><td align="center">5.21</td><td align="center">5.12</td><td align="center">4.98</td><td align="center"><b>4.94</b></td></tr>
+    <tr><td align="center"><b>HUM</b></td><td align="center">7.36</td><td align="center">6.79</td><td align="center">6.58</td><td align="center">6.39</td><td align="center"><b>6.17</b></td></tr>
+    <tr><td align="center"><b>LAW</b></td><td align="center">13.39</td><td align="center">11.51</td><td align="center">10.86</td><td align="center">10.52</td><td align="center"><b>10.41</b></td></tr>
+    <tr><td align="center"><b>MED</b></td><td align="center">6.03</td><td align="center">5.59</td><td align="center">5.52</td><td align="center">5.45</td><td align="center"><b>5.35</b></td></tr>
+    <tr><td align="center"><b>MIL</b></td><td align="center">6.20</td><td align="center">6.02</td><td align="center">6.04</td><td align="center">5.78</td><td align="center"><b>5.61</b></td></tr>
+  </tbody>
+</table>
+
 ## 🎧 Demo
 
 基于 **sherpa-onnx** 的在线 Demo：
