@@ -11,20 +11,16 @@
 <table align="center" border="0" cellspacing="0" cellpadding="0">
   <tr>
     <td align="center" width="25%" style="border: none; padding: 0 14px;">
-      <a href="https://www.sjtu.edu.cn/"><img src="assets/institutions/sjtu.png" height="54" alt="Shanghai Jiao Tong University"></a><br>
-      <sub>Shanghai Jiao Tong University</sub>
+      <a href="https://www.sjtu.edu.cn/"><img src="assets/institutions/sjtu.png" height="64" alt="Shanghai Jiao Tong University"></a>
     </td>
     <td align="center" width="25%" style="border: none; padding: 0 14px;">
-      <a href="https://www.sii.edu.cn/"><img src="assets/institutions/sii.png" height="54" alt="Shanghai Innovation Institute"></a><br>
-      <sub>Shanghai Innovation Institute</sub>
+      <a href="https://www.sii.edu.cn/"><img src="assets/institutions/sii.png" height="64" alt="Shanghai Innovation Institute"></a>
     </td>
     <td align="center" width="25%" style="border: none; padding: 0 14px;">
-      <a href="https://www.fudan.edu.cn/en/"><img src="assets/institutions/fudan.png" height="54" alt="Fudan University"></a><br>
-      <sub>Fudan University</sub>
+      <a href="https://www.fudan.edu.cn/en/"><img src="assets/institutions/fudan.png" height="64" alt="Fudan University"></a>
     </td>
     <td align="center" width="25%" style="border: none; padding: 0 14px;">
-      <a href="https://www.hust.edu.cn/"><img src="assets/institutions/hust.png" height="54" alt="Huazhong University of Science and Technology"></a><br>
-      <sub>Huazhong University of Science and Technology</sub>
+      <a href="https://www.hust.edu.cn/"><img src="assets/institutions/hust.png" height="64" alt="Huazhong University of Science and Technology"></a>
     </td>
   </tr>
 </table>
