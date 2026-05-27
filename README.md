@@ -4,10 +4,6 @@
   <b>Streaming-focused automatic speech recognition models based on icefall/k2, Zipformer, and sherpa-onnx.</b>
 </p>
 
-<p align="center">
-  <b>Participating Institutions</b>
-</p>
-
 <table align="center" border="0" cellspacing="0" cellpadding="0">
   <tr>
     <td align="center" width="25%" style="border: none; padding: 0 14px;">
@@ -24,6 +20,10 @@
     </td>
   </tr>
 </table>
+
+<p align="center">
+  <sub><b>Participating Institutions</b></sub>
+</p>
 
 <p align="center">
   <b>🌐 <a href="README_zh.md">中文版</a></b>

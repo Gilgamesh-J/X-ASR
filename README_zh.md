@@ -4,10 +4,6 @@
   <b>基于 icefall/k2、Zipformer 和 sherpa-onnx 的流式语音识别模型系列。</b>
 </p>
 
-<p align="center">
-  <b>参与机构</b>
-</p>
-
 <table align="center" border="0" cellspacing="0" cellpadding="0">
   <tr>
     <td align="center" width="25%" style="border: none; padding: 0 14px;">
@@ -24,6 +20,10 @@
     </td>
   </tr>
 </table>
+
+<p align="center">
+  <sub><b>参与机构</b></sub>
+</p>
 
 <p align="center">
   <b>🌐 <a href="README.md">English</a></b>
