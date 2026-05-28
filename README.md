@@ -135,47 +135,47 @@ The following results are for the current **X-ASR-zh-en** release. Values are **
     <tr>
       <td align="center">Streaming</td>
       <td align="center">160 ms</td>
-      <td align="center">3.91</td>
-      <td align="center">10.17</td>
-      <td align="center">10.97</td>
-      <td align="center">9.45</td>
-      <td align="center">12.04</td>
+      <td align="center">3.49</td>
+      <td align="center">8.75</td>
+      <td align="center">10.32</td>
+      <td align="center">8.72</td>
+      <td align="center">10.47</td>
     </tr>
     <tr>
       <td align="center">Streaming</td>
       <td align="center">480 ms</td>
-      <td align="center">3.14</td>
-      <td align="center">7.57</td>
-      <td align="center">9.77</td>
-      <td align="center">7.38</td>
-      <td align="center">9.31</td>
+      <td align="center">2.99</td>
+      <td align="center">7.36</td>
+      <td align="center">9.70</td>
+      <td align="center">7.46</td>
+      <td align="center">9.11</td>
     </tr>
     <tr>
       <td align="center">Streaming</td>
       <td align="center">960 ms</td>
-      <td align="center">3.12</td>
-      <td align="center">7.22</td>
-      <td align="center">9.62</td>
-      <td align="center">6.96</td>
-      <td align="center">8.84</td>
+      <td align="center">2.87</td>
+      <td align="center">6.77</td>
+      <td align="center">9.59</td>
+      <td align="center">6.97</td>
+      <td align="center">8.40</td>
     </tr>
     <tr>
       <td align="center">Streaming</td>
       <td align="center">1920 ms</td>
-      <td align="center">2.84</td>
-      <td align="center">6.47</td>
-      <td align="center">9.46</td>
-      <td align="center">6.42</td>
-      <td align="center">8.03</td>
+      <td align="center">2.75</td>
+      <td align="center">6.33</td>
+      <td align="center">9.43</td>
+      <td align="center">6.58</td>
+      <td align="center">7.88</td>
     </tr>
     <tr>
       <td align="center">Offline</td>
       <td align="center">-</td>
-      <td align="center"><b>2.69</b></td>
-      <td align="center"><b>5.76</b></td>
-      <td align="center"><b>9.23</b></td>
-      <td align="center"><b>5.96</b></td>
-      <td align="center"><b>7.20</b></td>
+      <td align="center"><b>2.56</b></td>
+      <td align="center"><b>5.56</b></td>
+      <td align="center"><b>9.17</b></td>
+      <td align="center"><b>5.83</b></td>
+      <td align="center"><b>7.06</b></td>
     </tr>
   </tbody>
 </table>
