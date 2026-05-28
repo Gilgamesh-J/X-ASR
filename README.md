@@ -113,7 +113,7 @@
 
 The following results are for the current **X-ASR-zh-en** release. Values are **WER/CER percentages**; lower is better. All results are reported with **greedy search**.
 
-### 🧪 General ASR Benchmarks
+### 🧪 Public ASR Benchmarks
 
 <table>
   <thead>

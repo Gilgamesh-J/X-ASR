@@ -113,7 +113,7 @@
 
 以下结果对应当前 **X-ASR-zh-en** 版本。表中数值为 **WER/CER 百分比**，越低越好。所有结果均使用 **greedy search**。
 
-### 🧪 General ASR Benchmarks（通用 ASR 基准评测）
+### 🧪 Public ASR Benchmarks（公开 ASR 基准评测）
 
 <table>
   <thead>
@@ -182,7 +182,7 @@
 
 **说明：** 加粗数值表示该评测列中当前列出的最佳结果。
 
-### 🧭 Vertical-Domain Benchmarks（垂直领域基准评测）
+### 🧭 Vertical-Domain Benchmarks（垂类）
 
 以下结果为当前 **X-ASR-zh-en** 版本在 **GigaSpeechBench vertical-domain** 上的评测结果。表中数值为 **WER/CER 百分比**，越低越好。领域缩写沿用 GigaSpeechBench 的 vertical-domain 标注。
 
