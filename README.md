@@ -113,14 +113,16 @@
 
 The following results are for the current **X-ASR-zh-en** release. Values are **WER/CER percentages**; lower is better. All results are reported with **greedy search**.
 
+### 🧪 Open Test Sets
+
 <table>
   <thead>
     <tr>
-      <th align="center" rowspan="2">Mode</th>
-      <th align="center" rowspan="2">Chunk size</th>
-      <th align="center" colspan="2">LibriSpeech</th>
-      <th align="center" rowspan="2">GigaSpeech</th>
-      <th align="center" colspan="2">WenetSpeech</th>
+      <th align="center" rowspan="2">⚙️ Mode</th>
+      <th align="center" rowspan="2">⏱️ Chunk size</th>
+      <th align="center" colspan="2">📚 LibriSpeech</th>
+      <th align="center" rowspan="2">🎙️ GigaSpeech</th>
+      <th align="center" colspan="2">🗣️ WenetSpeech</th>
     </tr>
     <tr>
       <th align="center">clean</th>
@@ -180,7 +182,7 @@ The following results are for the current **X-ASR-zh-en** release. Values are **
 
 **Note:** Bold numbers indicate the best result among the listed modes for each benchmark column.
 
-### GigaSpeechBench Vertical Domain Evaluation
+### 🧭 Vertical-Domain Test Sets
 
 The following results report **GigaSpeechBench vertical-domain** performance for the current **X-ASR-zh-en** release. Values are **WER/CER percentages**; lower is better. Domain abbreviations follow the GigaSpeechBench vertical-domain labels.
 
@@ -189,8 +191,8 @@ The following results report **GigaSpeechBench vertical-domain** performance for
 <table>
   <thead>
     <tr>
-      <th align="center">Mode</th>
-      <th align="center">Chunk size</th>
+      <th align="center">⚙️ Mode</th>
+      <th align="center">⏱️ Chunk size</th>
       <th align="center">ARG</th>
       <th align="center">AIT</th>
       <th align="center">ART</th>
@@ -219,8 +221,8 @@ The following results report **GigaSpeechBench vertical-domain** performance for
 <table>
   <thead>
     <tr>
-      <th align="center">Mode</th>
-      <th align="center">Chunk size</th>
+      <th align="center">⚙️ Mode</th>
+      <th align="center">⏱️ Chunk size</th>
       <th align="center">ARG</th>
       <th align="center">AIT</th>
       <th align="center">ART</th>
@@ -262,7 +264,9 @@ Demo video:
 
 ## 🚀 Quick Start
 
-### 1. Clone the repository
+This section shows how to build and run the **sherpa-onnx WebSocket streaming server** and the corresponding **WebSocket client**. For complete deployment arguments, model switching, runtime options, and production notes, see the [deployment guide](X-ASR-zh-en/deployment/README.md).
+
+### 1. Clone or download model artifacts
 
 This repository uses **Git LFS** for ONNX model artifacts and demo media. Install Git LFS before cloning or before pulling large files.
 
@@ -280,7 +284,7 @@ hf download GilgameshWind/icefall_X_ASR_streaming \
   --local-dir ./X-ASR-zh-en/deployment
 ```
 
-### 2. Install Python dependencies
+### 2. Prepare the sherpa-onnx runtime
 
 ```bash
 cd X-ASR-zh-en/deployment
@@ -290,9 +294,9 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-### 3. Start the streaming server
+### 3. Start the WebSocket server
 
-The example below starts the **160 ms streaming model** on CPU.
+The server wraps `sherpa_onnx.OnlineRecognizer` and exposes a WebSocket endpoint. Each WebSocket connection keeps an independent recognizer session, so concurrent clients do not share decoding state. The example below starts the **160 ms streaming model** on CPU and listens on `ws://0.0.0.0:6666`.
 
 ```bash
 python infer_and_client/sherpa_streaming_server.py \
@@ -310,7 +314,9 @@ python infer_and_client/sherpa_streaming_server.py \
   --text-format none
 ```
 
-### 4. Test with a WAV file
+The `--tokens`, `--encoder`, `--decoder`, and `--joiner` files must come from the same model directory.
+
+### 4. Run the WebSocket client
 
 Open another terminal:
 
@@ -325,9 +331,19 @@ python infer_and_client/sherpa_streaming_client.py \
   --simulate-realtime 1
 ```
 
-The client sends **16 kHz mono int16 PCM chunks** over WebSocket and prints partial and final results returned by the server.
+The client loads a WAV file, converts or resamples it to **16 kHz mono int16 PCM**, sends binary PCM chunks over WebSocket, and prints partial/final recognition results returned by the server. With `--simulate-realtime 1`, `--chunk-ms 100` means one audio packet is sent roughly every 100 ms.
 
-For full deployment options, see [X-ASR-zh-en/deployment/README.md](X-ASR-zh-en/deployment/README.md).
+### 5. WebSocket protocol
+
+The provided client and server use a minimal streaming protocol:
+
+| Step | Message | Purpose |
+|:---:|:---|:---|
+| 1 | JSON: `{"type": "start", "sample_rate": 16000}` | Start one recognition session |
+| 2 | Binary: int16 PCM audio chunks | Stream audio to the recognizer |
+| 3 | JSON: `{"type": "end"}` | Finish the session and flush final results |
+
+For detailed deployment instructions, see [X-ASR-zh-en/deployment/README.md](X-ASR-zh-en/deployment/README.md).
 
 ## 🗂️ Repository Layout
 
@@ -340,22 +356,42 @@ X-ASR/
 |   |-- figures/
 |   |   |-- demo-preview.png
 |   |   `-- zipformer.png
-|   `-- demos/
-|       `-- demo.mov
+|   |-- demos/
+|   |   `-- demo.mov
+|   `-- institutions/
+|       |-- sjtu.png
+|       |-- sii.png
+|       |-- fudan.png
+|       `-- hust.png
 `-- X-ASR-zh-en/
-    `-- deployment/
-        |-- README.md
-        |-- requirements.txt
-        |-- infer_and_client/
-        |   |-- sherpa_streaming_infer.py
-        |   |-- sherpa_streaming_server.py
-        |   `-- sherpa_streaming_client.py
-        `-- models/
-            |-- chunk-160ms-model/
-            |-- chunk-480ms-model/
-            |-- chunk-960ms-model/
-            `-- chunk-1920ms-model/
+    |-- deployment/
+    |   |-- README.md
+    |   |-- requirements.txt
+    |   |-- infer_and_client/
+    |   |   |-- sherpa_streaming_infer.py
+    |   |   |-- sherpa_streaming_server.py
+    |   |   `-- sherpa_streaming_client.py
+    |   `-- models/
+    |       |-- README.md
+    |       |-- chunk-160ms-model/
+    |       |-- chunk-480ms-model/
+    |       |-- chunk-960ms-model/
+    |       `-- chunk-1920ms-model/
+    `-- zipformer/
+        |-- train.py
+        |-- decode.py
+        |-- streaming_decode.py
+        |-- export.py
+        |-- export-onnx.py
+        |-- export-onnx-streaming.py
+        |-- model.py
+        |-- zipformer.py
+        `-- exp/
+            |-- pretrained.pt
+            `-- fintuned_with_punctuation.pt
 ```
+
+`X-ASR-zh-en/deployment/` contains runnable sherpa-onnx WebSocket server/client scripts and ONNX deployment artifacts. `X-ASR-zh-en/zipformer/` contains the icefall/Zipformer training, decoding, and export recipe files for the released model.
 
 ## 🤝 Contributing
 

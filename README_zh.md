@@ -113,14 +113,16 @@
 
 以下结果对应当前 **X-ASR-zh-en** 版本。表中数值为 **WER/CER 百分比**，越低越好。所有结果均使用 **greedy search**。
 
+### 🧪 Open Test Sets（开放测试集）
+
 <table>
   <thead>
     <tr>
-      <th align="center" rowspan="2">模式</th>
-      <th align="center" rowspan="2">Chunk size</th>
-      <th align="center" colspan="2">LibriSpeech</th>
-      <th align="center" rowspan="2">GigaSpeech</th>
-      <th align="center" colspan="2">WenetSpeech</th>
+      <th align="center" rowspan="2">⚙️ 模式</th>
+      <th align="center" rowspan="2">⏱️ Chunk size</th>
+      <th align="center" colspan="2">📚 LibriSpeech</th>
+      <th align="center" rowspan="2">🎙️ GigaSpeech</th>
+      <th align="center" colspan="2">🗣️ WenetSpeech</th>
     </tr>
     <tr>
       <th align="center">clean</th>
@@ -180,7 +182,7 @@
 
 **说明：** 加粗数值表示该评测列中当前列出的最佳结果。
 
-### GigaSpeechBench 垂直领域评测
+### 🧭 Vertical-Domain Test Sets（垂直领域测试集）
 
 以下结果为当前 **X-ASR-zh-en** 版本在 **GigaSpeechBench vertical-domain** 上的评测结果。表中数值为 **WER/CER 百分比**，越低越好。领域缩写沿用 GigaSpeechBench 的 vertical-domain 标注。
 
@@ -189,8 +191,8 @@
 <table>
   <thead>
     <tr>
-      <th align="center">模式</th>
-      <th align="center">Chunk size</th>
+      <th align="center">⚙️ 模式</th>
+      <th align="center">⏱️ Chunk size</th>
       <th align="center">ARG</th>
       <th align="center">AIT</th>
       <th align="center">ART</th>
@@ -219,8 +221,8 @@
 <table>
   <thead>
     <tr>
-      <th align="center">模式</th>
-      <th align="center">Chunk size</th>
+      <th align="center">⚙️ 模式</th>
+      <th align="center">⏱️ Chunk size</th>
       <th align="center">ARG</th>
       <th align="center">AIT</th>
       <th align="center">ART</th>
@@ -262,7 +264,9 @@ Demo 视频：
 
 ## 🚀 快速开始
 
-### 1. 克隆仓库
+本节重点说明如何基于 **sherpa-onnx** 构建并运行 **WebSocket 流式识别服务端** 与对应的 **WebSocket 客户端**。完整部署参数、模型切换方式、运行时选项和生产部署说明见 [deployment 文档](X-ASR-zh-en/deployment/README.md)。
+
+### 1. 克隆仓库或下载模型文件
 
 本仓库使用 **Git LFS** 管理 ONNX 模型文件和 demo 媒体文件。克隆或拉取大文件前需要先安装并初始化 Git LFS。
 
@@ -280,7 +284,7 @@ hf download GilgameshWind/icefall_X_ASR_streaming \
   --local-dir ./X-ASR-zh-en/deployment
 ```
 
-### 2. 安装 Python 依赖
+### 2. 准备 sherpa-onnx 运行环境
 
 ```bash
 cd X-ASR-zh-en/deployment
@@ -290,9 +294,9 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-### 3. 启动流式识别服务
+### 3. 启动 WebSocket 服务端
 
-下面示例使用 CPU 启动 **160 ms 流式模型**。
+服务端会封装 `sherpa_onnx.OnlineRecognizer`，并提供 WebSocket 接口。每个 WebSocket 连接都会维护独立的识别 session，因此多个客户端并发访问时不会共享解码状态。下面示例使用 CPU 启动 **160 ms 流式模型**，监听地址为 `ws://0.0.0.0:6666`。
 
 ```bash
 python infer_and_client/sherpa_streaming_server.py \
@@ -310,7 +314,9 @@ python infer_and_client/sherpa_streaming_server.py \
   --text-format none
 ```
 
-### 4. 使用 WAV 文件测试
+`--tokens`、`--encoder`、`--decoder` 和 `--joiner` 必须来自同一个模型目录。
+
+### 4. 运行 WebSocket 客户端
 
 另开一个终端：
 
@@ -325,9 +331,19 @@ python infer_and_client/sherpa_streaming_client.py \
   --simulate-realtime 1
 ```
 
-客户端会将音频转换为 **16 kHz 单声道 int16 PCM**，通过 WebSocket 分块发送，并打印服务端返回的 partial/final 识别结果。
+客户端会读取 WAV 文件，将其转换或重采样为 **16 kHz 单声道 int16 PCM**，通过 WebSocket 发送二进制 PCM 音频块，并打印服务端返回的 partial/final 识别结果。当 `--simulate-realtime 1` 启用时，`--chunk-ms 100` 表示大约每 100 ms 发送一个音频包。
 
-完整部署参数见 [X-ASR-zh-en/deployment/README.md](X-ASR-zh-en/deployment/README.md)。
+### 5. WebSocket 协议
+
+当前客户端和服务端使用一个简单的流式协议：
+
+| 步骤 | 消息 | 作用 |
+|:---:|:---|:---|
+| 1 | JSON: `{"type": "start", "sample_rate": 16000}` | 开始一次识别会话 |
+| 2 | Binary: int16 PCM audio chunks | 持续发送音频流 |
+| 3 | JSON: `{"type": "end"}` | 结束本次会话并输出 final 结果 |
+
+更完整的部署说明见 [X-ASR-zh-en/deployment/README.md](X-ASR-zh-en/deployment/README.md)。
 
 ## 🗂️ 仓库结构
 
@@ -340,22 +356,42 @@ X-ASR/
 |   |-- figures/
 |   |   |-- demo-preview.png
 |   |   `-- zipformer.png
-|   `-- demos/
-|       `-- demo.mov
+|   |-- demos/
+|   |   `-- demo.mov
+|   `-- institutions/
+|       |-- sjtu.png
+|       |-- sii.png
+|       |-- fudan.png
+|       `-- hust.png
 `-- X-ASR-zh-en/
-    `-- deployment/
-        |-- README.md
-        |-- requirements.txt
-        |-- infer_and_client/
-        |   |-- sherpa_streaming_infer.py
-        |   |-- sherpa_streaming_server.py
-        |   `-- sherpa_streaming_client.py
-        `-- models/
-            |-- chunk-160ms-model/
-            |-- chunk-480ms-model/
-            |-- chunk-960ms-model/
-            `-- chunk-1920ms-model/
+    |-- deployment/
+    |   |-- README.md
+    |   |-- requirements.txt
+    |   |-- infer_and_client/
+    |   |   |-- sherpa_streaming_infer.py
+    |   |   |-- sherpa_streaming_server.py
+    |   |   `-- sherpa_streaming_client.py
+    |   `-- models/
+    |       |-- README.md
+    |       |-- chunk-160ms-model/
+    |       |-- chunk-480ms-model/
+    |       |-- chunk-960ms-model/
+    |       `-- chunk-1920ms-model/
+    `-- zipformer/
+        |-- train.py
+        |-- decode.py
+        |-- streaming_decode.py
+        |-- export.py
+        |-- export-onnx.py
+        |-- export-onnx-streaming.py
+        |-- model.py
+        |-- zipformer.py
+        `-- exp/
+            |-- pretrained.pt
+            `-- fintuned_with_punctuation.pt
 ```
+
+`X-ASR-zh-en/deployment/` 包含可直接运行的 sherpa-onnx WebSocket 服务端/客户端脚本以及 ONNX 部署文件。`X-ASR-zh-en/zipformer/` 包含本次发布模型对应的 icefall/Zipformer 训练、解码和导出相关 recipe 文件。
 
 ## 🤝 贡献
 
