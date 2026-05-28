@@ -111,7 +111,7 @@
 
 ## 📊 评测结果
 
-以下结果对应当前 **X-ASR-zh-en** 版本。表中数值为 **WER/CER 百分比**，越低越好。所有结果均使用 **greedy search**。
+以下结果对应当前 **X-ASR-zh-en** 版本。所有结果均使用 **greedy search**。**Measurement：**英文结果使用 **WER (%)**，中文结果使用 **CER (%)**；越低越好。
 
 ### 🧪 Public ASR Benchmarks（公开 ASR 基准评测）
 

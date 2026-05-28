@@ -111,7 +111,7 @@
 
 ## 📊 Evaluation
 
-The following results are for the current **X-ASR-zh-en** release. Values are **WER/CER percentages**; lower is better. All results are reported with **greedy search**.
+The following results are for the current **X-ASR-zh-en** release. All results are reported with **greedy search**. **Measurement:** English results use **WER (%)**, and Chinese results use **CER (%)**; lower is better.
 
 ### 🧪 Public ASR Benchmarks
 
