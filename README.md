@@ -30,7 +30,8 @@
 </p>
 
 <p align="center">
-  <a href="https://huggingface.co/GilgameshWind/icefall_X_ASR_streaming">🤗 Hugging Face</a> |
+  <a href="https://huggingface.co/GilgameshWind/icefall_X_ASR_streaming">🤗 Hugging Face Hub</a> |
+  <a href="https://huggingface.co/spaces/chenxie95/X-ASR">🪐 Hugging Face Space</a> |
   <a href="https://stream-asr.sjtuxlance.com/">🎧 Online Demo</a> |
   <a href="X-ASR-zh-en/deployment/README.md">🚀 Deployment Guide</a>
 </p>
@@ -244,11 +245,8 @@ The following results report **GigaSpeechBench vertical-domain** performance for
 </table>
 
 ## 🎧 Demo
-A **demo on Hugging Face** is available here:
 
-- [https://huggingface.co/spaces/chenxie95/X-ASR](https://huggingface.co/spaces/chenxie95/X-ASR)
-
-A **sherpa-onnx based streaming demo** is available here:
+A **sherpa-onnx based demo** is available here:
 
 - [https://stream-asr.sjtuxlance.com/](https://stream-asr.sjtuxlance.com/)
 
