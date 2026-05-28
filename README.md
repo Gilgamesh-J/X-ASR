@@ -244,8 +244,11 @@ The following results report **GigaSpeechBench vertical-domain** performance for
 </table>
 
 ## 🎧 Demo
+A **sherpa-onnx based offline demo** is available here:
 
-A **sherpa-onnx based online demo** is available here:
+- [https://huggingface.co/spaces/chenxie95/offline-zipformer?logs=container](https://huggingface.co/spaces/chenxie95/offline-zipformer?logs=container)
+
+A **sherpa-onnx based streaming demo** is available here:
 
 - [https://stream-asr.sjtuxlance.com/](https://stream-asr.sjtuxlance.com/)
 
