@@ -31,6 +31,7 @@
 
 <p align="center">
   <a href="https://huggingface.co/GilgameshWind/icefall_X_ASR_streaming">🤗 Hugging Face</a> |
+  <a href="https://huggingface.co/spaces/chenxie95/X-ASR">🪐 Hugging Face Space</a> |
   <a href="https://stream-asr.sjtuxlance.com/">🎧 在线 Demo</a> |
   <a href="X-ASR-zh-en/deployment/README.md">🚀 部署文档</a>
 </p>
