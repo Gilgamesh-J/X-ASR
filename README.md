@@ -113,7 +113,7 @@
 
 The following results are for the current **X-ASR-zh-en** release. Values are **WER/CER percentages**; lower is better. All results are reported with **greedy search**.
 
-### 🧪 Open Test Sets
+### 🧪 General ASR Benchmarks
 
 <table>
   <thead>
@@ -182,7 +182,7 @@ The following results are for the current **X-ASR-zh-en** release. Values are **
 
 **Note:** Bold numbers indicate the best result among the listed modes for each benchmark column.
 
-### 🧭 Vertical-Domain Test Sets
+### 🧭 Vertical-Domain Benchmarks
 
 The following results report **GigaSpeechBench vertical-domain** performance for the current **X-ASR-zh-en** release. Values are **WER/CER percentages**; lower is better. Domain abbreviations follow the GigaSpeechBench vertical-domain labels.
 
