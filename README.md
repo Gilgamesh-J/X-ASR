@@ -246,7 +246,7 @@ The following results report **GigaSpeechBench vertical-domain** performance for
 
 ## 🎧 Demo
 
-A **sherpa-onnx based demo** is available here:
+A **sherpa-onnx based online demo** is available here:
 
 - [https://stream-asr.sjtuxlance.com/](https://stream-asr.sjtuxlance.com/)
 
