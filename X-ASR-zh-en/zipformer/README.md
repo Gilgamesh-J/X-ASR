@@ -32,18 +32,104 @@ zipformer/
 
 ## Training
 
-The full training command will be added after the release command line is finalized.
+### Base Training
 
 ```bash
-# TODO: add the X-ASR-zh-en Zipformer training command here.
+python ./zipformer/train.py \
+  --world-size 8 \
+  --num-epochs 5 \
+  --start-epoch 1 \
+  --use-bf16 1 \
+  --exp-dir /exp_dir \
+  --max-duration 3600 \
+  --lr-epochs 0.0097 \
+  --bpe-model /bpe_dir \
+  --num-buckets 40 \
+  --keep-last-k 100 \
+  --num-workers 4 \
+  --on-the-fly-feats True \
+  --num-encoder-layers 2,2,4,5,4,2 \
+  --feedforward-dim 512,768,1536,2048,1536,768 \
+  --encoder-dim 192,256,512,768,512,256 \
+  --encoder-unmasked-dim 192,192,256,320,256,192 \
+  --causal 1 \
+  --chunk-size "8,24,48,96,-1" \
+  --left-context-frames "96,128,256,-1"
+```
+
+### Fine-tuning for Punctuation and Casing
+
+```bash
+python3 ./zipformer/finetune.py \
+  --world-size 8 \
+  --num-epochs 1 \
+  --start-epoch 1 \
+  --use-bf16 1 \
+  --do-finetune 1 \
+  --finetune-ckpt /pretrained.pt \
+  --bpe-model /bpe_dir \
+  --init-modules encoder_embed,encoder \
+  --exp-dir /exp_dir \
+  --max-duration 3000 \
+  --lr-epochs 0.0097 \
+  --num-buckets 40 \
+  --keep-last-k 100 \
+  --num-workers 4 \
+  --on-the-fly-feats True \
+  --num-encoder-layers 2,2,4,5,4,2 \
+  --feedforward-dim 512,768,1536,2048,1536,768 \
+  --encoder-dim 192,256,512,768,512,256 \
+  --encoder-unmasked-dim 192,192,256,320,256,192 \
+  --causal 1 \
+  --chunk-size "8,24,48,96,-1" \
+  --left-context-frames "96,128,256,-1" \
+  --base-lr 0.0045
 ```
 
 ## Decoding
 
-The decoding command will be added after the release command line is finalized.
+### Offline Decoding
 
 ```bash
-# TODO: add the X-ASR-zh-en Zipformer decoding command here.
+./zipformer/decode.py \
+  --exp-dir /exp_dir \
+  --use-ctc False \
+  --use-transducer True \
+  --bpe-model /bpe_dir \
+  --num-encoder-layers 2,2,4,5,4,2 \
+  --feedforward-dim 512,768,1536,2048,1536,768 \
+  --encoder-dim 192,256,512,768,512,256 \
+  --encoder-unmasked-dim 192,192,256,320,256,192 \
+  --causal 1 \
+  --use-averaged-model True \
+  --decoding-method greedy_search \
+  --max-duration 1000 \
+  --left-context-frames -1 \
+  --chunk-size -1 \
+  --avg 3 \
+  --epoch 10
+```
+
+### Streaming Decoding
+
+```bash
+./zipformer/streaming_decode.py \
+  --exp-dir /exp_dir \
+  --use-ctc 0 \
+  --use-transducer 1 \
+  --bpe-model /bpe_dir \
+  --num-encoder-layers 2,2,4,5,4,2 \
+  --feedforward-dim 512,768,1536,2048,1536,768 \
+  --encoder-dim 192,256,512,768,512,256 \
+  --encoder-unmasked-dim 192,192,256,320,256,192 \
+  --causal 1 \
+  --use-averaged-model True \
+  --decoding-method greedy_search \
+  --num-decode-streams 1000 \
+  --left-context-frames 256 \
+  --chunk-size 96 \
+  --avg 15 \
+  --epoch 10
 ```
 
 ## Notes
