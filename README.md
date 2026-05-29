@@ -30,7 +30,7 @@
 </p>
 
 <p align="center">
-  <a href="https://huggingface.co/GilgameshWind/icefall_X_ASR_streaming">🤗 Hugging Face Hub</a> |
+  <a href="https://huggingface.co/GilgameshWind/X-ASR-zh-en">🤗 Hugging Face Hub</a> |
   <a href="https://huggingface.co/spaces/chenxie95/X-ASR">🪐 Hugging Face Space</a> |
   <a href="https://stream-asr.sjtuxlance.com/">🎧 Online Demo</a> |
   <a href="X-ASR-zh-en/deployment/README.md">🚀 Deployment Guide</a>
@@ -91,7 +91,7 @@
 
 | Model | Languages | Type | Streaming chunks | Deployment | Report | Model files |
 |:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| `X-ASR-zh-en` | Chinese, English | Offline-streaming unified transducer ASR | 160 ms, 480 ms, 960 ms, 1920 ms | sherpa-onnx | **Coming Soon** | [GitHub](X-ASR-zh-en/deployment), [Hugging Face](https://huggingface.co/GilgameshWind/icefall_X_ASR_streaming) |
+| `X-ASR-zh-en` | Chinese, English | Offline-streaming unified transducer ASR | 160 ms, 480 ms, 960 ms, 1920 ms | sherpa-onnx | **Coming Soon** | [GitHub](X-ASR-zh-en/deployment), [Hugging Face](https://huggingface.co/GilgameshWind/X-ASR-zh-en) |
 
 ## ⭐ Highlights
 
@@ -280,7 +280,7 @@ git lfs pull
 Alternatively, download the model artifacts from Hugging Face:
 
 ```bash
-hf download GilgameshWind/icefall_X_ASR_streaming \
+hf download GilgameshWind/X-ASR-zh-en \
   --local-dir ./X-ASR-zh-en/deployment
 ```
 

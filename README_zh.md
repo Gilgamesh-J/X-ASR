@@ -30,7 +30,7 @@
 </p>
 
 <p align="center">
-  <a href="https://huggingface.co/GilgameshWind/icefall_X_ASR_streaming">🤗 Hugging Face</a> |
+  <a href="https://huggingface.co/GilgameshWind/X-ASR-zh-en">🤗 Hugging Face</a> |
   <a href="https://huggingface.co/spaces/chenxie95/X-ASR">🪐 Hugging Face Space</a> |
   <a href="https://stream-asr.sjtuxlance.com/">🎧 在线 Demo</a> |
   <a href="X-ASR-zh-en/deployment/README.md">🚀 部署文档</a>
@@ -91,7 +91,7 @@
 
 | 模型 | 语言 | 类型 | 流式 chunk | 部署 | 工作报告 | 模型文件 |
 |:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| `X-ASR-zh-en` | 中文、英文 | 离线-流式一体化 transducer ASR | 160 ms, 480 ms, 960 ms, 1920 ms | sherpa-onnx | **Coming Soon** | [GitHub](X-ASR-zh-en/deployment), [Hugging Face](https://huggingface.co/GilgameshWind/icefall_X_ASR_streaming) |
+| `X-ASR-zh-en` | 中文、英文 | 离线-流式一体化 transducer ASR | 160 ms, 480 ms, 960 ms, 1920 ms | sherpa-onnx | **Coming Soon** | [GitHub](X-ASR-zh-en/deployment), [Hugging Face](https://huggingface.co/GilgameshWind/X-ASR-zh-en) |
 
 ## ⭐ 核心特性
 
@@ -280,7 +280,7 @@ git lfs pull
 也可以从 Hugging Face 下载模型文件：
 
 ```bash
-hf download GilgameshWind/icefall_X_ASR_streaming \
+hf download GilgameshWind/X-ASR-zh-en \
   --local-dir ./X-ASR-zh-en/deployment
 ```
 

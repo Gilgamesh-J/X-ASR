@@ -11,7 +11,7 @@ git lfs pull
 The same model artifacts are also available on Hugging Face:
 
 ```bash
-hf download GilgameshWind/icefall_X_ASR_streaming \
+hf download GilgameshWind/X-ASR-zh-en \
   --local-dir ./X-ASR-zh-en/deployment
 ```
 
