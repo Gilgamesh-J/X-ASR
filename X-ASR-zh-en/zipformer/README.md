@@ -128,7 +128,7 @@ python3 ./zipformer/finetune.py \
   --num-decode-streams 1000 \
   --left-context-frames 256 \
   --chunk-size 96 \
-  --avg 15 \
+  --avg 3 \
   --epoch 10
 ```
 
