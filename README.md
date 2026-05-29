@@ -208,10 +208,12 @@ The following table compares representative ASR models on the same public benchm
     <tr><td align="center">1</td><td align="center">Qwen3-ASR</td><td align="center">1.7B</td><td align="center">1.65</td><td align="center">3.45</td><td align="center">8.56</td><td align="center">5.29</td><td align="center">5.46</td><td align="center"><b>4.882</b></td></tr>
     <tr><td align="center">2</td><td align="center">Qwen3-ASR</td><td align="center">0.6B</td><td align="center">2.18</td><td align="center">4.54</td><td align="center">8.94</td><td align="center">5.97</td><td align="center">6.88</td><td align="center">5.702</td></tr>
     <tr><td align="center">3</td><td align="center"><b>X-ASR-zh-en</b> (offline)</td><td align="center">0.16B</td><td align="center">2.56</td><td align="center">5.56</td><td align="center">9.17</td><td align="center">5.83</td><td align="center">7.06</td><td align="center">6.036</td></tr>
-    <tr><td align="center">4</td><td align="center">SenseVoice-small</td><td align="center">Not specified</td><td align="center">3.16</td><td align="center">7.21</td><td align="center">11.24</td><td align="center">5.73</td><td align="center">6.47</td><td align="center">6.762</td></tr>
-    <tr><td align="center">5</td><td align="center">VibeVoice</td><td align="center">Not specified</td><td align="center">2.18</td><td align="center">5.65</td><td align="center">9.49</td><td align="center">14.45</td><td align="center">17.19</td><td align="center">9.792</td></tr>
+    <tr><td align="center">4</td><td align="center">SenseVoice-small</td><td align="center">234M</td><td align="center">3.16</td><td align="center">7.21</td><td align="center">11.24</td><td align="center">5.73</td><td align="center">6.47</td><td align="center">6.762</td></tr>
+    <tr><td align="center">5</td><td align="center">VibeVoice-ASR</td><td align="center">9B</td><td align="center">2.18</td><td align="center">5.65</td><td align="center">9.49</td><td align="center">14.45</td><td align="center">17.19</td><td align="center">9.792</td></tr>
   </tbody>
 </table>
+
+Parameter references: SenseVoice-small follows the [FunAudioLLM report](https://fun-audio-llm.github.io/pdf/FunAudioLLM.pdf); VibeVoice-ASR follows the [Hugging Face model card](https://huggingface.co/microsoft/VibeVoice-ASR).
 
 ### 🧭 Vertical-Domain Benchmarks
 
