@@ -213,8 +213,6 @@ The following table compares representative ASR models on the same public benchm
   </tbody>
 </table>
 
-Parameter references: SenseVoice-small follows the [FunAudioLLM report](https://fun-audio-llm.github.io/pdf/FunAudioLLM.pdf); VibeVoice-ASR follows the [Hugging Face model card](https://huggingface.co/microsoft/VibeVoice-ASR).
-
 ### 🧭 Vertical-Domain Benchmarks
 
 The following results report **GigaSpeechBench vertical-domain** performance for the current **X-ASR-zh-en** release. Values are **WER/CER percentages**; lower is better. Domain abbreviations follow the GigaSpeechBench vertical-domain labels.

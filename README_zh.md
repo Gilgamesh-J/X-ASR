@@ -213,8 +213,6 @@
   </tbody>
 </table>
 
-参数量来源：SenseVoice-small 参考 [FunAudioLLM 报告](https://fun-audio-llm.github.io/pdf/FunAudioLLM.pdf)；VibeVoice-ASR 参考 [Hugging Face 模型卡](https://huggingface.co/microsoft/VibeVoice-ASR)。
-
 ### 🧭 Vertical-Domain Benchmarks（垂类）
 
 以下结果为当前 **X-ASR-zh-en** 版本在 **GigaSpeechBench vertical-domain** 上的评测结果。表中数值为 **WER/CER 百分比**，越低越好。领域缩写沿用 GigaSpeechBench 的 vertical-domain 标注。
