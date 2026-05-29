@@ -182,6 +182,37 @@
 
 **说明：** 加粗数值表示该评测列中当前列出的最佳结果。
 
+### 🏆 Public Benchmark Model Comparison（公开基准模型对比）
+
+下表用于对比不同 ASR 模型在同一组公开 benchmark 上的结果。排名按五个评测列的 **AVG** 从低到高计算，越低越好。参数量仅使用来源表中明确标注的信息。
+
+<table>
+  <thead>
+    <tr>
+      <th align="center" rowspan="2">🏅 排名</th>
+      <th align="center" rowspan="2">模型</th>
+      <th align="center" rowspan="2">参数量</th>
+      <th align="center" colspan="2">📚 LibriSpeech</th>
+      <th align="center" rowspan="2">🎙️ GigaSpeech</th>
+      <th align="center" colspan="2">🗣️ WenetSpeech</th>
+      <th align="center" rowspan="2">AVG</th>
+    </tr>
+    <tr>
+      <th align="center">clean</th>
+      <th align="center">other</th>
+      <th align="center">net</th>
+      <th align="center">meeting</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td align="center">1</td><td align="center">Qwen3-ASR</td><td align="center">1.7B</td><td align="center">1.65</td><td align="center">3.45</td><td align="center">8.56</td><td align="center">5.29</td><td align="center">5.46</td><td align="center"><b>4.882</b></td></tr>
+    <tr><td align="center">2</td><td align="center">Qwen3-ASR</td><td align="center">0.6B</td><td align="center">2.18</td><td align="center">4.54</td><td align="center">8.94</td><td align="center">5.97</td><td align="center">6.88</td><td align="center">5.702</td></tr>
+    <tr><td align="center">3</td><td align="center"><b>X-ASR-zh-en</b> (offline)</td><td align="center">0.16B</td><td align="center">2.56</td><td align="center">5.56</td><td align="center">9.17</td><td align="center">5.83</td><td align="center">7.06</td><td align="center">6.036</td></tr>
+    <tr><td align="center">4</td><td align="center">SenseVoice-small</td><td align="center">未标注</td><td align="center">3.16</td><td align="center">7.21</td><td align="center">11.24</td><td align="center">5.73</td><td align="center">6.47</td><td align="center">6.762</td></tr>
+    <tr><td align="center">5</td><td align="center">VibeVoice</td><td align="center">未标注</td><td align="center">2.18</td><td align="center">5.65</td><td align="center">9.49</td><td align="center">14.45</td><td align="center">17.19</td><td align="center">9.792</td></tr>
+  </tbody>
+</table>
+
 ### 🧭 Vertical-Domain Benchmarks（垂类）
 
 以下结果为当前 **X-ASR-zh-en** 版本在 **GigaSpeechBench vertical-domain** 上的评测结果。表中数值为 **WER/CER 百分比**，越低越好。领域缩写沿用 GigaSpeechBench 的 vertical-domain 标注。

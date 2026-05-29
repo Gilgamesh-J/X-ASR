@@ -182,6 +182,37 @@ The following results are for the current **X-ASR-zh-en** release. All results a
 
 **Note:** Bold numbers indicate the best result among the listed modes for each benchmark column.
 
+### 🏆 Public Benchmark Model Comparison
+
+The following table compares representative ASR models on the same public benchmark columns. Ranks are computed by **AVG** across the five listed columns; lower is better. Parameter sizes are shown when provided by the source sheet.
+
+<table>
+  <thead>
+    <tr>
+      <th align="center" rowspan="2">🏅 Rank</th>
+      <th align="center" rowspan="2">Model</th>
+      <th align="center" rowspan="2">Params</th>
+      <th align="center" colspan="2">📚 LibriSpeech</th>
+      <th align="center" rowspan="2">🎙️ GigaSpeech</th>
+      <th align="center" colspan="2">🗣️ WenetSpeech</th>
+      <th align="center" rowspan="2">AVG</th>
+    </tr>
+    <tr>
+      <th align="center">clean</th>
+      <th align="center">other</th>
+      <th align="center">net</th>
+      <th align="center">meeting</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td align="center">1</td><td align="center">Qwen3-ASR</td><td align="center">1.7B</td><td align="center">1.65</td><td align="center">3.45</td><td align="center">8.56</td><td align="center">5.29</td><td align="center">5.46</td><td align="center"><b>4.882</b></td></tr>
+    <tr><td align="center">2</td><td align="center">Qwen3-ASR</td><td align="center">0.6B</td><td align="center">2.18</td><td align="center">4.54</td><td align="center">8.94</td><td align="center">5.97</td><td align="center">6.88</td><td align="center">5.702</td></tr>
+    <tr><td align="center">3</td><td align="center"><b>X-ASR-zh-en</b> (offline)</td><td align="center">0.16B</td><td align="center">2.56</td><td align="center">5.56</td><td align="center">9.17</td><td align="center">5.83</td><td align="center">7.06</td><td align="center">6.036</td></tr>
+    <tr><td align="center">4</td><td align="center">SenseVoice-small</td><td align="center">Not specified</td><td align="center">3.16</td><td align="center">7.21</td><td align="center">11.24</td><td align="center">5.73</td><td align="center">6.47</td><td align="center">6.762</td></tr>
+    <tr><td align="center">5</td><td align="center">VibeVoice</td><td align="center">Not specified</td><td align="center">2.18</td><td align="center">5.65</td><td align="center">9.49</td><td align="center">14.45</td><td align="center">17.19</td><td align="center">9.792</td></tr>
+  </tbody>
+</table>
+
 ### 🧭 Vertical-Domain Benchmarks
 
 The following results report **GigaSpeechBench vertical-domain** performance for the current **X-ASR-zh-en** release. Values are **WER/CER percentages**; lower is better. Domain abbreviations follow the GigaSpeechBench vertical-domain labels.
