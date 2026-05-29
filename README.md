@@ -388,12 +388,19 @@ X-ASR/
         |-- export-onnx-streaming.py
         |-- model.py
         |-- zipformer.py
+        |-- data/
+        |   |-- lang_5000/
+        |   |   |-- bpe.model
+        |   |   `-- tokens.txt
+        |   `-- lang_5000_with_punctuation/
+        |       |-- bpe_punc.model
+        |       `-- tokens.txt
         `-- checkpoint/
             |-- pretrained.pt
             `-- fintuned_with_punctuation.pt
 ```
 
-`X-ASR-zh-en/deployment/` contains runnable sherpa-onnx WebSocket server/client scripts and ONNX deployment artifacts. `X-ASR-zh-en/zipformer/` contains the icefall/Zipformer training, decoding, export recipe files, and released PyTorch checkpoints for the model.
+`X-ASR-zh-en/deployment/` contains runnable sherpa-onnx WebSocket server/client scripts and ONNX deployment artifacts. `X-ASR-zh-en/zipformer/` contains the icefall/Zipformer training, decoding, export recipe files, tokenizer/data files, and released PyTorch checkpoints for the model.
 
 ## 🤝 Contributing
 

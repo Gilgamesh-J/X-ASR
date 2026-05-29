@@ -388,12 +388,19 @@ X-ASR/
         |-- export-onnx-streaming.py
         |-- model.py
         |-- zipformer.py
+        |-- data/
+        |   |-- lang_5000/
+        |   |   |-- bpe.model
+        |   |   `-- tokens.txt
+        |   `-- lang_5000_with_punctuation/
+        |       |-- bpe_punc.model
+        |       `-- tokens.txt
         `-- checkpoint/
             |-- pretrained.pt
             `-- fintuned_with_punctuation.pt
 ```
 
-`X-ASR-zh-en/deployment/` 包含可直接运行的 sherpa-onnx WebSocket 服务端/客户端脚本以及 ONNX 部署文件。`X-ASR-zh-en/zipformer/` 包含本次发布模型对应的 icefall/Zipformer 训练、解码、导出 recipe 文件和 PyTorch checkpoint。
+`X-ASR-zh-en/deployment/` 包含可直接运行的 sherpa-onnx WebSocket 服务端/客户端脚本以及 ONNX 部署文件。`X-ASR-zh-en/zipformer/` 包含本次发布模型对应的 icefall/Zipformer 训练、解码、导出 recipe 文件、tokenizer/data 文件和 PyTorch checkpoint。
 
 ## 🤝 贡献
 

@@ -18,6 +18,13 @@ zipformer/
 |-- export-onnx-streaming.py
 |-- model.py
 |-- zipformer.py
+|-- data/
+|   |-- lang_5000/
+|   |   |-- bpe.model
+|   |   `-- tokens.txt
+|   `-- lang_5000_with_punctuation/
+|       |-- bpe_punc.model
+|       `-- tokens.txt
 `-- checkpoint/
     |-- pretrained.pt
     `-- fintuned_with_punctuation.pt
@@ -29,6 +36,15 @@ zipformer/
 | --- | --- |
 | `checkpoint/pretrained.pt` | The base checkpoint obtained from the main X-ASR-zh-en training run. |
 | `checkpoint/fintuned_with_punctuation.pt` | A checkpoint fine-tuned from `checkpoint/pretrained.pt` to improve punctuation prediction and true English casing. |
+
+## Data and Checkpoint Mapping
+
+Use the data folder that matches the checkpoint being loaded. In the commands below, replace `/bpe_dir` with the corresponding BPE model path.
+
+| Checkpoint | Matching data folder | BPE model | Tokens | Usage |
+| --- | --- | --- | --- | --- |
+| `checkpoint/pretrained.pt` | `data/lang_5000/` | `data/lang_5000/bpe.model` | `data/lang_5000/tokens.txt` | Base X-ASR-zh-en checkpoint from the main training run. |
+| `checkpoint/fintuned_with_punctuation.pt` | `data/lang_5000_with_punctuation/` | `data/lang_5000_with_punctuation/bpe_punc.model` | `data/lang_5000_with_punctuation/tokens.txt` | Fine-tuned checkpoint for punctuation prediction and true English casing. |
 
 ## Training
 
