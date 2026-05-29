@@ -10,6 +10,7 @@ For ready-to-run sherpa-onnx WebSocket deployment, see [`../deployment/README.md
 zipformer/
 |-- README.md
 |-- train.py
+|-- finetune.py
 |-- decode.py
 |-- streaming_decode.py
 |-- export.py

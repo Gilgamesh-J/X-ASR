@@ -380,6 +380,7 @@ X-ASR/
     `-- zipformer/
         |-- README.md
         |-- train.py
+        |-- finetune.py
         |-- decode.py
         |-- streaming_decode.py
         |-- export.py
