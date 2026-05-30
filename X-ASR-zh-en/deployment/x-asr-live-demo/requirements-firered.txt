@@ -1,0 +1,6 @@
+# Optional: enable the default FireRedVAD (--vad firered).
+# Once installed + weights downloaded it is used by default; otherwise the program
+# auto-falls back to silero and the demo still runs.
+#   pip install -r requirements-firered.txt
+#   ./download_models.sh           # also downloads FireRedVAD weights to models/firered_vad/
+fireredvad              # official package (FireRedTeam / Xiaohongshu, Apache-2.0); pulls torch / kaldi_native_fbank, etc.
