@@ -128,6 +128,16 @@ We welcome more experiments and real-world use cases built on top of **X-ASR**. 
       <br>
       <sub>Microphone/WAV → FireRedVAD endpointing → X-ASR streaming decoding → live partial/final output. Designed for local offline dictation, voice-input prototypes, and vibe-coding workflows.</sub>
       <br><br>
+      <p align="left">
+        This application turns X-ASR from a model release into a complete local voice-input loop. FireRedVAD detects when speech starts and ends, while X-ASR performs low-latency streaming recognition during the utterance. A short pause commits the current sentence as final text.
+      </p>
+      <p align="left">
+        The main idea is that streaming ASR alone is not enough for interactive use: the decoder can produce partial text, but it does not know when a user has finished speaking. Adding VAD-based endpointing makes the system usable for local dictation, voice-IME prototypes, and vibe-coding scenarios where speech can be turned into text without sending audio to a server.
+      </p>
+      <p align="left">
+        As a starting point, the demo prints final results in the terminal. A natural next step is to replace that final-text callback with an editor or focused-input injection layer, turning X-ASR into a local hands-free coding and writing interface.
+      </p>
+      <br><br>
       <a href="X-ASR-zh-en/deployment/x-asr-live-demo/README.md"><b>Open Guide</b></a> ·
       <a href="X-ASR-zh-en/deployment/x-asr-live-demo/README_zh.md">中文</a>
     </td>

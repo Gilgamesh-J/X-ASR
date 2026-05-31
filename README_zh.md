@@ -128,6 +128,16 @@
       <br>
       <sub>麦克风/WAV → FireRedVAD 端点检测 → X-ASR 流式解码 → partial/final 实时输出。适用于本机离线听写、语音输入原型和 vibe-coding 工作流。</sub>
       <br><br>
+      <p align="left">
+        这个应用把 X-ASR 从一个模型发布，进一步连接成一个完整的本机语音输入闭环。FireRedVAD 负责判断语音从哪里开始、在哪里结束；X-ASR 在说话过程中持续进行低延迟流式识别；当检测到短暂停顿时，当前句子会被提交为 final 文本。
+      </p>
+      <p align="left">
+        这里的关键启发是：流式 ASR 本身只能边听边出 partial，但它并不知道用户什么时候说完一句话。加入基于 VAD 的端点检测之后，系统才更接近真实可用的本机听写、语音输入法原型，以及 vibe-coding 中“用语音驱动编辑和编码”的交互形态。
+      </p>
+      <p align="left">
+        当前 demo 默认把 final 结果打印在终端。进一步扩展时，可以把 final-text 回调替换成向编辑器或当前输入框注入文本，从而把 X-ASR 变成本机离线的免手输入、写作和编码接口。
+      </p>
+      <br><br>
       <a href="X-ASR-zh-en/deployment/x-asr-live-demo/README_zh.md"><b>打开文档</b></a> ·
       <a href="X-ASR-zh-en/deployment/x-asr-live-demo/README.md">English</a>
     </td>
