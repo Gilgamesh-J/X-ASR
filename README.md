@@ -113,9 +113,9 @@
 
 ## 🎙️ Applications
 
-X-ASR is released with runnable application examples that show how the model can be used beyond benchmark evaluation. The latest contribution focuses on **local offline live recognition**, **VAD-based endpointing**, and practical voice-input workflows for **vibe-coding**.
+We welcome more experiments and real-world use cases built on top of **X-ASR**. The following downstream applications are based on X-ASR and have been synced into this repository.
 
-### 🧪 New PR: Local Offline Vibe-Coding with VAD
+### 🧪 Vibe-Coding Application with FireRedVAD
 
 <table>
   <tr>
@@ -124,9 +124,9 @@ X-ASR is released with runnable application examples that show how the model can
         <img src="X-ASR-zh-en/deployment/x-asr-live-demo/assets/streaming-demo.gif" width="720" alt="X-ASR local offline live recognition demo">
       </a>
       <br>
-      <b>Local Offline Live ASR Demo</b>
+      <b>Local Offline Vibe-Coding ASR Demo</b>
       <br>
-      <sub>Microphone/WAV → VAD endpointing → X-ASR streaming decoding → live partial/final output. Designed for local dictation, voice-input prototypes, and vibe-coding workflows.</sub>
+      <sub>Microphone/WAV → FireRedVAD endpointing → X-ASR streaming decoding → live partial/final output. Designed for local offline dictation, voice-input prototypes, and vibe-coding workflows.</sub>
       <br><br>
       <a href="X-ASR-zh-en/deployment/x-asr-live-demo/README.md"><b>Open Guide</b></a> ·
       <a href="X-ASR-zh-en/deployment/x-asr-live-demo/README_zh.md">中文</a>
