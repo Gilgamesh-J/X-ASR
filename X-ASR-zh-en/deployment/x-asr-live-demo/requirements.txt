@@ -1,0 +1,7 @@
+# Core deps: the silero / energy VADs run the end-to-end demo out of the box.
+# (Default is --vad firered; if the optional package below or its weights are
+#  missing, it auto-falls back to silero.)
+sherpa-onnx>=1.13.2     # streaming zipformer ASR + silero VAD runtime (prebuilt wheels on Apple Silicon)
+numpy
+sounddevice             # live microphone capture (M1 mode)
+soundfile               # read wav (M0 mode)

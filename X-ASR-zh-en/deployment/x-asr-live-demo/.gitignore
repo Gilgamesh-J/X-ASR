@@ -1,0 +1,6 @@
+# Weights/caches are not committed (fetch them with download_models.sh)
+models/
+.hf_xasr/
+__pycache__/
+*.pyc
+.DS_Store
