@@ -113,33 +113,23 @@
 
 ## 🎙️ Applications
 
-X-ASR is released with runnable application examples that show how the model can be used beyond benchmark evaluation. The current focus is **low-latency streaming recognition**, from server-side WebSocket deployment to fully local live dictation.
+X-ASR is released with runnable application examples that show how the model can be used beyond benchmark evaluation. The latest contribution focuses on **local offline live recognition**, **VAD-based endpointing**, and practical voice-input workflows for **vibe-coding**.
+
+### 🧪 New PR: Local Offline Vibe-Coding with VAD
 
 <table>
   <tr>
-    <td width="50%" valign="top" align="center">
+    <td width="100%" valign="top" align="center">
       <a href="X-ASR-zh-en/deployment/x-asr-live-demo/README.md">
-        <img src="X-ASR-zh-en/deployment/x-asr-live-demo/assets/streaming-demo.gif" width="420" alt="X-ASR local live streaming demo">
+        <img src="X-ASR-zh-en/deployment/x-asr-live-demo/assets/streaming-demo.gif" width="720" alt="X-ASR local offline live recognition demo">
       </a>
       <br>
-      <b>Local Live ASR Demo</b>
+      <b>Local Offline Live ASR Demo</b>
       <br>
-      <sub>Microphone/WAV → VAD endpointing → X-ASR streaming decoding → live partial/final output. Runs locally without a WebSocket server.</sub>
+      <sub>Microphone/WAV → VAD endpointing → X-ASR streaming decoding → live partial/final output. Designed for local dictation, voice-input prototypes, and vibe-coding workflows.</sub>
       <br><br>
       <a href="X-ASR-zh-en/deployment/x-asr-live-demo/README.md"><b>Open Guide</b></a> ·
       <a href="X-ASR-zh-en/deployment/x-asr-live-demo/README_zh.md">中文</a>
-    </td>
-    <td width="50%" valign="top" align="center">
-      <a href="X-ASR-zh-en/deployment/README.md">
-        <img src="assets/figures/demo-preview.png" width="420" alt="X-ASR WebSocket deployment demo">
-      </a>
-      <br>
-      <b>WebSocket Streaming Deployment</b>
-      <br>
-      <sub>sherpa-onnx WebSocket server/client for service-style streaming ASR deployment. Each connection keeps an independent recognition session.</sub>
-      <br><br>
-      <a href="X-ASR-zh-en/deployment/README.md"><b>Deployment Guide</b></a> ·
-      <a href="#quick-start">Quick Start</a>
     </td>
   </tr>
 </table>

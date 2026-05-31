@@ -113,33 +113,23 @@
 
 ## 🎙️ 应用示例
 
-X-ASR 不只提供评测结果，也提供可直接运行的应用示例，用于展示模型在真实低延迟流式场景中的使用方式。当前重点覆盖 **服务化 WebSocket 部署** 和 **本地实时听写/语音输入** 两条路径。
+X-ASR 不只提供评测结果，也提供可直接运行的应用示例，用于展示模型在真实低延迟流式场景中的使用方式。最新合入的贡献重点面向 **本机离线实时识别**、**VAD 端点检测**，以及适合 **vibe-coding** 的语音输入工作流。
+
+### 🧪 新 PR：本机离线 Vibe-Coding 与 VAD
 
 <table>
   <tr>
-    <td width="50%" valign="top" align="center">
+    <td width="100%" valign="top" align="center">
       <a href="X-ASR-zh-en/deployment/x-asr-live-demo/README_zh.md">
-        <img src="X-ASR-zh-en/deployment/x-asr-live-demo/assets/streaming-demo.gif" width="420" alt="X-ASR 本地实时流式识别 Demo">
+        <img src="X-ASR-zh-en/deployment/x-asr-live-demo/assets/streaming-demo.gif" width="720" alt="X-ASR 本机离线实时识别 Demo">
       </a>
       <br>
-      <b>本地实时 ASR Demo</b>
+      <b>本机离线实时 ASR Demo</b>
       <br>
-      <sub>麦克风/WAV → VAD 端点检测 → X-ASR 流式解码 → partial/final 实时输出。无需启动 WebSocket 服务端，可作为本地听写或语音输入原型。</sub>
+      <sub>麦克风/WAV → VAD 端点检测 → X-ASR 流式解码 → partial/final 实时输出。适用于本地听写、语音输入原型和 vibe-coding 工作流。</sub>
       <br><br>
       <a href="X-ASR-zh-en/deployment/x-asr-live-demo/README_zh.md"><b>打开文档</b></a> ·
       <a href="X-ASR-zh-en/deployment/x-asr-live-demo/README.md">English</a>
-    </td>
-    <td width="50%" valign="top" align="center">
-      <a href="X-ASR-zh-en/deployment/README.md">
-        <img src="assets/figures/demo-preview.png" width="420" alt="X-ASR WebSocket 部署 Demo">
-      </a>
-      <br>
-      <b>WebSocket 流式部署</b>
-      <br>
-      <sub>基于 sherpa-onnx 的 WebSocket 服务端/客户端部署路径，适合服务化流式 ASR 接入。每个连接维护独立识别 session。</sub>
-      <br><br>
-      <a href="X-ASR-zh-en/deployment/README.md"><b>部署文档</b></a> ·
-      <a href="#快速开始">快速开始</a>
     </td>
   </tr>
 </table>
