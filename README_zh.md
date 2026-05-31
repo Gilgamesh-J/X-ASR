@@ -33,6 +33,7 @@
   <a href="https://huggingface.co/GilgameshWind/X-ASR-zh-en">🤗 Hugging Face</a> |
   <a href="https://huggingface.co/spaces/chenxie95/X-ASR">🪐 Hugging Face Space</a> |
   <a href="https://stream-asr.sjtuxlance.com/">🎧 在线 Demo</a> |
+  <a href="X-ASR-zh-en/deployment/x-asr-live-demo/README_zh.md">🎙️ 本地实时 Demo</a> |
   <a href="X-ASR-zh-en/deployment/README.md">🚀 部署文档</a>
 </p>
 
@@ -52,6 +53,7 @@
   <a href="#项目概览">🔍 项目概览</a> |
   <a href="#时间线">📅 时间线</a> |
   <a href="#模型发布">📦 模型发布</a> |
+  <a href="#应用示例">🎙️ 应用示例</a> |
   <a href="#评测结果">📊 评测结果</a> |
   <a href="#快速开始">🚀 快速开始</a>
 </p>
@@ -106,6 +108,41 @@
 | **文本输出** | 支持标点和大小写 |
 | **部署运行时** | sherpa-onnx |
 | **接口形式** | WebSocket 流式服务端和 WAV 文件测试客户端 |
+
+<a id="应用示例"></a>
+
+## 🎙️ 应用示例
+
+X-ASR 不只提供评测结果，也提供可直接运行的应用示例，用于展示模型在真实低延迟流式场景中的使用方式。当前重点覆盖 **服务化 WebSocket 部署** 和 **本地实时听写/语音输入** 两条路径。
+
+<table>
+  <tr>
+    <td width="50%" valign="top" align="center">
+      <a href="X-ASR-zh-en/deployment/x-asr-live-demo/README_zh.md">
+        <img src="X-ASR-zh-en/deployment/x-asr-live-demo/assets/streaming-demo.gif" width="420" alt="X-ASR 本地实时流式识别 Demo">
+      </a>
+      <br>
+      <b>本地实时 ASR Demo</b>
+      <br>
+      <sub>麦克风/WAV → VAD 端点检测 → X-ASR 流式解码 → partial/final 实时输出。无需启动 WebSocket 服务端，可作为本地听写或语音输入原型。</sub>
+      <br><br>
+      <a href="X-ASR-zh-en/deployment/x-asr-live-demo/README_zh.md"><b>打开文档</b></a> ·
+      <a href="X-ASR-zh-en/deployment/x-asr-live-demo/README.md">English</a>
+    </td>
+    <td width="50%" valign="top" align="center">
+      <a href="X-ASR-zh-en/deployment/README.md">
+        <img src="assets/figures/demo-preview.png" width="420" alt="X-ASR WebSocket 部署 Demo">
+      </a>
+      <br>
+      <b>WebSocket 流式部署</b>
+      <br>
+      <sub>基于 sherpa-onnx 的 WebSocket 服务端/客户端部署路径，适合服务化流式 ASR 接入。每个连接维护独立识别 session。</sub>
+      <br><br>
+      <a href="X-ASR-zh-en/deployment/README.md"><b>部署文档</b></a> ·
+      <a href="#快速开始">快速开始</a>
+    </td>
+  </tr>
+</table>
 
 <a id="评测结果"></a>
 
@@ -402,6 +439,13 @@ X-ASR/
     |   |   |-- sherpa_streaming_infer.py
     |   |   |-- sherpa_streaming_server.py
     |   |   `-- sherpa_streaming_client.py
+    |   |-- x-asr-live-demo/
+    |   |   |-- README.md
+    |   |   |-- README_zh.md
+    |   |   |-- live_asr.py
+    |   |   |-- download_models.sh
+    |   |   |-- requirements.txt
+    |   |   `-- assets/
     |   `-- models/
     |       |-- README.md
     |       |-- chunk-160ms-model/
@@ -431,7 +475,7 @@ X-ASR/
             `-- fintuned_with_punctuation.pt
 ```
 
-`X-ASR-zh-en/deployment/` 包含可直接运行的 sherpa-onnx WebSocket 服务端/客户端脚本以及 ONNX 部署文件。`X-ASR-zh-en/zipformer/` 包含本次发布模型对应的 icefall/Zipformer 训练、解码、导出 recipe 文件、tokenizer/data 文件和 PyTorch checkpoint。
+`X-ASR-zh-en/deployment/` 包含可直接运行的 sherpa-onnx 部署文件，包括 WebSocket 服务端/客户端路径和本地实时 ASR 应用示例。`X-ASR-zh-en/zipformer/` 包含本次发布模型对应的 icefall/Zipformer 训练、解码、导出 recipe 文件、tokenizer/data 文件和 PyTorch checkpoint。
 
 ## 🤝 贡献
 

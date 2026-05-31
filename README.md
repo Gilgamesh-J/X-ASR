@@ -33,6 +33,7 @@
   <a href="https://huggingface.co/GilgameshWind/X-ASR-zh-en">🤗 Hugging Face Hub</a> |
   <a href="https://huggingface.co/spaces/chenxie95/X-ASR">🪐 Hugging Face Space</a> |
   <a href="https://stream-asr.sjtuxlance.com/">🎧 Online Demo</a> |
+  <a href="X-ASR-zh-en/deployment/x-asr-live-demo/README.md">🎙️ Local Live Demo</a> |
   <a href="X-ASR-zh-en/deployment/README.md">🚀 Deployment Guide</a>
 </p>
 
@@ -52,6 +53,7 @@
   <a href="#overview">🔍 Overview</a> |
   <a href="#timeline">📅 Timeline</a> |
   <a href="#model-releases">📦 Model Releases</a> |
+  <a href="#applications">🎙️ Applications</a> |
   <a href="#evaluation">📊 Evaluation</a> |
   <a href="#quick-start">🚀 Quick Start</a>
 </p>
@@ -106,6 +108,41 @@
 | **Text output** | Supports punctuation and casing |
 | **Runtime** | sherpa-onnx |
 | **Interface** | WebSocket streaming server and WAV-file client |
+
+<a id="applications"></a>
+
+## 🎙️ Applications
+
+X-ASR is released with runnable application examples that show how the model can be used beyond benchmark evaluation. The current focus is **low-latency streaming recognition**, from server-side WebSocket deployment to fully local live dictation.
+
+<table>
+  <tr>
+    <td width="50%" valign="top" align="center">
+      <a href="X-ASR-zh-en/deployment/x-asr-live-demo/README.md">
+        <img src="X-ASR-zh-en/deployment/x-asr-live-demo/assets/streaming-demo.gif" width="420" alt="X-ASR local live streaming demo">
+      </a>
+      <br>
+      <b>Local Live ASR Demo</b>
+      <br>
+      <sub>Microphone/WAV → VAD endpointing → X-ASR streaming decoding → live partial/final output. Runs locally without a WebSocket server.</sub>
+      <br><br>
+      <a href="X-ASR-zh-en/deployment/x-asr-live-demo/README.md"><b>Open Guide</b></a> ·
+      <a href="X-ASR-zh-en/deployment/x-asr-live-demo/README_zh.md">中文</a>
+    </td>
+    <td width="50%" valign="top" align="center">
+      <a href="X-ASR-zh-en/deployment/README.md">
+        <img src="assets/figures/demo-preview.png" width="420" alt="X-ASR WebSocket deployment demo">
+      </a>
+      <br>
+      <b>WebSocket Streaming Deployment</b>
+      <br>
+      <sub>sherpa-onnx WebSocket server/client for service-style streaming ASR deployment. Each connection keeps an independent recognition session.</sub>
+      <br><br>
+      <a href="X-ASR-zh-en/deployment/README.md"><b>Deployment Guide</b></a> ·
+      <a href="#quick-start">Quick Start</a>
+    </td>
+  </tr>
+</table>
 
 <a id="evaluation"></a>
 
@@ -402,6 +439,13 @@ X-ASR/
     |   |   |-- sherpa_streaming_infer.py
     |   |   |-- sherpa_streaming_server.py
     |   |   `-- sherpa_streaming_client.py
+    |   |-- x-asr-live-demo/
+    |   |   |-- README.md
+    |   |   |-- README_zh.md
+    |   |   |-- live_asr.py
+    |   |   |-- download_models.sh
+    |   |   |-- requirements.txt
+    |   |   `-- assets/
     |   `-- models/
     |       |-- README.md
     |       |-- chunk-160ms-model/
@@ -431,7 +475,7 @@ X-ASR/
             `-- fintuned_with_punctuation.pt
 ```
 
-`X-ASR-zh-en/deployment/` contains runnable sherpa-onnx WebSocket server/client scripts and ONNX deployment artifacts. `X-ASR-zh-en/zipformer/` contains the icefall/Zipformer training, decoding, export recipe files, tokenizer/data files, and released PyTorch checkpoints for the model.
+`X-ASR-zh-en/deployment/` contains runnable sherpa-onnx deployment artifacts, including the WebSocket server/client path and the local live ASR application demo. `X-ASR-zh-en/zipformer/` contains the icefall/Zipformer training, decoding, export recipe files, tokenizer/data files, and released PyTorch checkpoints for the model.
 
 ## 🤝 Contributing
 

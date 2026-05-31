@@ -7,6 +7,35 @@
 #            if missing, the demo auto-falls back to silero)
 set -e
 cd "$(dirname "$0")"
+
+usage() {
+  cat <<'EOF'
+Usage: ./download_models.sh
+
+Downloads the model files needed by the local live ASR demo:
+  - X-ASR-zh-en chunk-960ms streaming Zipformer artifacts
+  - silero_vad.onnx for the silero VAD backend
+  - optional FireRedVAD weights when the hf CLI is available
+
+Options:
+  -h, --help    Show this help message and exit.
+EOF
+}
+
+case "${1:-}" in
+  "")
+    ;;
+  -h|--help)
+    usage
+    exit 0
+    ;;
+  *)
+    echo "Unknown argument: $1" >&2
+    usage >&2
+    exit 2
+    ;;
+esac
+
 mkdir -p models/asr models/firered_vad
 
 # ---------------------------------------------------------------- 1) ASR ---- #
@@ -52,7 +81,7 @@ elif command -v hf >/dev/null 2>&1; then
     || echo "(FireRedVAD download failed; safe to skip: --vad firered auto-falls back to silero)"
 else
   echo "(no hf CLI, skipping FireRedVAD weights. --vad firered will auto-fall back to silero.)"
-  echo "  manual (HF)        : huggingface-cli download FireRedTeam/FireRedVAD --local-dir models/firered_vad"
+  echo "  manual (HF)        : hf download FireRedTeam/FireRedVAD --local-dir models/firered_vad"
   echo "  manual (ModelScope): modelscope download --model xukaituo/FireRedVAD --local_dir models/firered_vad"
   echo "  ensure you end up with: models/firered_vad/model.pth.tar and models/firered_vad/cmvn.ark"
 fi

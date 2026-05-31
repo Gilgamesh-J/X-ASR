@@ -1,8 +1,16 @@
 # Streaming Zipformer ASR ONNX Deployment
 
-This folder contains deployment-ready ONNX models and a minimal WebSocket server/client for streaming ASR inference with `sherpa-onnx`.
+This folder contains deployment-ready ONNX models, a minimal WebSocket server/client, and a local live ASR demo for streaming inference with `sherpa-onnx`.
 
 The package is intended for users who want to run the exported streaming Zipformer models locally or on a server. It does not require the original training code.
+
+## Deployment Paths
+
+| Path | Use case |
+| --- | --- |
+| [`infer_and_client/`](infer_and_client/) | WebSocket streaming ASR server and WAV-file client for service-style deployment. |
+| [`x-asr-live-demo/`](x-asr-live-demo/) | Local live ASR application demo with microphone/WAV input, VAD endpointing, and live partial/final output. |
+| [`models/`](models/) | Exported sherpa-onnx model artifacts for 160 ms, 480 ms, 960 ms, and 1920 ms streaming modes. |
 
 ## Directory Layout
 
@@ -13,6 +21,15 @@ X-ASR-zh-en/deployment/
 │   ├── sherpa_streaming_infer.py    # sherpa-onnx wrapper and text formatting
 │   ├── sherpa_streaming_server.py   # WebSocket streaming ASR server
 │   └── sherpa_streaming_client.py   # WAV-file WebSocket test client
+├── x-asr-live-demo/
+│   ├── README.md                    # Local live ASR demo guide
+│   ├── README_zh.md                 # Chinese local live ASR demo guide
+│   ├── live_asr.py                  # Mic/WAV + VAD + streaming ASR loop
+│   ├── download_models.sh           # Demo model download helper
+│   ├── requirements.txt             # Core demo dependencies
+│   ├── requirements-firered.txt     # Optional FireRedVAD dependency
+│   └── assets/
+│       └── streaming-demo.gif
 └── models/
     ├── chunk-160ms-model/
     │   ├── encoder-160ms.onnx
