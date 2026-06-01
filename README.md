@@ -56,7 +56,8 @@
   <a href="#model-releases">📦 Model Releases</a> |
   <a href="#applications">🎙️ Applications</a> |
   <a href="#evaluation">📊 Evaluation</a> |
-  <a href="#quick-start">🚀 Quick Start</a>
+  <a href="#quick-start">🚀 Quick Start</a> |
+  <a href="#repository-layout">🗂️ Repository Layout</a>
 </p>
 
 ---
@@ -443,6 +444,8 @@ The provided client and server use a minimal streaming protocol:
 | 3 | JSON: `{"type": "end"}` | Finish the session and flush final results |
 
 For detailed deployment instructions, see [X-ASR-zh-en/deployment/README.md](X-ASR-zh-en/deployment/README.md).
+
+<a id="repository-layout"></a>
 
 ## 🗂️ Repository Layout
 

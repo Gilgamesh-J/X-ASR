@@ -56,7 +56,8 @@
   <a href="#模型发布">📦 模型发布</a> |
   <a href="#应用示例">🎙️ 应用示例</a> |
   <a href="#评测结果">📊 评测结果</a> |
-  <a href="#快速开始">🚀 快速开始</a>
+  <a href="#快速开始">🚀 快速开始</a> |
+  <a href="#仓库结构">🗂️ 仓库结构</a>
 </p>
 
 ---
@@ -443,6 +444,8 @@ python infer_and_client/sherpa_streaming_client.py \
 | 3 | JSON: `{"type": "end"}` | 结束本次会话并输出 final 结果 |
 
 更完整的部署说明见 [X-ASR-zh-en/deployment/README.md](X-ASR-zh-en/deployment/README.md)。
+
+<a id="仓库结构"></a>
 
 ## 🗂️ 仓库结构
 
