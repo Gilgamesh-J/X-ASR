@@ -31,6 +31,7 @@
 
 <p align="center">
   <a href="https://huggingface.co/GilgameshWind/X-ASR-zh-en">🤗 Hugging Face Hub</a> |
+  <a href="https://www.modelscope.ai/Gilgamesh-J/X-ASR-zh-en">🧩 ModelScope</a> |
   <a href="https://huggingface.co/spaces/chenxie95/X-ASR">🪐 Hugging Face Space</a> |
   <a href="https://stream-asr.sjtuxlance.com/">🎧 Online Demo</a> |
   <a href="X-ASR-zh-en/deployment/x-asr-live-demo/README.md">🎙️ Local Live Demo</a> |
@@ -93,7 +94,7 @@
 
 | Model | Languages | Type | Streaming chunks | Deployment | Report | Model files |
 |:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| `X-ASR-zh-en` | Chinese, English | Offline-streaming unified transducer ASR | 160 ms, 480 ms, 960 ms, 1920 ms | sherpa-onnx | **Coming Soon** | [GitHub](X-ASR-zh-en/deployment), [Hugging Face](https://huggingface.co/GilgameshWind/X-ASR-zh-en) |
+| `X-ASR-zh-en` | Chinese, English | Offline-streaming unified transducer ASR | 160 ms, 480 ms, 960 ms, 1920 ms | sherpa-onnx | **Coming Soon** | [GitHub](X-ASR-zh-en/deployment), [Hugging Face](https://huggingface.co/GilgameshWind/X-ASR-zh-en), [ModelScope](https://www.modelscope.ai/Gilgamesh-J/X-ASR-zh-en) |
 
 ## ⭐ Highlights
 
@@ -338,6 +339,10 @@ This section shows how to build and run the **sherpa-onnx WebSocket streaming se
 
 This repository uses **Git LFS** for ONNX model artifacts and demo media. Install Git LFS before cloning or before pulling large files.
 
+#### GitHub
+
+Use GitHub when you want the full project repository, bilingual documentation, training references, deployment examples, and issue-tracking context.
+
 ```bash
 git lfs install
 git clone https://github.com/Gilgamesh-J/X-ASR.git
@@ -345,17 +350,43 @@ cd X-ASR
 git lfs pull
 ```
 
-Alternatively, download the model artifacts from Hugging Face:
+#### Hugging Face
+
+Use Hugging Face when you want the model artifact page and standard HF Hub download tooling.
 
 ```bash
 hf download GilgameshWind/X-ASR-zh-en \
-  --local-dir ./X-ASR-zh-en/deployment
+  --local-dir ./X-ASR-zh-en
+```
+
+#### ModelScope
+
+Use ModelScope when you prefer the ModelScope mirror or Git LFS clone from ModelScope.
+
+```bash
+git lfs install
+git clone https://www.modelscope.ai/Gilgamesh-J/X-ASR-zh-en.git
+cd X-ASR-zh-en
+git lfs pull
 ```
 
 ### 2. Prepare the sherpa-onnx runtime
 
+If you cloned the full GitHub project, enter:
+
+```bash
+cd X-ASR/X-ASR-zh-en/deployment
+```
+
+If you downloaded from Hugging Face or cloned from ModelScope, enter:
+
 ```bash
 cd X-ASR-zh-en/deployment
+```
+
+Then prepare the Python environment:
+
+```bash
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip

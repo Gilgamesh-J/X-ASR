@@ -31,6 +31,7 @@
 
 <p align="center">
   <a href="https://huggingface.co/GilgameshWind/X-ASR-zh-en">🤗 Hugging Face</a> |
+  <a href="https://www.modelscope.ai/Gilgamesh-J/X-ASR-zh-en">🧩 ModelScope</a> |
   <a href="https://huggingface.co/spaces/chenxie95/X-ASR">🪐 Hugging Face Space</a> |
   <a href="https://stream-asr.sjtuxlance.com/">🎧 在线 Demo</a> |
   <a href="X-ASR-zh-en/deployment/x-asr-live-demo/README_zh.md">🎙️ 本地实时 Demo</a> |
@@ -93,7 +94,7 @@
 
 | 模型 | 语言 | 类型 | 流式 chunk | 部署 | 工作报告 | 模型文件 |
 |:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| `X-ASR-zh-en` | 中文、英文 | 离线-流式一体化 transducer ASR | 160 ms, 480 ms, 960 ms, 1920 ms | sherpa-onnx | **Coming Soon** | [GitHub](X-ASR-zh-en/deployment), [Hugging Face](https://huggingface.co/GilgameshWind/X-ASR-zh-en) |
+| `X-ASR-zh-en` | 中文、英文 | 离线-流式一体化 transducer ASR | 160 ms, 480 ms, 960 ms, 1920 ms | sherpa-onnx | **Coming Soon** | [GitHub](X-ASR-zh-en/deployment), [Hugging Face](https://huggingface.co/GilgameshWind/X-ASR-zh-en), [ModelScope](https://www.modelscope.ai/Gilgamesh-J/X-ASR-zh-en) |
 
 ## ⭐ 核心特性
 
@@ -338,6 +339,10 @@ Demo 视频：
 
 本仓库使用 **Git LFS** 管理 ONNX 模型文件和 demo 媒体文件。克隆或拉取大文件前需要先安装并初始化 Git LFS。
 
+#### GitHub
+
+如果需要完整项目仓库、中英文文档、训练参考、部署示例和 issue 跟踪，请使用 GitHub。
+
 ```bash
 git lfs install
 git clone https://github.com/Gilgamesh-J/X-ASR.git
@@ -345,17 +350,43 @@ cd X-ASR
 git lfs pull
 ```
 
-也可以从 Hugging Face 下载模型文件：
+#### Hugging Face
+
+如果需要模型 artifact 页面以及标准 Hugging Face Hub 下载工具，请使用 Hugging Face。
 
 ```bash
 hf download GilgameshWind/X-ASR-zh-en \
-  --local-dir ./X-ASR-zh-en/deployment
+  --local-dir ./X-ASR-zh-en
+```
+
+#### ModelScope
+
+如果希望使用 ModelScope 镜像或从 ModelScope 通过 Git LFS 克隆，请使用 ModelScope。
+
+```bash
+git lfs install
+git clone https://www.modelscope.ai/Gilgamesh-J/X-ASR-zh-en.git
+cd X-ASR-zh-en
+git lfs pull
 ```
 
 ### 2. 准备 sherpa-onnx 运行环境
 
+如果你克隆的是完整 GitHub 项目，进入：
+
+```bash
+cd X-ASR/X-ASR-zh-en/deployment
+```
+
+如果你从 Hugging Face 下载，或从 ModelScope 克隆，进入：
+
 ```bash
 cd X-ASR-zh-en/deployment
+```
+
+然后准备 Python 环境：
+
+```bash
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
