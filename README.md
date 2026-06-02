@@ -142,6 +142,25 @@ We welcome more experiments and real-world use cases built on top of **X-ASR**. 
       <br><br>
       <a href="X-ASR-zh-en/deployment/x-asr-live-demo/README.md"><b>Open Guide</b></a> ·
       <a href="X-ASR-zh-en/deployment/x-asr-live-demo/README_zh.md">中文</a>
+      <br><br>
+      <b>Desktop Package Download</b>
+      <br>
+      <table>
+        <tr>
+          <th align="center">Version</th>
+          <th align="center">Platform</th>
+          <th align="center">International</th>
+          <th align="center">China mainland</th>
+          <th align="center">SHA256</th>
+        </tr>
+        <tr>
+          <td align="center"><code>1.1.2</code></td>
+          <td align="center">macOS universal<br><sub>x86_64 + arm64, macOS 15.0+</sub></td>
+          <td align="center"><a href="https://huggingface.co/GilgameshWind/X-ASR-zh-en/resolve/main/applications/vibe-xasr/VibeXASR-1.1.2-macos-universal.dmg?download=true"><b>Download from Hugging Face</b></a></td>
+          <td align="center"><a href="https://www.modelscope.cn/models/Gilgamesh-J/X-ASR-zh-en/resolve/master/applications/vibe-xasr/VibeXASR-1.1.2-macos-universal.dmg"><b>Download from ModelScope</b></a></td>
+          <td align="center"><code>f6a910ab15e45d3173168c8fc873d8ebf898e1eb14cfcb0eddf6ed3ead942f37</code></td>
+        </tr>
+      </table>
     </td>
   </tr>
 </table>
