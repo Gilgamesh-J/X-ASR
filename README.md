@@ -148,9 +148,15 @@ We welcome more experiments and real-world use cases built on top of **X-ASR**. 
 
 ### ⬇️ Desktop Package Download
 
-| Version | Platform | International | China mainland | SHA256 |
-|:---:|:---:|:---:|:---:|:---|
-| `1.1.2` | macOS universal<br><sub>x86_64 + arm64, macOS 15.0+</sub> | [Download from Hugging Face](https://huggingface.co/GilgameshWind/X-ASR-zh-en/resolve/main/applications/vibe-xasr/VibeXASR-1.1.2-macos-universal.dmg?download=true) | [Download from ModelScope](https://modelscope.cn/models/Gilgamesh-J/X-ASR-zh-en/file/view/master/applications/vibe-xasr/VibeXASR-1.1.2-macos-universal.dmg?status=1) | `f6a910ab15e45d3173168c8fc873d8ebf898e1eb14cfcb0eddf6ed3ead942f37` |
+<p align="center">
+  <img src="assets/applications/vibe-xasr/icon.png" width="96" alt="Vibe XASR app icon">
+  <br>
+  <b>Vibe XASR</b>
+</p>
+
+| Version | Platform | International | China mainland |
+|:---:|:---:|:---:|:---:|
+| `1.1.2` | macOS universal<br><sub>x86_64 + arm64, macOS 15.0+</sub> | [Download from Hugging Face](https://huggingface.co/GilgameshWind/X-ASR-zh-en/resolve/main/applications/vibe-xasr/VibeXASR-1.1.2-macos-universal.dmg?download=true) | [Download from ModelScope](https://modelscope.cn/models/Gilgamesh-J/X-ASR-zh-en/file/view/master/applications/vibe-xasr/VibeXASR-1.1.2-macos-universal.dmg?status=1) |
 
 <a id="evaluation"></a>
 

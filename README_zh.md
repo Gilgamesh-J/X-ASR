@@ -148,9 +148,15 @@
 
 ### ⬇️ 桌面应用下载
 
-| 版本 | 平台 | 国际用户 | 国内用户 | SHA256 |
-|:---:|:---:|:---:|:---:|:---|
-| `1.1.2` | macOS universal<br><sub>x86_64 + arm64，macOS 15.0+</sub> | [从 Hugging Face 下载](https://huggingface.co/GilgameshWind/X-ASR-zh-en/resolve/main/applications/vibe-xasr/VibeXASR-1.1.2-macos-universal.dmg?download=true) | [从 ModelScope 下载](https://modelscope.cn/models/Gilgamesh-J/X-ASR-zh-en/file/view/master/applications/vibe-xasr/VibeXASR-1.1.2-macos-universal.dmg?status=1) | `f6a910ab15e45d3173168c8fc873d8ebf898e1eb14cfcb0eddf6ed3ead942f37` |
+<p align="center">
+  <img src="assets/applications/vibe-xasr/icon.png" width="96" alt="Vibe XASR app icon">
+  <br>
+  <b>Vibe XASR</b>
+</p>
+
+| 版本 | 平台 | 国际用户 | 国内用户 |
+|:---:|:---:|:---:|:---:|
+| `1.1.2` | macOS universal<br><sub>x86_64 + arm64，macOS 15.0+</sub> | [从 Hugging Face 下载](https://huggingface.co/GilgameshWind/X-ASR-zh-en/resolve/main/applications/vibe-xasr/VibeXASR-1.1.2-macos-universal.dmg?download=true) | [从 ModelScope 下载](https://modelscope.cn/models/Gilgamesh-J/X-ASR-zh-en/file/view/master/applications/vibe-xasr/VibeXASR-1.1.2-macos-universal.dmg?status=1) |
 
 <a id="评测结果"></a>
 
