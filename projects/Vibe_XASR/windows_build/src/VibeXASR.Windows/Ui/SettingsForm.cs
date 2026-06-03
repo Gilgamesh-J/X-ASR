@@ -1073,6 +1073,10 @@ public sealed class SettingsForm : Form
                        : $"Please install the Vibe XASR skill: first `mkdir -p ~/{selAgentDir}`, then `curl -s -H \"Authorization: Bearer {key}\" \"{baseUrl}/skill\" -o ~/{selAgentDir}SKILL.md`");
             try { Clipboard.SetText(cmd); } catch { }
             copyCmd.Text = L10n.T("share.copied");
+            // transient "copied" feedback — reset the label after a moment (matches macOS).
+            var flash = new System.Windows.Forms.Timer { Interval = 1500 };
+            flash.Tick += (_, _) => { copyCmd.Text = L10n.T("share.copyCmd"); flash.Stop(); flash.Dispose(); };
+            flash.Start();
         };
         installRow.Controls.Add(copyCmd);
 
