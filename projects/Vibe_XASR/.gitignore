@@ -1,0 +1,31 @@
+# macOS / editor / local config
+.DS_Store
+.claude/
+
+# build artifacts & caches
+.build/
+*.dSYM/
+*.tar.bz2
+macos_build/native/dist/
+
+# local-only eval tools (not shipped)
+tools/
+
+# ASR model payload on Windows is fetched / staged at build time, never committed.
+# Anchored to the payload dir on purpose: a bare `**/models/` also matches the C# source
+# directory windows_build/src/VibeXASR.Windows/Models/ and would drop ModelPaths.cs etc.
+# (windows_build/.gitignore covers the rest of the Windows build output: bin/ obj/ dist/ payload/.)
+windows_build/installer/payload/models/
+
+# Logs / scratch
+*.log
+/tmp/
+
+# stray local archive (do NOT commit — 1.9GB)
+/wind.zip
+
+# Claude 设计工具导出的原始设计对话/上传件 — 不公开(docs 只保留 index.html + 架构图 + appcast.xml)
+docs/chats/
+docs/project/
+docs/uploads/
+docs/README.md

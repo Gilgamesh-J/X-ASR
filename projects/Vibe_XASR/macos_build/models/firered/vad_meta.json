@@ -1,0 +1,21 @@
+{
+  "num_caches": 8,
+  "P": 128,
+  "Co": 19,
+  "idim": 80,
+  "odim": 1,
+  "sample_rate": 16000,
+  "num_mel_bins": 80,
+  "frame_length_ms": 25,
+  "frame_shift_ms": 10,
+  "snip_edges": true,
+  "dither": 0,
+  "postproc": {
+    "smooth_window_size": 5,
+    "speech_threshold": 0.5,
+    "pad_start_frame": 5,
+    "min_speech_frame": 20,
+    "max_speech_frame": 2000,
+    "min_silence_frame": 70
+  }
+}

@@ -1,0 +1,75 @@
+name: build-wheels
+
+on:
+  push:
+    branches:
+      - wheel
+    tags:
+      - '*'
+  workflow_dispatch:
+
+concurrency:
+  group: build-wheels-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_wheels:
+    name: ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["cp38", "cp39", "cp310", "cp311", "cp312", "cp313", "cp314"]
+        manylinux: [manylinux2014] #, manylinux_2_28]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # see https://cibuildwheel.readthedocs.io/en/stable/changelog/
+      # for a list of versions
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v3.1.4
+        env:
+          CIBW_BUILD: "${{ matrix.python-version}}-* "
+          CIBW_SKIP: "cp27-* cp35-* cp36-* cp37-* *-win32 pp* *-musllinux*"
+          CIBW_BUILD_VERBOSITY: 3
+          CIBW_MANYLINUX_X86_64_IMAGE: quay.io/pypa/${{ matrix.manylinux }}_x86_64
+
+      - name: Display wheels
+        shell: bash
+        run: |
+          ls -lh ./wheelhouse/
+
+          unzip -l wheelhouse/*.whl
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.python-version }}
+          path: ./wheelhouse/*.whl
+
+      - name: Publish wheels to PyPI
+        env:
+          TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
+          TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+        shell: bash
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install wheel twine==5.0.0 setuptools
+
+          twine upload ./wheelhouse/*.whl
+
+      - name: Build sdist
+        if: ${{ matrix.python-version == 'cp38' }}
+        shell: bash
+        run: |
+          python3 setup.py sdist
+          ls -l dist/*
+
+      - name: Publish sdist to PyPI
+        if: ${{ matrix.python-version == 'cp38' }}
+        env:
+          TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
+          TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+        run: |
+          twine upload dist/*.tar.gz

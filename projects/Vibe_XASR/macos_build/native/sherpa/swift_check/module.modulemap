@@ -1,0 +1,4 @@
+module CSherpaOnnx {
+  header "/path/to/xasr_workspace/xasr_macos_build/native/sherpa/include/sherpa-onnx/c-api/c-api.h"
+  export *
+}

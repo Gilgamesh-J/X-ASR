@@ -1,0 +1,23 @@
+# This file is from
+# https://github.com/acts-project/acts/blob/main/CI/iwyu/filter.yaml
+remove_lines:
+  # ignore pybind11
+  - "^(- )?#include <pybind11/"
+  - "^(- )?#include [<\"]pybind11/"
+  # ignore python
+  - "^#include <abstract.h>"
+  - "^#include <floatobject.h>"
+  - "^#include <longobject.h>"
+  - "^#include <pyerrors.h>"
+
+replace_lines:
+  - "^#include <assert\\.h>": "#include <cassert>"
+  - "^#include <stddef\\.h>": "#include <cstddef>"
+  - "^#include <math\\.h>": "#include <cmath>"
+  - "^#include <limits\\.h>": "#include <climits>"
+  - "^#include <unistd\\.h>": "#include <cunistd>"
+  - "^#include <stdint\\.h>": "#include <cstdint>"
+  - "^#include <stdlib.h>": "#include <cstdlib>"
+
+ignore_files:
+  - ".*_deps/"

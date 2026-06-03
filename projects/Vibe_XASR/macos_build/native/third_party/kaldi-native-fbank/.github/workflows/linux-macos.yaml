@@ -1,0 +1,74 @@
+name: linux-macos
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+concurrency:
+  group: linux-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  linux_macos:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, ubuntu-22.04-arm]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.8"
+
+      - name: Install Python dependencies
+        shell: bash
+        run: |
+          python3 -m pip install --upgrade pip numpy
+          python3 -m pip install wheel twine setuptools
+          if [[ ${{ matrix.os }} == "ubuntu" ]]; then
+            python3 -m pip install torch==1.13.0+cpu -f https://download.pytorch.org/whl/torch_stable.html
+          else
+            python3 -m pip install torch==1.13.0 -f https://download.pytorch.org/whl/torch_stable.html
+          fi
+
+      - name: Configure Cmake
+        shell: bash
+        run: |
+          mkdir build
+          cd build
+          cmake -D CMAKE_BUILD_TYPE=Release ..
+
+      - name: Build kaldi-native-fbank for ubuntu/macos
+        run: |
+          cd build
+          make -j2
+          ctest --output-on-failure
+
+      - name: Run tests for ubuntu/macos
+        run: |
+          cd build
+          ctest --output-on-failure
+
+      - name: Build Python
+        shell: bash
+        run: |
+          python3 -m pip install --verbose .
+
+      - name: Display Python package version
+        shell: bash
+        run: |
+          python3 -c "import kaldi_native_fbank; print(kaldi_native_fbank.__version__)"
+          python3 -c "import kaldi_native_fbank; print(kaldi_native_fbank.__file__)"
