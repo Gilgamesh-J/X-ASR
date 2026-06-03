@@ -15,9 +15,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.4.2</string>
+	<string>1.4.3</string>
 	<key>CFBundleVersion</key>
-	<string>12</string>
+	<string>13</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>15.0</string>
 	<key>LSUIElement</key>
@@ -29,7 +29,7 @@
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
 	<key>SUFeedURL</key>
-	<string>https://liutaocode.github.io/Vibe_XASR/appcast.xml</string>
+	<string>https://raw.githubusercontent.com/Gilgamesh-J/X-ASR/main/projects/docs/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>gMtrgRPFykG1o9cT1l4/NGoxB5nV5zb+h3dYB6pweSc=</string>
 	<key>SUScheduledCheckInterval</key>

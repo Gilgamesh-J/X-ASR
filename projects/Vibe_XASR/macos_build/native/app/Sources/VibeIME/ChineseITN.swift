@@ -23,7 +23,10 @@ enum ChineseITN {
     static func cn2int(_ s: String) -> Int? {
         var total = 0, section = 0, n = 0; var seen = false
         for ch in s {
-            if let v = num[ch] { n = v; seen = true }
+            // Two consecutive bare digits (e.g. "一二三…") is a digit string being
+            // counted out, NOT a structured number — bail so "一二三四五六七八九十"
+            // stays as-is instead of collapsing to 90.
+            if let v = num[ch] { if n != 0 { return nil }; n = v; seen = true }
             else if let u = unit[ch] { section += (n == 0 ? 1 : n) * u; n = 0; seen = true }
             else if let b = big[ch] { section += n; total += section * b; section = 0; n = 0; seen = true }
             else { return nil }

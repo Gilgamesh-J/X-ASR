@@ -752,17 +752,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         engine.onFinal = { [weak self] text in
             DispatchQueue.main.async {
                 guard let self else { return }
-                let text = self.corrected(text)
-                // Insert + record happen HERE, where `text` is the real final. (The
+                let final = self.corrected(text)
+                // Insert + record happen HERE, where the text is the real final. (The
                 // old code read a buffer synchronously in endDictation before this
                 // async ran → empty text → no insert, no history. That was the bug.)
-                self.recordFinal(text)
-                self.hudModel.partialText = text
+                self.recordFinal(final)
+                self.hudModel.partialText = final
                 if self.store.insertMethod == "type" {
-                    self.inserter.update(text)     // final correction of the tail
-                    if self.store.clipboardOverwrite { Paste.setClipboard(text) }
+                    // 逐字 mode types live as you speak; do NOT re-apply the FINAL-only
+                    // corrections (filler removal / number ITN / snippet expansion) on
+                    // screen — that would delete and retype the tail, which feels awful.
+                    // Converge only to the streaming-level text (pinyin/replacements,
+                    // already shown). History + clipboard still get the full correction.
+                    self.inserter.update(self.corrected(text, isFinal: false))
+                    if self.store.clipboardOverwrite { Paste.setClipboard(final) }
                 } else {
-                    Paste.insert(text, restore: !self.store.clipboardOverwrite)
+                    Paste.insert(final, restore: !self.store.clipboardOverwrite)
                 }
             }
         }

@@ -652,25 +652,122 @@ struct SettingsGroup<Content: View>: View {
 private struct GeneralTab: View {
     @ObservedObject var s: SettingsState
     @ObservedObject var l10n: L10n
+    @Environment(\.colorScheme) private var scheme
+    /// Switches the host's settings tab to the Permissions tab.
+    var onOpenPermissions: () -> Void
+    /// Jump to the Dictation tab (where the hotkey is configured).
+    var onSetHotkey: () -> Void
+
     var body: some View {
-        SettingsGroup(label: l10n.t("grp.general")) {
-            SettingsRow(title: l10n.t("gen.dock"), help: l10n.t("gen.dock.help")) {
-                VibeToggle(on: Binding(get: { s.showDockIcon },
-                                       set: { s.applyDockIcon($0) }))
+        VStack(spacing: 18) {
+            SettingsGroup(label: l10n.t("grp.general")) {
+                SettingsRow(title: l10n.t("gen.dock"), help: l10n.t("gen.dock.help")) {
+                    VibeToggle(on: Binding(get: { s.showDockIcon },
+                                           set: { s.applyDockIcon($0) }))
+                }
+                SettingsRow(title: l10n.t("gen.launchAtLogin"), help: l10n.t("gen.launchAtLogin.help")) {
+                    VibeToggle(on: Binding(get: { s.launchAtLogin },
+                                           set: { s.applyLaunchAtLogin($0) }))
+                }
+                SettingsRow(title: l10n.t("gen.lang"), help: l10n.t("gen.lang.help")) {
+                    // Real, live UI-language picker. Auto label is itself localized.
+                    VibeSelect(
+                        value: Binding(get: { l10n.lang.rawValue },
+                                       set: { l10n.lang = Lang(rawValue: $0) ?? .auto }),
+                        options: Lang.allCases.map {
+                            ($0.rawValue, $0 == .auto ? l10n.autoLabel() : $0.display)
+                        })
+                }
             }
-            SettingsRow(title: l10n.t("gen.launchAtLogin"), help: l10n.t("gen.launchAtLogin.help")) {
-                VibeToggle(on: Binding(get: { s.launchAtLogin },
-                                       set: { s.applyLaunchAtLogin($0) }))
+
+            // Self-check · helps users who hit permission problems.
+            SelfCheckView(s: s, l10n: l10n, onOpenPermissions: onOpenPermissions, onSetHotkey: onSetHotkey)
+        }
+    }
+}
+
+/// Reusable hotkey self-check. Shows an instruction, a focusable test box that
+/// dictation can type into, a permission-aware hint (warning when any of
+/// mic/accessibility/input-monitoring is missing, otherwise the neutral tip),
+/// and a shortcut to the Permissions tab.
+private struct SelfCheckView: View {
+    @ObservedObject var s: SettingsState
+    @ObservedObject var l10n: L10n
+    @Environment(\.colorScheme) private var scheme
+    /// Switches the host's settings tab to the Permissions tab.
+    var onOpenPermissions: () -> Void
+    /// (General tab only) Jump to the Dictation tab to set the hotkey. nil = hide.
+    var onSetHotkey: (() -> Void)? = nil
+
+    @State private var testText = ""
+
+    var body: some View {
+        // Live permission read — drives the warning vs. neutral hint.
+        let missing = (!s.micGranted() || !s.a11yGranted() || !s.inputGranted())
+        SettingsGroup(label: l10n.t("selfcheck.title")) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(l10n.t("selfcheck.body"))
+                    .font(Vibe.Fonts.ui(13))
+                    .foregroundStyle(Vibe.Palette.text(scheme))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                // Test box: focus it, hold the global hotkey and speak → dictation
+                // types into this field, proving the hotkey path end-to-end.
+                HStack(spacing: 8) {
+                    TextField(l10n.t("selfcheck.placeholder"), text: $testText)
+                        .textFieldStyle(.plain)
+                        .font(Vibe.Fonts.ui(13))
+                        .foregroundStyle(Vibe.Palette.text(scheme))
+                    if !testText.isEmpty {
+                        Button { testText = "" } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 12))
+                                .foregroundStyle(Vibe.Palette.textMuted(scheme))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.vertical, 9).padding(.horizontal, 11)
+                .background(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(Vibe.Palette.surface2(scheme))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(Vibe.Palette.hairline(scheme), lineWidth: 1)
+                )
+
+                if missing {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 12)).foregroundStyle(Vibe.Palette.error)
+                        Text(l10n.t("selfcheck.warn"))
+                            .font(Vibe.Fonts.ui(11.5))
+                            .foregroundStyle(Vibe.Palette.error)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                } else {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 12)).foregroundStyle(Vibe.Palette.warn)
+                        Text(l10n.t("selfcheck.hint"))
+                            .font(Vibe.Fonts.ui(11.5))
+                            .foregroundStyle(Vibe.Palette.textMuted(scheme))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                HStack(spacing: 8) {
+                    Spacer()
+                    if let onSetHotkey {
+                        MButton(title: l10n.t("selfcheck.setHotkey"), kind: .ghost) { onSetHotkey() }
+                    }
+                    MButton(title: l10n.t("selfcheck.openPerm"), kind: .ghost) { onOpenPermissions() }
+                }
             }
-            SettingsRow(title: l10n.t("gen.lang"), help: l10n.t("gen.lang.help")) {
-                // Real, live UI-language picker. Auto label is itself localized.
-                VibeSelect(
-                    value: Binding(get: { l10n.lang.rawValue },
-                                   set: { l10n.lang = Lang(rawValue: $0) ?? .auto }),
-                    options: Lang.allCases.map {
-                        ($0.rawValue, $0 == .auto ? l10n.autoLabel() : $0.display)
-                    })
-            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 13).padding(.horizontal, 16)
+            .background(Vibe.Palette.surface(scheme))
         }
     }
 }
@@ -779,7 +876,10 @@ private struct DictationTab: View {
     @ObservedObject var s: SettingsState
     @ObservedObject var l10n: L10n
     @Environment(\.colorScheme) private var scheme
+    /// Switches the host's settings tab to the Permissions tab.
+    var onOpenPermissions: () -> Void
     var body: some View {
+        VStack(spacing: 18) {
         SettingsGroup(label: l10n.t("grp.dictation")) {
             SettingsRow(title: l10n.t("dict.hotkey"), help: l10n.t("dict.hotkey.help")) {
                 HotkeyRecorder(
@@ -828,6 +928,10 @@ private struct DictationTab: View {
                                   onChange: { s.applyCueVolume($0) })
                 }
             }
+        }
+        // Same self-check as General, surfaced here next to the hotkey/mode
+        // controls so users can verify the path right where they configured it.
+        SelfCheckView(s: s, l10n: l10n, onOpenPermissions: onOpenPermissions)
         }
     }
 }
@@ -1886,41 +1990,41 @@ private struct ShareTab: View {
     private var lanHost: String? { s.bridge?.apiLANHost }
 
     private struct Agent: Identifiable { let id: String; let name: String; let dir: String? }
-    private let agents: [Agent] = [
-        .init(id: "openclaw", name: "OpenClaw", dir: ".openclaw/skills/vibe_xasr/"),
-        .init(id: "claude",   name: "Claude Code", dir: ".claude/skills/vibe_xasr/"),
-        .init(id: "hermes",   name: "Hermes", dir: ".hermes/skills/vibe_xasr/"),
-        .init(id: "codex",    name: "Codex", dir: nil),
-        .init(id: "generic",  name: "通用 / 其他 AI", dir: nil),
-    ]
+    private var agents: [Agent] {
+        [.init(id: "openclaw", name: "OpenClaw", dir: ".openclaw/skills/vibe_xasr/"),
+         .init(id: "claude",   name: "Claude Code", dir: ".claude/skills/vibe_xasr/"),
+         .init(id: "hermes",   name: "Hermes", dir: ".hermes/skills/vibe_xasr/"),
+         .init(id: "codex",    name: "Codex", dir: nil),
+         .init(id: "generic",  name: l10n.t("share.agent.generic"), dir: nil)]
+    }
 
     var body: some View {
         VStack(spacing: 18) {
-            SettingsGroup(label: "共享 · 把语音数据接到 AI 编程助手") {
-                SettingsRow(title: "启用本地共享",
-                            help: "在本机开一个只读接口,让你的 AI 编程助手读取语音记录 / 词典 / 口令。默认关闭。") {
+            SettingsGroup(label: l10n.t("share.group.title")) {
+                SettingsRow(title: l10n.t("share.enable.title"),
+                            help: l10n.t("share.enable.help")) {
                     Toggle("", isOn: Binding(get: { s.apiEnabled }, set: { s.applyAPIEnabled($0) })).labelsHidden()
                 }
                 if s.apiEnabled {
-                    SettingsRow(title: "访问地址", help: "默认仅本机可访问") {
+                    SettingsRow(title: l10n.t("share.addr.title"), help: l10n.t("share.addr.help")) {
                         Text(verbatim: baseURL).font(Vibe.Fonts.mono(12))
                             .foregroundStyle(Vibe.Palette.text(scheme)).textSelection(.enabled)
                     }
-                    SettingsRow(title: "鉴权 key", help: "每个请求都要带它;泄露后点「重置」即可作废旧 key。") {
+                    SettingsRow(title: l10n.t("share.key.title"), help: l10n.t("share.key.help")) {
                         HStack(spacing: 8) {
                             Text(s.apiKey).font(Vibe.Fonts.mono(12)).foregroundStyle(Vibe.Palette.text(scheme))
                                 .lineLimit(1).truncationMode(.middle).frame(maxWidth: 150)
-                            MButton(title: copiedTag == "key" ? "已复制" : "复制", kind: .ghost) { copy(s.apiKey, tag: "key") }
-                            MButton(title: "重置", kind: .danger) { s.regenerateAPIKey() }
+                            MButton(title: copiedTag == "key" ? l10n.t("share.copied") : l10n.t("share.copy"), kind: .ghost) { copy(s.apiKey, tag: "key") }
+                            MButton(title: l10n.t("share.reset"), kind: .danger) { s.regenerateAPIKey() }
                         }
                     }
-                    SettingsRow(title: "允许局域网访问",
-                                help: "默认只允许本机 127.0.0.1。开启后同一 Wi‑Fi 下的设备也能用 key 访问你的记录 —— 仅在可信网络开启。") {
+                    SettingsRow(title: l10n.t("share.lan.title"),
+                                help: l10n.t("share.lan.help")) {
                         Toggle("", isOn: Binding(get: { s.apiAllowLAN }, set: { s.applyAPIAllowLAN($0) })).labelsHidden()
                     }
                     if s.apiAllowLAN {
-                        SettingsRow(title: "局域网地址", help: "同网段设备用这个地址访问") {
-                            Text(verbatim: lanHost.map { "http://\($0):\(port)" } ?? "(获取中…)")
+                        SettingsRow(title: l10n.t("share.lanaddr.title"), help: l10n.t("share.lanaddr.help")) {
+                            Text(verbatim: lanHost.map { "http://\($0):\(port)" } ?? l10n.t("share.lanaddr.loading"))
                                 .font(Vibe.Fonts.mono(12)).foregroundStyle(Vibe.Palette.warn).textSelection(.enabled)
                         }
                     }
@@ -1928,17 +2032,17 @@ private struct ShareTab: View {
             }
 
             if s.apiEnabled {
-                SettingsGroup(label: "一键安装到你的 AI 助手") {
+                SettingsGroup(label: l10n.t("share.install.group")) {
                     ForEach(agents) { installRow($0) }
                 }
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "lock.shield").font(.system(size: 12)).foregroundStyle(Vibe.Palette.success)
-                    Text("只读 · 纯本地 · 需 key。数据不出本机(局域网需你单独允许)。")
+                    Text(l10n.t("share.privacy"))
                         .font(Vibe.Fonts.ui(11.5)).foregroundStyle(Vibe.Palette.textMuted(scheme))
                     Spacer()
                 }.padding(.horizontal, 2)
             } else {
-                Text("开启后,这里会给出可粘到 OpenClaw / Claude Code / Codex / Hermes 的一键安装指令。")
+                Text(l10n.t("share.disabled.hint"))
                     .font(Vibe.Fonts.ui(12)).foregroundStyle(Vibe.Palette.textMuted(scheme))
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -1960,7 +2064,7 @@ private struct ShareTab: View {
                 Text(a.name).font(Vibe.Fonts.ui(13.5, weight: .bold)).foregroundStyle(Vibe.Palette.text(scheme))
                 if let d = a.dir { Text(d).font(Vibe.Fonts.mono(11)).foregroundStyle(Vibe.Palette.textMuted(scheme)) }
                 Spacer()
-                MButton(title: copiedTag == a.id ? "已复制" : "复制指令", kind: .ghost) { copy(text, tag: a.id) }
+                MButton(title: copiedTag == a.id ? l10n.t("share.copied") : l10n.t("share.copyCmd"), kind: .ghost) { copy(text, tag: a.id) }
             }
             Text(verbatim: text).font(Vibe.Fonts.mono(11.5)).foregroundStyle(Vibe.Palette.textMuted(scheme))
                 .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
@@ -1972,10 +2076,17 @@ private struct ShareTab: View {
 
     private func instruction(_ a: Agent) -> String {
         let key = s.apiKey
+        // Templates live in L10n with literal `\(dir)` / `\(key)` / `\(baseURL)`
+        // placeholder tokens; fill them in here.
         if let dir = a.dir {
-            return "请帮我安装 Vibe XASR 技能:先 `mkdir -p \(dir)`,再 `curl -s -H \"Authorization: Bearer \(key)\" \(baseURL)/skill -o \(dir)SKILL.md` 取得说明并保存。之后照 SKILL.md 用它读我的语音听写记录 / 词典 / 口令(只读,仅本机)。"
+            return l10n.t("share.instr.skill")
+                .replacingOccurrences(of: "\\(dir)", with: dir)
+                .replacingOccurrences(of: "\\(key)", with: key)
+                .replacingOccurrences(of: "\\(baseURL)", with: baseURL)
         }
-        return "我在本机跑了 Vibe XASR 只读接口。基址 `\(baseURL)`,鉴权 key `\(key)`(放进 `Authorization: Bearer` 头或 `?key=`)。完整说明:`\(baseURL)/skill`。需要我的语音记录 / 词典 / 口令时就 GET:`/v1/export?date=today&format=md`、`/v1/history?date=today`、`/v1/config/hotwords` 等。"
+        return l10n.t("share.instr.generic")
+            .replacingOccurrences(of: "\\(baseURL)", with: baseURL)
+            .replacingOccurrences(of: "\\(key)", with: key)
     }
 
     private func copy(_ text: String, tag: String) {
@@ -2224,6 +2335,9 @@ public struct SettingsView: View {
     @StateObject private var s = SettingsState()
     @ObservedObject private var l10n = L10n.shared
     @State private var tab = "general"
+    /// Live "all permissions granted" flag, polled while the window is open —
+    /// drives the red badge on the Permissions sidebar tab.
+    @State private var permsOK = true
     @Environment(\.colorScheme) private var scheme
 
     /// Host bridge for the live (store-backed) controls; nil in previews.
@@ -2241,7 +2355,7 @@ public struct SettingsView: View {
          ("hotwords", l10n.t("tab.hotwords"), "📖"),
          ("snippet", l10n.t("tab.snippet"), "⚡"),
          ("records", l10n.t("tab.records"), "📋"),
-         ("share", "共享", "🔗"),
+         ("share", l10n.t("tab.share"), "🔗"),
          ("permissions", l10n.t("tab.permissions"), "🔐"),
          ("about", l10n.t("tab.about"), "ⓘ")]
     }
@@ -2277,6 +2391,12 @@ public struct SettingsView: View {
         // "two rows" look. Content sits directly below the native title bar.
         .onAppear {
             if let bridge { s.bind(to: bridge) }
+            permsOK = s.micGranted() && s.a11yGranted() && s.inputGranted()
+        }
+        // Poll permissions while the window is open so the sidebar badge clears
+        // within ~1.5s of the user granting access in System Settings.
+        .onReceive(Timer.publish(every: 1.5, on: .main, in: .common).autoconnect()) { _ in
+            permsOK = s.micGranted() && s.a11yGranted() && s.inputGranted()
         }
         // Re-sync the controls when the mode changes programmatically (e.g. stopping
         // OnCall reverts the dictation mode) so the picker isn't left stale.
@@ -2297,8 +2417,11 @@ public struct SettingsView: View {
             ScrollView {
                 Group {
                     switch tab {
-                    case "general":     GeneralTab(s: s, l10n: l10n)
-                    case "dictation":   DictationTab(s: s, l10n: l10n)
+                    case "general":     GeneralTab(s: s, l10n: l10n,
+                                                   onOpenPermissions: { tab = "permissions" },
+                                                   onSetHotkey: { tab = "dictation" })
+                    case "dictation":   DictationTab(s: s, l10n: l10n,
+                                                     onOpenPermissions: { tab = "permissions" })
                     case "model":       ModelTab(s: s, l10n: l10n,
                                                  relay: ModelManagerRelay(manager))
                     case "hotwords":    HotwordsTab(s: s, l10n: l10n)
@@ -2354,6 +2477,13 @@ public struct SettingsView: View {
                         Text(t.label)
                             .font(Vibe.Fonts.ui(13.5, weight: on ? .medium : .regular))
                         Spacer()
+                        // Live red badge: a permission is missing. Polled every
+                        // ~1.5s, so it clears shortly after the user grants access.
+                        if t.id == "permissions" && !permsOK {
+                            Image(systemName: "exclamationmark.circle.fill")
+                                .font(.system(size: 13))
+                                .foregroundStyle(Vibe.Palette.error)
+                        }
                     }
                     .foregroundStyle(Vibe.Palette.text(scheme))
                     .padding(.vertical, 8).padding(.horizontal, 10)
