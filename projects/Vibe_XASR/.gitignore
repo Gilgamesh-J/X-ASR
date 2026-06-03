@@ -29,3 +29,9 @@ docs/chats/
 docs/project/
 docs/uploads/
 docs/README.md
+
+# Local macOS build deps (prebuilt native libs + VAD models — NOT committed; copy in once to build here)
+macos_build/native/sherpa/dist/
+macos_build/native/third_party/onnxruntime/
+macos_build/models/firered/firered_vad.onnx
+macos_build/native/app/Resources/silero_vad.onnx
