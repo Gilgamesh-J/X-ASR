@@ -1,23 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Vibe XASR Windows auto-update feed (WinSparkle). Separate from appcast.xml (macOS/Sparkle).
      Windows rides the current macOS release tag; a Windows-only patch carries a .N suffix
-     (e.g. 1.1.3.1) so there is a single "Latest" release. Served via GitHub Pages at
-     https://liutaocode.github.io/Vibe_XASR/appcast-win.xml
+     (e.g. 1.1.3.1) so there is a single "Latest" release. Served as a raw GitHub file at
+     https://raw.githubusercontent.com/Gilgamesh-J/X-ASR/main/projects/docs/appcast-win.xml
      Sign the MSI with third_party/winsparkle/winsparkle-tool.exe (the "sign" subcommand with the
      private key), then paste into sparkle:edSignature and set length to the MSI byte size. -->
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
   <channel>
     <title>Vibe XASR (Windows)</title>
-    <link>https://liutaocode.github.io/Vibe_XASR/appcast-win.xml</link>
+    <link>https://raw.githubusercontent.com/Gilgamesh-J/X-ASR/main/projects/docs/appcast-win.xml</link>
     <description>Vibe XASR Windows auto-update feed</description>
     <language>zh</language>
     <item>
-      <title>Vibe XASR 1.4.0.1-beta</title>
-      <pubDate>Wed, 03 Jun 2026 14:19:41 +0800</pubDate>
-      <link>https://github.com/liutaocode/Vibe_XASR/releases/tag/v1.4.0</link>
+      <title>Vibe XASR 1.4.0.2-beta</title>
+      <pubDate>Wed, 03 Jun 2026 19:50:00 +0800</pubDate>
+      <link>https://github.com/Gilgamesh-J/X-ASR/releases/tag/vibe-v1.4.2</link>
       <description><![CDATA[
-        <h3>Vibe XASR 1.4.0.1-beta (Windows)</h3>
+        <h3>Vibe XASR 1.4.0.2-beta (Windows)</h3>
         <ul>
+          <li>「记录」聚合选项可调(与 macOS 对齐):按停顿(≤1/2/5/10 分)或按累计字数
+              (60/120/200/300 字)实时重新分段。</li>
           <li>「记录」工作区重做(与 macOS 1.4.0 同步):日历热力图、碎句聚合 / 一键合并、
               多选批量、标签、撤销、双击弹出编辑、导出。</li>
           <li>新增「共享」:本机只读 HTTP API(key 鉴权,默认仅 127.0.0.1,可选局域网),
@@ -26,11 +28,11 @@
         </ul>
       ]]></description>
       <enclosure
-        url="https://github.com/Gilgamesh-J/X-ASR/releases/download/vibe-v1.4.2/VibeXASR-1.4.0.1-windows-x64.msi"
+        url="https://github.com/Gilgamesh-J/X-ASR/releases/download/vibe-v1.4.2/VibeXASR-1.4.0.2-windows-x64.msi"
         sparkle:os="windows"
-        sparkle:version="1.4.0.1"
-        sparkle:shortVersionString="1.4.0.1-beta"
-        sparkle:edSignature="QZNpYKejE51/yMlR6tCpsmxc3iN6EN2uMsJ+vOtNJNriQGNRvgXxS8ILv8uaLlw6m3zq08ZvtQ/vNQWFoF/OCg=="
+        sparkle:version="1.4.0.2"
+        sparkle:shortVersionString="1.4.0.2-beta"
+        sparkle:edSignature="0BJOKYHqZYe8xYJEOKBrVaS9MJZUPWC8rflSqHc8JtIC37G3+ZpaAshONbixYbZuLknFdVV2nBEXp5O0CGVQBA=="
         length="628588544"
         type="application/octet-stream" />
     </item>

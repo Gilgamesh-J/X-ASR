@@ -25,7 +25,10 @@ internal sealed class HistoryWorkspacePanel : Panel
     private string? _tagFilter;
     private bool _aggregate = true;
     private bool _showCalendar;
-    private readonly H.AggOptions _opts = new() { Mode = H.AggMode.Pause, GapSeconds = 120, TargetChars = 120 };
+    private H.AggMode _aggMode = H.AggMode.Pause;
+    private int _gapMin = 2, _targetChars = 120;
+    private H.AggOptions Opts => new() { Mode = _aggMode, GapSeconds = _gapMin * 60, TargetChars = _targetChars };
+    private readonly Panel _aggBar = new() { Visible = false };
 
     // selection + undo
     private readonly HashSet<Guid> _selection = new();
@@ -90,8 +93,9 @@ internal sealed class HistoryWorkspacePanel : Panel
 
         Controls.Add(_search); Controls.Add(_aggBtn); Controls.Add(_calBtn); Controls.Add(_undoBtn);
         Controls.Add(_exportBtn); Controls.Add(_clearBtn);
-        Controls.Add(_calendar); Controls.Add(_selBar); Controls.Add(_stats); Controls.Add(_listHost); Controls.Add(_toast);
+        Controls.Add(_aggBar); Controls.Add(_calendar); Controls.Add(_selBar); Controls.Add(_stats); Controls.Add(_listHost); Controls.Add(_toast);
 
+        BuildAggBar();
         Rebuild();
     }
 
@@ -122,6 +126,8 @@ internal sealed class HistoryWorkspacePanel : Panel
         _search.SetBounds(pad, 9, Math.Max(120, bx - pad - 6), 26);
 
         int y = 44;
+        if (_aggregate) { _aggBar.Visible = true; _aggBar.SetBounds(0, y, w, 38); y += 40; }
+        else _aggBar.Visible = false;
         if (_showCalendar)
         {
             _calendar.Visible = true;
@@ -141,6 +147,54 @@ internal sealed class HistoryWorkspacePanel : Panel
         _toast.SetBounds(w / 2 - 110, ClientSize.Height - 46, 220, 32);
     }
 
+    // Inline aggregation-options bar (mirrors macOS AggPopover): mode + gap/target segmented.
+    private void BuildAggBar()
+    {
+        _aggBar.Controls.Clear();
+        _aggBar.BackColor = Theme.Surface;
+        _aggBar.Controls.Add(new Label
+        {
+            Text = Zh ? "聚合方式" : "Group by", Font = Theme.Ui(9f, FontStyle.Bold), ForeColor = Theme.TextMuted,
+            AutoSize = false, Location = new Point(14, 11), Size = new Size(60, 18), BackColor = Color.Transparent,
+        });
+        int x = 78;
+        var mode = new SegmentedControl
+        {
+            Width = 150, Location = new Point(x, 3),
+            Options = new[] { ("pause", Zh ? "按停顿" : "By pause"), ("chars", Zh ? "按字数" : "By chars") },
+            Value = _aggMode == H.AggMode.Pause ? "pause" : "chars",
+        };
+        mode.SelectionChanged += (_, v) =>
+        {
+            var m = v == "chars" ? H.AggMode.Chars : H.AggMode.Pause;
+            if (m != _aggMode) { _aggMode = m; BuildAggBar(); Rebuild(); }
+        };
+        _aggBar.Controls.Add(mode); x += 158;
+
+        if (_aggMode == H.AggMode.Pause)
+        {
+            var gap = new SegmentedControl
+            {
+                Width = 210, Location = new Point(x, 3),
+                Options = new[] { 1, 2, 5, 10 }.Select(n => (n.ToString(), Zh ? $"≤{n}分" : $"≤{n}m")).ToArray(),
+                Value = _gapMin.ToString(),
+            };
+            gap.SelectionChanged += (_, v) => { if (int.TryParse(v, out var n) && n != _gapMin) { _gapMin = n; Rebuild(); } };
+            _aggBar.Controls.Add(gap);
+        }
+        else
+        {
+            var tc = new SegmentedControl
+            {
+                Width = 230, Location = new Point(x, 3),
+                Options = new[] { 60, 120, 200, 300 }.Select(n => (n.ToString(), Zh ? $"{n}字" : $"{n}c")).ToArray(),
+                Value = _targetChars.ToString(),
+            };
+            tc.SelectionChanged += (_, v) => { if (int.TryParse(v, out var n) && n != _targetChars) { _targetChars = n; Rebuild(); } };
+            _aggBar.Controls.Add(tc);
+        }
+    }
+
     // ----- rebuild -----
 
     private void Rebuild()
@@ -149,7 +203,7 @@ internal sealed class HistoryWorkspacePanel : Panel
         var filters = new H.Filters
         {
             ShowOnCall = true, TagFilter = _tagFilter, Query = _query,
-            SelectedDay = _selectedDay, Aggregate = _aggregate, Opts = _opts,
+            SelectedDay = _selectedDay, Aggregate = _aggregate, Opts = Opts,
         };
         var groups = H.BuildGroups(entries, filters);
 

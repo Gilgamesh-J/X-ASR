@@ -16,8 +16,8 @@ namespace VibeXASR.Windows;
 /// </summary>
 internal static class Updater
 {
-    /// <summary>Windows appcast feed (GitHub Pages). Override for testing via VIBEXASR_APPCAST.</summary>
-    private const string DefaultAppcastUrl = "https://liutaocode.github.io/Vibe_XASR/appcast-win.xml";
+    /// <summary>Windows appcast feed (raw GitHub, served from projects/docs). Override for testing via VIBEXASR_APPCAST.</summary>
+    private const string DefaultAppcastUrl = "https://raw.githubusercontent.com/Gilgamesh-J/X-ASR/main/projects/docs/appcast-win.xml";
 
     /// <summary>EdDSA (Ed25519) public key — base64 of the 32-byte key from winsparkle-tool.
     /// The matching private key signs each released MSI and is NOT stored in the repo.</summary>
