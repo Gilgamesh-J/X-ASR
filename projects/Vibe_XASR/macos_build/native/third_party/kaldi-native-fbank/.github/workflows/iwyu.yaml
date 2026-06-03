@@ -1,0 +1,171 @@
+name: iwyu
+
+on:
+  push:
+    branches:
+      - master
+      - iwyu-2
+  pull_request:
+    branches:
+      - master
+
+  workflow_dispatch:
+
+concurrency:
+  group: iwyu-${{ github.ref }}
+  cancel-in-progress: true
+
+# References
+# https://github.com/official-stockfish/Stockfish/blob/master/.github/workflows/iwyu.yml
+# https://github.com/acts-project/acts/actions/runs/8588671882/workflow
+# https://github.com/acts-project/acts/tree/main/CI/iwyu
+
+jobs:
+  iwyu:
+    if: github.repository_owner == 'csukuangfj' || github.repository_owner == 'k2-fsa'
+    permissions:
+      contents: write  # for stefanzweifel/git-auto-commit-action to push code in repo
+    name: Include what you use
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download required linux packages
+        shell: bash
+        run: |
+          echo "GITHUB_WORKSPACE: $GITHUB_WORKSPACE"
+          sudo add-apt-repository 'deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-17 main'
+          wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+          sudo apt update
+          sudo apt install -y libclang-17-dev clang-17 libc++-17-dev
+
+      - name: Display llvm
+        shell: bash
+        run: |
+          ls -lh /usr/lib/*llvm*
+
+          ls -lh /usr/bin/*clang*
+
+      - name: cache-iwyu
+        id: cache-iwyu
+        uses: actions/cache@v4
+        with:
+          path: /tmp/iwyu-install
+          key: iwyu-install-2024-04-13
+
+      - name: Get IWYU source
+        if: steps.cache-iwyu.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: include-what-you-use/include-what-you-use
+          ref: clang_17
+          path: iwyu
+
+      - name: Build IWYU
+        if: steps.cache-iwyu.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          mkdir iwyu-build iwyu-install
+          cmake -B iwyu-build -S iwyu -DCMAKE_PREFIX_PATH=/usr/lib/llvm-17 -DCMAKE_INSTALL_PREFIX=/tmp/iwyu-install
+          cmake --build iwyu-build --target install
+
+          ls -lh /tmp/iwyu-install
+          tree /tmp/iwyu-install
+
+          /tmp/iwyu-install/bin/include-what-you-use --version
+
+      - name: setup path
+        shell: bash
+        run: |
+          echo "/tmp/iwyu-install/bin"  >> "$GITHUB_PATH"
+
+      - name: display include what you use version
+        shell: bash
+        run: |
+          include-what-you-use --version
+          which include-what-you-use
+
+          include-what-you-use --help
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: iwyu-install
+          path: /tmpiwyu-install/*
+
+      - name: Check
+        shell: bash
+        run: |
+          mkdir build
+          cd build
+
+          cmake \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            ..
+
+      - name: Run iwyu_tool.py
+        shell: bash
+        run: |
+          python3 /tmp/iwyu-install/bin/iwyu_tool.py -p build/ -j2 | tee iwyu-output.txt
+
+      - name: Filter IWYU output
+        shell: bash
+        run: |
+          python3 .github/scripts/filter.py .github/scripts/filter.yaml iwyu-output.txt iwyu-filtered.txt
+
+      - name: Show IWYU output
+        shell: bash
+        run: |
+          cat iwyu-output.txt
+
+      - name: Show filtered IWYU output
+        shell: bash
+        run: |
+          cat iwyu-filtered.txt
+
+      - name: Upload IWYU output
+        uses: actions/upload-artifact@v4
+        with:
+          name: iwyu
+          path: |
+            iwyu-output.txt
+            iwyu-filtered.txt
+
+      - name: Apply iwyu
+        shell: bash
+        run: |
+          git status
+          python3 /tmp/iwyu-install/bin/fix_includes.py < iwyu-filtered.txt
+
+          rm -rf iwyu*
+
+      - name: Show diff
+        shell: bash
+        run: |
+          git status
+
+          git diff
+          git diff > a.diff
+          # Download a.diff
+          # Run
+          #   git apply a.diff
+
+      - name: Upload IWYU output
+        uses: actions/upload-artifact@v4
+        with:
+          name: diff
+          path: |
+            a.diff
+
+      # https://github.com/stefanzweifel/git-auto-commit-action
+      - uses: stefanzweifel/git-auto-commit-action@v5
+        if: false
+        with:
+          file_pattern: '*.h *.cc'
+          commit_message: "apply iwyu changes"

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
+  <assemblyIdentity version="1.0.0.0" name="VibeXASR.Windows.app" />
+
+  <!-- TODO(win): The low-level keyboard hook (WH_KEYBOARD_LL) and SendInput work without
+       elevation against normal apps, but cannot inject into elevated/admin windows from a
+       non-elevated process (UIPI). If you want dictation to work into elevated apps, set
+       requestedExecutionLevel to requireAdministrator and ship a signed binary. Default below
+       is asInvoker (recommended for a tray utility). -->
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
+    <security>
+      <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
+        <requestedExecutionLevel level="asInvoker" uiAccess="false" />
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+
+  <!-- DPI awareness (PerMonitorV2) is configured via the csproj <ApplicationHighDpiMode>
+       property + ApplicationConfiguration.Initialize(), so it is intentionally NOT set here
+       (setting it in both places triggers WFAC010). -->
+
+  <!-- Declare Windows 10/11 compatibility so APIs behave as expected. -->
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+    <application>
+      <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}" /> <!-- Windows 10/11 -->
+    </application>
+  </compatibility>
+</assembly>

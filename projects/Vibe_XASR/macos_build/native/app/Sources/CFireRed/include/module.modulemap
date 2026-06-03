@@ -1,0 +1,4 @@
+module CFireRed {
+    header "firered_vad.h"
+    export *
+}

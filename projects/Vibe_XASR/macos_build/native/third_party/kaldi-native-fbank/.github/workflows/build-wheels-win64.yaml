@@ -1,0 +1,64 @@
+name: build-wheels-win64
+
+on:
+  push:
+    branches:
+      - wheel
+    tags:
+      - '*'
+  workflow_dispatch:
+
+concurrency:
+  group: build-wheels-win64-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_wheels:
+    name: ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest]
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Build wheels
+        shell: bash
+        run: |
+          pip install setuptools wheel
+
+          python3 setup.py bdist_wheel
+
+          ls -lh ./dist/
+
+          mv dist wheelhouse
+
+      - name: Display wheels
+        shell: bash
+        run: |
+          ls -lh ./wheelhouse/
+
+          unzip -l wheelhouse/*.whl
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.python-version }}
+          path: ./wheelhouse/*.whl
+
+      - name: Publish wheels to PyPI
+        env:
+          TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
+          TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+        shell: bash
+        run: |
+          python3 -m pip install wheel twine==5.0.0 setuptools
+
+          twine upload ./wheelhouse/*.whl

@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Vibe XASR — per-user MSI installer that bundles the default 960 ms model.
+  Installs (no admin / no UAC) to %LOCALAPPDATA%\Programs\VibeXASR with a Start-Menu
+  shortcut. The app reads the bundled models from its install dir; extra tiers download
+  to %APPDATA%\VibeXASR. Build with build-installer.ps1.
+-->
+<?ifndef Version ?><?define Version = "1.1.3.1" ?><?endif?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+
+  <Package Name="Vibe XASR"
+           Manufacturer="Vibe XASR"
+           Version="$(var.Version)"
+           UpgradeCode="6f2a1e90-1c5b-4d2a-9a3e-7b1c2d3e4f50"
+           Scope="perUser"
+           Compressed="yes">
+
+    <!-- AllowSameVersionUpgrades: the MSI ProductVersion ignores the 4th field, so 1.1.3.1 reads
+         as 1.1.3 — same as a prior 1.1.3.0 install. This lets the Windows .1 patch upgrade it. -->
+    <MajorUpgrade AllowSameVersionUpgrades="yes" DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="low" />
+
+    <!-- Add/Remove Programs presentation -->
+    <Icon Id="AppIcon" SourceFile="appicon.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon" />
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="ProgramsFolder" Name="Programs">
+        <Directory Id="INSTALLFOLDER" Name="VibeXASR">
+          <Directory Id="ModelsFolder" Name="models">
+            <Directory Id="TierFolder" Name="chunk-960ms-model" />
+            <Directory Id="FireRedFolder" Name="firered" />
+          </Directory>
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder" />
+    <StandardDirectory Id="DesktopFolder" />
+
+    <!-- App exe + bundled default model (read directly from the install dir at runtime). -->
+    <ComponentGroup Id="AppFiles">
+      <Component Directory="INSTALLFOLDER" Guid="*">
+        <File Id="VibeXASR.exe" Source="payload\VibeXASR.exe" KeyPath="yes" />
+      </Component>
+      <Component Directory="INSTALLFOLDER" Guid="*">
+        <File Source="payload\WinSparkle.dll" KeyPath="yes" />
+      </Component>
+      <Component Directory="INSTALLFOLDER" Guid="*">
+        <File Source="payload\firered_vad.dll" KeyPath="yes" />
+      </Component>
+      <Component Directory="FireRedFolder" Guid="*">
+        <File Source="payload\models\firered\firered_vad.onnx" KeyPath="yes" />
+      </Component>
+      <Component Directory="FireRedFolder" Guid="*">
+        <File Source="payload\models\firered\cmvn_means.bin" KeyPath="yes" />
+      </Component>
+      <Component Directory="FireRedFolder" Guid="*">
+        <File Source="payload\models\firered\cmvn_istd.bin" KeyPath="yes" />
+      </Component>
+      <Component Directory="ModelsFolder" Guid="*">
+        <File Source="payload\models\silero_vad.onnx" KeyPath="yes" />
+      </Component>
+      <Component Directory="ModelsFolder" Guid="*">
+        <File Source="payload\models\pinyin.txt" KeyPath="yes" />
+      </Component>
+      <Component Directory="ModelsFolder" Guid="*">
+        <File Source="payload\models\bpe.vocab" KeyPath="yes" />
+      </Component>
+      <Component Directory="TierFolder" Guid="*">
+        <File Source="payload\models\chunk-960ms-model\encoder-960ms.onnx" KeyPath="yes" />
+      </Component>
+      <Component Directory="TierFolder" Guid="*">
+        <File Source="payload\models\chunk-960ms-model\decoder-960ms.onnx" KeyPath="yes" />
+      </Component>
+      <Component Directory="TierFolder" Guid="*">
+        <File Source="payload\models\chunk-960ms-model\joiner-960ms.onnx" KeyPath="yes" />
+      </Component>
+      <Component Directory="TierFolder" Guid="*">
+        <File Source="payload\models\chunk-960ms-model\tokens.txt" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- Start-Menu shortcut (HKCU keypath, correct for a per-user install). -->
+    <Component Id="cmp_shortcut" Directory="ProgramMenuFolder" Guid="*">
+      <Shortcut Id="StartMenuShortcut" Name="Vibe XASR"
+                Target="[INSTALLFOLDER]VibeXASR.exe"
+                WorkingDirectory="INSTALLFOLDER"
+                Icon="AppIcon" />
+      <RemoveFolder Id="RemoveProgramMenuFolder" On="uninstall" />
+      <RegistryValue Root="HKCU" Key="Software\VibeXASR" Name="installed"
+                     Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <!-- Desktop shortcut. -->
+    <Component Id="cmp_desktop" Directory="DesktopFolder" Guid="*">
+      <Shortcut Id="DesktopShortcut" Name="Vibe XASR"
+                Target="[INSTALLFOLDER]VibeXASR.exe"
+                WorkingDirectory="INSTALLFOLDER"
+                Icon="AppIcon" />
+      <RegistryValue Root="HKCU" Key="Software\VibeXASR" Name="desktopShortcut"
+                     Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <Feature Id="Main" Title="Vibe XASR" Level="1">
+      <ComponentGroupRef Id="AppFiles" />
+      <ComponentRef Id="cmp_shortcut" />
+      <ComponentRef Id="cmp_desktop" />
+    </Feature>
+
+    <!-- Minimal wizard + launch Vibe XASR on Finish (checkbox checked by default), so a fresh
+         install opens straight into the first-run guide instead of silently sitting in the tray. -->
+    <UI>
+      <ui:WixUI Id="WixUI_Minimal" />
+      <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchApplication"
+               Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT Installed" />
+    </UI>
+    <WixVariable Id="WixUILicenseRtf" Value="license.rtf" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch Vibe XASR" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
+    <Property Id="WixShellExecTarget" Value="[#VibeXASR.exe]" />
+    <CustomAction Id="LaunchApplication" DllEntry="WixShellExec" Impersonate="yes" BinaryRef="Wix4UtilCA_X86" />
+  </Package>
+</Wix>
