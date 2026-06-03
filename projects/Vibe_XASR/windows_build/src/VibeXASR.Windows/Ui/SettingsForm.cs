@@ -522,6 +522,24 @@ public sealed class SettingsForm : Form
 
         col.AddGroup(L10n.T("grp.permissions"),
             new List<Control> { banner, micRow, inputRow, recheckHost });
+
+        col.AddGroup(L10n.T("selfcheck.title"), new List<Control> { SelfCheckHost() });
+    }
+
+    /// <summary>Self-check (mirrors macOS 1.4.3): a focusable test box — click in, hold the hotkey,
+    /// speak, and the dictation should type itself in. Verifies the global hook + insertion end-to-end.</summary>
+    private Control SelfCheckHost()
+    {
+        int w = _innerWidth;
+        var host = new Panel { BackColor = Theme.Surface, Width = w, Height = 124 };
+        host.Controls.Add(new Label { Text = L10n.T("selfcheck.body"), Font = Theme.Ui(9.5f), ForeColor = Theme.Text, AutoSize = false, Location = new Point(16, 10), Size = new Size(w - 32, 34), BackColor = Color.Transparent });
+        var test = new TextBox { PlaceholderText = L10n.T("selfcheck.placeholder"), Font = Theme.Ui(10.5f), BackColor = Theme.Surface2, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle, Location = new Point(16, 48), Size = new Size(w - 32, 28) };
+        host.Controls.Add(test);
+        host.Controls.Add(new Label { Text = L10n.T("selfcheck.hint"), Font = Theme.Ui(8.5f), ForeColor = Theme.TextMuted, AutoSize = false, Location = new Point(16, 82), Size = new Size(w - 32 - 150, 34), BackColor = Color.Transparent });
+        var setHk = new VibeButton { Text = L10n.T("selfcheck.setHotkey"), Style = VibeButton.Kind.Ghost, Size = new Size(130, 28), Location = new Point(w - 16 - 130, 84) };
+        setHk.Click += (_, _) => Select("general");
+        host.Controls.Add(setHk);
+        return host;
     }
 
     /// <summary>A row hosting the live mic level meter + a hint; creates and starts the meter.</summary>
@@ -1029,6 +1047,35 @@ public sealed class SettingsForm : Form
         skill.Click += (_, _) => { int port = _app.ApiBoundPort > 0 ? _app.ApiBoundPort : S.ApiPort; try { Clipboard.SetText($"http://127.0.0.1:{port}/skill?key={_app.ApiKey}"); } catch { } };
         skillRow.Controls.Add(skill);
 
+        // One-tap install commands for AI coding agents (mirrors macOS 1.4.3 multi-agent share).
+        var agents = new (string label, string? dir)[]
+        {
+            ("OpenClaw", ".openclaw/skills/vibe_xasr/"),
+            ("Claude Code", ".claude/skills/vibe_xasr/"),
+            ("Hermes", ".hermes/skills/vibe_xasr/"),
+            (zh ? "通用 / 其他 AI" : "Generic / other AI", null),
+        };
+        string? selAgentDir = agents[0].dir;
+        var installRow = new Panel { BackColor = Theme.Surface, Width = w, Height = 58 };
+        installRow.Controls.Add(new Label { Text = zh ? "一键安装到你的 AI 助手:" : "One-tap install into your AI assistant:", Font = Theme.Ui(9f), ForeColor = Theme.TextMuted, AutoSize = false, Location = new Point(16, 6), Size = new Size(w - 32, 16), BackColor = Color.Transparent });
+        var agentSel = new VibeSelect { Width = 170, Options = agents.Select(a => (a.dir ?? "generic", a.label)).ToArray(), Value = agents[0].dir!, Location = new Point(16, 26) };
+        agentSel.SelectionChanged += (_, v) => selAgentDir = v == "generic" ? null : v;
+        installRow.Controls.Add(agentSel);
+        var copyCmd = new VibeButton { Text = zh ? "复制安装指令" : "Copy install command", Style = VibeButton.Kind.Ghost, Size = new Size(150, 28), Location = new Point(196, 25) };
+        copyCmd.Click += (_, _) =>
+        {
+            int port = _app.ApiBoundPort > 0 ? _app.ApiBoundPort : S.ApiPort;
+            string key = _app.ApiKey, baseUrl = $"http://127.0.0.1:{port}";
+            string cmd = selAgentDir is null
+                ? (zh ? $"我在本机跑了 Vibe XASR 只读接口。基址 {baseUrl},鉴权 key {key}(放进 Authorization: Bearer 头或 ?key=)。完整说明 {baseUrl}/skill 。需要语音记录 / 词典 / 口令时就 GET /v1/export?date=today&format=md 等。"
+                       : $"I'm running a Vibe XASR read-only endpoint locally. Base URL {baseUrl}, auth key {key} (Authorization: Bearer header or ?key=). Docs at {baseUrl}/skill. For my voice records / dictionary / commands, GET /v1/export?date=today&format=md, /v1/history?date=today, /v1/config/hotwords, etc.")
+                : (zh ? $"请帮我安装 Vibe XASR 技能:先 `mkdir -p ~/{selAgentDir}`,再 `curl -s -H \"Authorization: Bearer {key}\" \"{baseUrl}/skill\" -o ~/{selAgentDir}SKILL.md`"
+                       : $"Please install the Vibe XASR skill: first `mkdir -p ~/{selAgentDir}`, then `curl -s -H \"Authorization: Bearer {key}\" \"{baseUrl}/skill\" -o ~/{selAgentDir}SKILL.md`");
+            try { Clipboard.SetText(cmd); } catch { }
+            copyCmd.Text = zh ? "已复制" : "Copied";
+        };
+        installRow.Controls.Add(copyCmd);
+
         col.AddGroup(zh ? "共享 · 把语音数据接到 AI 编程助手" : "SHARE · feed your dictation to AI coding agents", new List<Control>
         {
             Row(zh ? "启用本地共享" : "Enable local share",
@@ -1042,6 +1089,7 @@ public sealed class SettingsForm : Form
                 Toggle(S.ApiAllowLAN, on => { _app.SetApiAllowLAN(on); RebuildCurrentTab(); })),
             keyRow,
             skillRow,
+            installRow,
         });
     }
 

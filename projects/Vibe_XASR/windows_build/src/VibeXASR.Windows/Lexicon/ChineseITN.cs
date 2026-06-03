@@ -32,7 +32,9 @@ internal static class ChineseITN
         long total = 0, section = 0, n = 0; bool seen = false;
         foreach (var ch in s)
         {
-            if (Num.TryGetValue(ch, out var v)) { n = v; seen = true; }
+            // Two consecutive bare digits ("一二三…") is a digit string being counted out,
+            // NOT a structured number — bail so "一二三四五六七八九十" stays as-is (not 90).
+            if (Num.TryGetValue(ch, out var v)) { if (n != 0) return null; n = v; seen = true; }
             else if (Unit.TryGetValue(ch, out var u)) { section += (n == 0 ? 1 : n) * u; n = 0; seen = true; }
             else if (Big.TryGetValue(ch, out var b)) { section += n; total += section * b; section = 0; n = 0; seen = true; }
             else return null;

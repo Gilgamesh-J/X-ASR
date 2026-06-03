@@ -550,7 +550,7 @@ public sealed class TrayApp : IDisposable, IAppController
                 _overlay?.SetText(e.Text);
                 break;
             case DictationMode.Type:
-                StreamTypeDiff(e.Text);
+                StreamTypeDiff(ApplyCorrections(e.Text, isFinal: false));  // type pinyin/replacements live; no final-only retype
                 _overlay?.SetText(e.Text);
                 break;
         }
@@ -584,7 +584,8 @@ public sealed class TrayApp : IDisposable, IAppController
                 _overlay?.ShowInserted();
                 break;
             case DictationMode.Type:
-                StreamTypeDiff(text);
+                // 逐字: converge to the streaming-level text (no tail rewrite); history + clipboard keep the full correction.
+                StreamTypeDiff(ApplyCorrections(e.Text, isFinal: false));
                 _typedSoFar = string.Empty;
                 MaybeOverwriteClipboard(text);
                 _overlay?.SetText(text);
@@ -604,11 +605,15 @@ public sealed class TrayApp : IDisposable, IAppController
     /// pinyin homophone correction → text replacements → 去口水词 → 数字规整 (ITN) → 口令 expansion.
     /// Each step no-ops unless enabled + populated. Runs on FINAL text only (not streaming partials,
     /// where ITN digits would jump as you speak).</summary>
-    private string ApplyCorrections(string textIn)
+    private string ApplyCorrections(string textIn, bool isFinal = true)
     {
         var text = textIn;
         if (_settings.PinyinFuzzyEnabled && _pinyin.IsActive) text = _pinyin.Normalize(text);
         if (_settings.ReplacementsEnabled && _replaceRules.Count > 0) text = Replacements.Apply(text, _replaceRules);
+        // FINAL-only steps. In 逐字 (type) mode they're skipped for what's typed live — applying them
+        // on the final would delete + retype the on-screen tail (jarring). They still run for the
+        // recorded history + clipboard text. (Mirrors macOS's corrected(isFinal:) split.)
+        if (!isFinal) return text;
         if (_settings.DefillerEnabled) text = Defiller.Clean(text);                 // 去口水词: strip fillers first
         if (_settings.ItnEnabled) text = ChineseITN.Normalize(text);                // 数字规整: then normalize numbers
         if (_settings.SnippetsEnabled && _snippetRules.Count > 0) text = Replacements.Expand(text, _snippetRules); // 口令: expand last

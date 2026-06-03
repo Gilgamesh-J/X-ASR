@@ -12,12 +12,15 @@
     <description>Vibe XASR Windows auto-update feed</description>
     <language>zh</language>
     <item>
-      <title>Vibe XASR 1.4.2.1-beta</title>
-      <pubDate>Wed, 03 Jun 2026 21:05:00 +0800</pubDate>
-      <link>https://github.com/Gilgamesh-J/X-ASR/releases/tag/vibe-v1.4.2</link>
+      <title>Vibe XASR 1.4.3.1-beta</title>
+      <pubDate>Wed, 03 Jun 2026 23:20:00 +0800</pubDate>
+      <link>https://github.com/Gilgamesh-J/X-ASR/releases/tag/vibe-v1.4.3</link>
       <description><![CDATA[
-        <h3>Vibe XASR 1.4.2.1-beta (Windows)</h3>
+        <h3>Vibe XASR 1.4.3.1-beta (Windows)</h3>
         <ul>
+          <li>对齐 macOS 1.4.3:逐字模式不再回改(最终的去口水词 / 数字规整 / 口令只进历史与剪贴板,
+              不删改已上屏的文字);ITN 更稳(「一二三四五六七八九十」不再误并成数字);新增「自检 ·
+              快捷键测试」;「共享」支持一键生成各 AI 助手(OpenClaw / Claude Code / Hermes / 通用)安装指令。</li>
           <li>对齐 macOS 1.4.1 / 1.4.2:托盘图标按状态变色(录音=红 / 持续候机=绿 / 引擎错误=橙);
               「关于」新增反馈入口(直达 X-ASR Issues)。版本号基线对齐到 1.4.2。</li>
           <li>「记录」聚合选项可调(与 macOS 对齐):按停顿(≤1/2/5/10 分)或按累计字数
@@ -30,12 +33,12 @@
         </ul>
       ]]></description>
       <enclosure
-        url="https://github.com/Gilgamesh-J/X-ASR/releases/download/vibe-v1.4.2/VibeXASR-1.4.2.1-windows-x64.msi"
+        url="https://github.com/Gilgamesh-J/X-ASR/releases/download/vibe-v1.4.3/VibeXASR-1.4.3.1-windows-x64.msi"
         sparkle:os="windows"
-        sparkle:version="1.4.2.1"
-        sparkle:shortVersionString="1.4.2.1-beta"
-        sparkle:edSignature="dzY5OvDIU8IGvh8cqWV90sT//wm5DtCuxz4gggRrNdHiHLjsRhllrrevZ3IAuDBX/iYaNhWlSkL2H4ogD78IDQ=="
-        length="628584448"
+        sparkle:version="1.4.3.1"
+        sparkle:shortVersionString="1.4.3.1-beta"
+        sparkle:edSignature="dOQvTqIAxGTdgUGSBx8VoG6HlsojcEppskAmfajED+xIrR1C6aOPbs2HzVmiL8XO4It6LajCtMN7WlRE3mf1BA=="
+        length="628588544"
         type="application/octet-stream" />
     </item>
   </channel>
