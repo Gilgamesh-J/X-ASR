@@ -1070,7 +1070,14 @@ public sealed class SettingsForm : Form
                                    Size = new Size(120, 30) };
         upd.Location = new Point(cx - upd.Width / 2, y);
         upd.Click += (_, _) => Updater.CheckForUpdatesUi();
-        card.Controls.Add(upd); y += 30 + 12;
+        card.Controls.Add(upd); y += 30 + 8;
+
+        // Single feedback channel (mirrors macOS 1.4.2): engine bugs / app bugs / feature
+        // requests all routed to the X-ASR tracker (Gilgamesh-J/X-ASR/issues).
+        var fb = CenterLabel(L10n.T("about.feedback"), Theme.Mono(8.5f), Theme.AccentB, _innerWidth, y);
+        fb.Cursor = Cursors.Hand;
+        fb.Click += (_, _) => OpenUrl("https://github.com/Gilgamesh-J/X-ASR/issues");
+        card.Controls.Add(fb); y += 22 + 12;
 
         // X-ASR credit card.
         var credit = new RoundedPanel { Fill = Theme.AccentSoft, Border = Color.FromArgb(102, Theme.AccentA),

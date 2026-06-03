@@ -12,12 +12,14 @@
     <description>Vibe XASR Windows auto-update feed</description>
     <language>zh</language>
     <item>
-      <title>Vibe XASR 1.4.0.2-beta</title>
-      <pubDate>Wed, 03 Jun 2026 19:50:00 +0800</pubDate>
+      <title>Vibe XASR 1.4.2.1-beta</title>
+      <pubDate>Wed, 03 Jun 2026 21:05:00 +0800</pubDate>
       <link>https://github.com/Gilgamesh-J/X-ASR/releases/tag/vibe-v1.4.2</link>
       <description><![CDATA[
-        <h3>Vibe XASR 1.4.0.2-beta (Windows)</h3>
+        <h3>Vibe XASR 1.4.2.1-beta (Windows)</h3>
         <ul>
+          <li>对齐 macOS 1.4.1 / 1.4.2:托盘图标按状态变色(录音=红 / 持续候机=绿 / 引擎错误=橙);
+              「关于」新增反馈入口(直达 X-ASR Issues)。版本号基线对齐到 1.4.2。</li>
           <li>「记录」聚合选项可调(与 macOS 对齐):按停顿(≤1/2/5/10 分)或按累计字数
               (60/120/200/300 字)实时重新分段。</li>
           <li>「记录」工作区重做(与 macOS 1.4.0 同步):日历热力图、碎句聚合 / 一键合并、
@@ -28,12 +30,12 @@
         </ul>
       ]]></description>
       <enclosure
-        url="https://github.com/Gilgamesh-J/X-ASR/releases/download/vibe-v1.4.2/VibeXASR-1.4.0.2-windows-x64.msi"
+        url="https://github.com/Gilgamesh-J/X-ASR/releases/download/vibe-v1.4.2/VibeXASR-1.4.2.1-windows-x64.msi"
         sparkle:os="windows"
-        sparkle:version="1.4.0.2"
-        sparkle:shortVersionString="1.4.0.2-beta"
-        sparkle:edSignature="0BJOKYHqZYe8xYJEOKBrVaS9MJZUPWC8rflSqHc8JtIC37G3+ZpaAshONbixYbZuLknFdVV2nBEXp5O0CGVQBA=="
-        length="628588544"
+        sparkle:version="1.4.2.1"
+        sparkle:shortVersionString="1.4.2.1-beta"
+        sparkle:edSignature="dzY5OvDIU8IGvh8cqWV90sT//wm5DtCuxz4gggRrNdHiHLjsRhllrrevZ3IAuDBX/iYaNhWlSkL2H4ogD78IDQ=="
+        length="628584448"
         type="application/octet-stream" />
     </item>
   </channel>

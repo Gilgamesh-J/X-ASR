@@ -233,6 +233,7 @@ public static class L10n
 
         ["about.version"] = "Version {0} · Windows 10/11 · x64 / ARM64",
         ["about.checkUpdate"] = "Check for updates",
+        ["about.feedback"] = "Bug or feature request? Send feedback to X-ASR →",
         ["about.credits"] = "Also built on",
         ["about.local"] = "100% local · offline · your data never leaves the device",
         ["about.xasr.title"] = "Powered by X-ASR",
@@ -426,6 +427,7 @@ public static class L10n
 
         ["about.version"] = "版本 {0} · Windows 10/11 · x64 / ARM64",
         ["about.checkUpdate"] = "检查更新",
+        ["about.feedback"] = "有问题 / 想要新功能?反馈给 X-ASR →",
         ["about.credits"] = "同时基于",
         ["about.local"] = "100% 本地 · 不联网 · 数据不出设备",
         ["about.xasr.title"] = "由 X-ASR 驱动",
@@ -619,6 +621,7 @@ public static class L10n
 
         ["about.version"] = "バージョン {0} · Windows 10/11 · x64 / ARM64",
         ["about.checkUpdate"] = "アップデートを確認",
+        ["about.feedback"] = "不具合・ご要望は X-ASR へ →",
         ["about.credits"] = "さらに、次の技術を利用",
         ["about.local"] = "100% ローカル · オフライン · データは端末外に出ません",
         ["about.xasr.title"] = "X-ASR を搭載",
@@ -812,6 +815,7 @@ public static class L10n
 
         ["about.version"] = "버전 {0} · Windows 10/11 · x64 / ARM64",
         ["about.checkUpdate"] = "업데이트 확인",
+        ["about.feedback"] = "버그·기능 요청은 X-ASR로 →",
         ["about.credits"] = "또한 다음 기술 기반",
         ["about.local"] = "100% 로컬 · 오프라인 · 데이터가 기기를 떠나지 않습니다",
         ["about.xasr.title"] = "X-ASR 기반",

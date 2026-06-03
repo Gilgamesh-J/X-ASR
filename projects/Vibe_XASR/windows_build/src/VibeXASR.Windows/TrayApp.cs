@@ -60,6 +60,7 @@ public sealed class TrayApp : IDisposable, IAppController
     private volatile bool _engineSwapping;
     private bool _dictationEnabled = true;
     private volatile bool _listening;
+    private volatile bool _engineError;    // engine/model load failed → tray shows the error tint
     private volatile float _holdPeakRms;   // loudest mic level seen during the current hold (diagnostics)
     private bool _announcedReady;          // show the "ready" tray prompt once per launch
 
@@ -240,6 +241,7 @@ public sealed class TrayApp : IDisposable, IAppController
             {
                 StartMic();
                 _engineReady = true;
+                _engineError = false;
                 Diag.Log($"engine: READY (mic running={_mic?.IsRunning == true})");
                 if (_settings.Mode == DictationMode.OnCall) EnterOnCall();
                 _popup?.Invalidate();
@@ -251,7 +253,9 @@ public sealed class TrayApp : IDisposable, IAppController
         {
             CloseDownloadDialog();
             Diag.Log("ENGINE FAILED: " + ex);
+            _engineError = true;
             try { if (_tray is not null) _tray.Text = L10n.Resolved == Lang.Zh ? "Vibe XASR · 引擎加载失败" : "Vibe XASR · engine failed"; } catch { }
+            UpdateTrayIcon();
             _tray?.ShowBalloonTip(5000, "Vibe XASR",
                 "Model/engine failed: " + ex.Message, ToolTipIcon.Error);
         }
@@ -404,6 +408,19 @@ public sealed class TrayApp : IDisposable, IAppController
                    : $"Vibe XASR · ready — hold {VkNames.Name(_settings.HotkeyVk)}";
         if (s.Length > 63) s = s.Substring(0, 63);
         try { _tray.Text = s; } catch { }
+        UpdateTrayIcon();
+    }
+
+    /// <summary>Tint the tray icon by state (mirrors macOS's colored menu-bar bars):
+    /// red = recording, green = OnCall, orange = engine error, none = ready/loading.</summary>
+    private void UpdateTrayIcon()
+    {
+        if (_tray is null) return;
+        var st = _engineError ? Branding.TrayState.Error
+               : (_engineReady && _listening) ? Branding.TrayState.Recording
+               : (_engineReady && _settings.Mode == DictationMode.OnCall) ? Branding.TrayState.OnCall
+               : Branding.TrayState.Ready;
+        try { _tray.Icon = Branding.StateIcon(st); } catch { }
     }
 
     /// <summary>
@@ -505,6 +522,7 @@ public sealed class TrayApp : IDisposable, IAppController
         _typedSoFar = string.Empty;
         _holdPeakRms = 0;
         _listening = true;
+        UpdateTrayIcon();
         _engine?.BeginHold();
         _overlay?.ShowListening();
         if (_settings.CueEnabled) CueSound.Shared.Play(_settings.CueTheme, start: true);   // 提示音: start chime
@@ -515,6 +533,7 @@ public sealed class TrayApp : IDisposable, IAppController
         if (_settings.Mode == DictationMode.OnCall) return;
         if (!_listening) return;
         _listening = false;
+        UpdateTrayIcon();
         Diag.Log($"OnHotkeyUp; peak mic RMS={_holdPeakRms:F4}");
         _engine?.EndHold();
         if (_settings.CueEnabled) CueSound.Shared.Play(_settings.CueTheme, start: false);  // 提示音: stop chime
