@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>Vibe XASR</title>
+    <link>https://liutaocode.github.io/Vibe_XASR/appcast.xml</link>
+    <description>Vibe XASR 自动更新源 / auto-update feed</description>
+    <language>zh</language>
+    <item>
+      <title>Vibe XASR 1.4.2</title>
+      <pubDate>Wed, 03 Jun 2026 18:02:57 +0800</pubDate>
+      <sparkle:version>12</sparkle:version>
+      <sparkle:shortVersionString>1.4.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+      <link>https://github.com/liutaocode/Vibe_XASR/releases/tag/v1.4.2</link>
+      <enclosure url="https://github.com/Gilgamesh-J/X-ASR/releases/download/vibe-v1.4.2/VibeXASR-1.4.2.zip" type="application/octet-stream" sparkle:edSignature="wiIx6uVk3099W0iGvMmBls33pMY0V+7jqE4WeN9eAo65dGzRGKErnHNNPINXfeptLKW9rPCcnq5ItiiXFPHoAA==" length="579923151" />
+    </item>
+  </channel>
+</rss>

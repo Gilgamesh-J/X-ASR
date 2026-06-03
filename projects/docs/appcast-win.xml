@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Vibe XASR Windows auto-update feed (WinSparkle). Separate from appcast.xml (macOS/Sparkle).
+     Windows rides the current macOS release tag; a Windows-only patch carries a .N suffix
+     (e.g. 1.1.3.1) so there is a single "Latest" release. Served via GitHub Pages at
+     https://liutaocode.github.io/Vibe_XASR/appcast-win.xml
+     Sign the MSI with third_party/winsparkle/winsparkle-tool.exe (the "sign" subcommand with the
+     private key), then paste into sparkle:edSignature and set length to the MSI byte size. -->
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>Vibe XASR (Windows)</title>
+    <link>https://liutaocode.github.io/Vibe_XASR/appcast-win.xml</link>
+    <description>Vibe XASR Windows auto-update feed</description>
+    <language>zh</language>
+    <item>
+      <title>Vibe XASR 1.4.0.1-beta</title>
+      <pubDate>Wed, 03 Jun 2026 14:19:41 +0800</pubDate>
+      <link>https://github.com/liutaocode/Vibe_XASR/releases/tag/v1.4.0</link>
+      <description><![CDATA[
+        <h3>Vibe XASR 1.4.0.1-beta (Windows)</h3>
+        <ul>
+          <li>「记录」工作区重做(与 macOS 1.4.0 同步):日历热力图、碎句聚合 / 一键合并、
+              多选批量、标签、撤销、双击弹出编辑、导出。</li>
+          <li>新增「共享」:本机只读 HTTP API(key 鉴权,默认仅 127.0.0.1,可选局域网),
+              把语音记录 / 词典 / 口令接给你的 AI 编程助手(复制 /skill 地址即可接入)。</li>
+          <li>(含此前的数字规整 / 去口水词 / 口令 / 提示音。)</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/Gilgamesh-J/X-ASR/releases/download/vibe-v1.4.2/VibeXASR-1.4.0.1-windows-x64.msi"
+        sparkle:os="windows"
+        sparkle:version="1.4.0.1"
+        sparkle:shortVersionString="1.4.0.1-beta"
+        sparkle:edSignature="QZNpYKejE51/yMlR6tCpsmxc3iN6EN2uMsJ+vOtNJNriQGNRvgXxS8ILv8uaLlw6m3zq08ZvtQ/vNQWFoF/OCg=="
+        length="628588544"
+        type="application/octet-stream" />
+    </item>
+  </channel>
+</rss>

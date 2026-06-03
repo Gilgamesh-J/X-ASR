@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vibe XASR —— 为 Vibe Coding 而生的本地语音输入法</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="apple-touch-icon" href="favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Noto+Sans+SC:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F4F6FB;
+    --bg-soft:#EEF1F8;
+    --card:#FFFFFF;
+    --ink:#14161D;
+    --ink-2:#3B4150;
+    --ink-soft:#6B7185;
+    --line:#E6E9F2;
+    --line-2:#EDF0F7;
+    --blue:#2563EB;
+    --purple:#7C3AED;
+    --grad:linear-gradient(115deg,#2563EB 0%,#6D3BE8 55%,#8B3CF0 100%);
+    --grad-soft:linear-gradient(115deg,#EAF1FE,#F1ECFE);
+    --tint-blue:#EAF1FE;
+    --tint-purple:#F2ECFE;
+    --shadow-sm:0 2px 8px rgba(36,55,120,.06);
+    --shadow:0 18px 50px -22px rgba(40,52,110,.30);
+    --shadow-lg:0 40px 90px -40px rgba(45,55,120,.42);
+    --r:22px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    font-family:"Plus Jakarta Sans","Noto Sans SC",-apple-system,system-ui,sans-serif;
+    background:var(--bg);
+    color:var(--ink);
+    line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:0 28px}
+  .grad-text{background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+  section{position:relative}
+
+  /* ===== NAV ===== */
+  nav{
+    position:sticky;top:0;z-index:50;
+    backdrop-filter:saturate(160%) blur(14px);
+    background:rgba(244,246,251,.78);
+    border-bottom:1px solid transparent;
+    transition:border-color .3s, background .3s;
+  }
+  nav.scrolled{border-color:var(--line);background:rgba(244,246,251,.9)}
+  .nav-in{display:flex;align-items:center;justify-content:space-between;height:68px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:19px;letter-spacing:-.01em}
+  .brand .mk{width:30px;height:30px;border-radius:9px;background:var(--grad);display:grid;place-items:center;box-shadow:0 6px 16px -6px rgba(99,52,232,.6)}
+  .brand .mk svg{width:17px;height:17px}
+  .nav-links{display:flex;align-items:center;gap:30px}
+  .nav-links a{color:var(--ink-2);text-decoration:none;font-size:14.5px;font-weight:600;transition:color .2s}
+  .nav-links a:hover{color:var(--blue)}
+  .nav-cta{
+    background:var(--grad);color:#fff;border:none;cursor:pointer;
+    font-family:inherit;font-weight:700;font-size:14px;
+    padding:10px 18px;border-radius:11px;
+    box-shadow:0 10px 24px -10px rgba(99,52,232,.65);
+    transition:transform .18s, box-shadow .18s;
+  }
+  .nav-cta:hover{transform:translateY(-1px);box-shadow:0 16px 30px -12px rgba(99,52,232,.75)}
+  .nav-right{display:flex;align-items:center;gap:13px}
+  .nav-feedback{color:var(--ink-2);text-decoration:none;font-size:14.5px;font-weight:600;transition:color .2s;white-space:nowrap}
+  .nav-feedback:hover{color:var(--blue)}
+  @media(max-width:820px){.nav-links a{display:none}}
+
+  /* ===== HERO ===== */
+  .hero{padding:72px 0 40px;position:relative}
+  .hero::before{
+    content:"";position:absolute;inset:-200px 0 auto;height:560px;z-index:0;
+    background:
+      radial-gradient(620px 320px at 22% 10%,rgba(37,99,235,.14),transparent 60%),
+      radial-gradient(560px 320px at 86% 4%,rgba(124,58,237,.13),transparent 60%);
+    pointer-events:none;
+  }
+  .hero-grid{position:relative;z-index:1;display:grid;grid-template-columns:1.05fr .95fr;gap:54px;align-items:center}
+  .pill{
+    display:inline-flex;align-items:center;gap:9px;
+    background:#fff;border:1px solid var(--line);
+    padding:7px 14px 7px 9px;border-radius:999px;font-size:13px;font-weight:600;color:var(--ink-2);
+    box-shadow:var(--shadow-sm);margin-bottom:26px;
+  }
+  .pill .dot{width:8px;height:8px;border-radius:50%;background:#22C55E;box-shadow:0 0 0 4px rgba(34,197,94,.16)}
+  .wordmark{font-size:clamp(58px,8.5vw,104px);font-weight:800;line-height:.96;letter-spacing:-.03em;margin-bottom:6px}
+  .subtag{font-size:clamp(17px,2vw,20px);font-weight:700;color:var(--ink-2);letter-spacing:.01em;margin-bottom:30px;position:relative;padding-bottom:0;display:flex;align-items:center;gap:14px}
+  .subtag::before,.subtag::after{content:"";height:2px;flex:0 0 26px;background:var(--grad);border-radius:2px;opacity:.55}
+  .subtag span{flex:0 0 auto}
+  .headline{font-family:"Noto Sans SC",sans-serif;font-weight:900;font-size:clamp(26px,3.6vw,40px);line-height:1.28;letter-spacing:-.01em;margin-bottom:22px}
+  .headline .big{font-size:1.08em}
+  .lede{font-size:16.5px;color:var(--ink-soft);max-width:480px;margin-bottom:34px;line-height:1.7}
+
+  .dl-row{display:flex;gap:14px;flex-wrap:wrap;align-items:stretch}
+  .btn{
+    display:flex;align-items:center;gap:13px;cursor:pointer;font-family:inherit;
+    border-radius:15px;padding:14px 22px;text-decoration:none;text-align:left;
+    transition:transform .18s, box-shadow .18s, border-color .18s;border:1px solid transparent;
+  }
+  .btn .ico{flex:0 0 auto;display:grid;place-items:center}
+  .btn .tx{display:flex;flex-direction:column;line-height:1.15}
+  .btn .t1{font-size:11px;font-weight:600;opacity:.78}
+  .btn .t2{font-size:16.5px;font-weight:800;letter-spacing:-.01em}
+  .btn-mac{background:var(--grad);color:#fff;box-shadow:0 18px 38px -16px rgba(99,52,232,.6)}
+  .btn-mac:hover{transform:translateY(-2px);box-shadow:0 26px 48px -18px rgba(99,52,232,.72)}
+  .btn-mac .ico svg{width:26px;height:26px}
+  .btn-win{background:#fff;color:var(--ink);border-color:var(--line);box-shadow:var(--shadow-sm)}
+  .btn-win:hover{transform:translateY(-2px);border-color:#cfd6ea}
+  .btn-win .ico svg{width:24px;height:24px}
+  .btn-win .t1{color:var(--purple);opacity:1;font-weight:700}
+  .soon{font-size:10px;font-weight:800;color:var(--purple);background:var(--tint-purple);padding:2px 7px;border-radius:6px;margin-left:6px;letter-spacing:.02em;align-self:center}
+  .trust{margin-top:18px;font-size:12.5px;color:var(--ink-soft);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .trust svg{width:14px;height:14px;color:#22C55E;flex:0 0 auto}
+  /* open-source repo buttons */
+  .repo-links{margin-top:20px;display:flex;gap:12px;flex-wrap:wrap}
+  .repo-btn{
+    display:inline-flex;align-items:center;gap:9px;text-decoration:none;cursor:pointer;
+    background:#fff;border:1px solid var(--line);border-radius:11px;
+    padding:9px 15px;font-size:13.5px;font-weight:700;color:var(--ink-2);
+    box-shadow:var(--shadow-sm);transition:transform .18s,border-color .18s,box-shadow .18s,color .18s;
+  }
+  .repo-btn:hover{transform:translateY(-2px);border-color:#cfd6ea;color:var(--blue);box-shadow:0 12px 26px -14px rgba(40,52,110,.4)}
+  .repo-btn svg{width:16px;height:16px;flex:0 0 auto}
+  .repo-btn .arr{width:13px;height:13px;opacity:.55}
+
+  @media(max-width:900px){
+    .hero-grid{grid-template-columns:1fr;gap:40px}
+    .hero{padding:48px 0 20px}
+  }
+
+  /* ===== ONCALL FLOATING WINDOW MOCK ===== */
+  .stage{position:relative;display:flex;justify-content:center;align-items:center;min-height:420px}
+  .glow{position:absolute;inset:0;background:radial-gradient(420px 280px at 60% 45%,rgba(124,58,237,.18),transparent 65%);filter:blur(8px);z-index:0}
+  .oncall{
+    position:relative;z-index:2;width:min(420px,100%);
+    background:#fff;border:1px solid var(--line);border-radius:20px;
+    box-shadow:var(--shadow-lg);overflow:hidden;
+  }
+  .oc-bar{display:flex;align-items:center;gap:10px;padding:13px 15px;border-bottom:1px solid var(--line-2)}
+  .traffic{display:flex;gap:7px}
+  .traffic i{width:11px;height:11px;border-radius:50%;display:block}
+  .traffic i:nth-child(1){background:#FF5F57}
+  .traffic i:nth-child(2){background:#FEBC2E}
+  .traffic i:nth-child(3){background:#28C840}
+  .oc-title{font-weight:700;font-size:14px;display:flex;align-items:center;gap:8px}
+  .oc-title .live{display:inline-flex;align-items:center;gap:5px;color:var(--blue);font-size:12px;font-weight:700}
+  .oc-title .live .pulse{width:7px;height:7px;border-radius:50%;background:var(--blue);animation:pulse 1.4s infinite}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.7)}}
+  .oc-actions-top{margin-left:auto;display:flex;gap:14px;color:var(--ink-soft)}
+  .oc-actions-top svg{width:16px;height:16px;cursor:pointer;transition:color .2s}
+  .oc-actions-top svg:hover{color:var(--ink)}
+  .oc-body{padding:20px 18px 6px}
+  .oc-text{font-family:"Noto Sans SC",sans-serif;font-size:17px;line-height:1.62;color:var(--ink);min-height:96px;font-weight:500}
+  .oc-text .caret{display:inline-block;width:2px;height:18px;background:var(--blue);margin-left:1px;vertical-align:-3px;animation:blink 1s step-end infinite}
+  @keyframes blink{50%{opacity:0}}
+  .wave{display:flex;align-items:center;justify-content:center;gap:3px;height:46px;margin:8px 0 4px}
+  .wave i{width:3.5px;border-radius:3px;background:var(--grad);transform-origin:center;height:8px}
+  .oc-foot{display:flex;border-top:1px solid var(--line-2);margin-top:8px}
+  .oc-foot button{
+    flex:1;border:none;background:none;cursor:pointer;font-family:inherit;
+    padding:13px 4px;display:flex;flex-direction:column;align-items:center;gap:5px;
+    color:var(--ink-2);font-size:11.5px;font-weight:600;transition:color .2s,background .2s;
+  }
+  .oc-foot button:not(:last-child){border-right:1px solid var(--line-2)}
+  .oc-foot button svg{width:17px;height:17px}
+  .oc-foot button:hover{color:var(--blue);background:var(--tint-blue)}
+  /* menubar chip — centered below the OnCall card (in normal flow) */
+  .oncall-wrap{position:relative;z-index:2;width:min(420px,100%);display:flex;flex-direction:column;align-items:center;gap:16px}
+  .menubar{
+    display:inline-flex;align-items:center;gap:7px;
+    background:#fff;border:1px solid var(--line);border-radius:12px;padding:8px 14px;
+    box-shadow:var(--shadow-sm);font-size:12.5px;font-weight:600;color:var(--ink-2);
+  }
+  .menubar .mic{width:24px;height:24px;border-radius:7px;background:var(--grad);display:grid;place-items:center}
+  .menubar .mic svg{width:13px;height:13px}
+  @media(max-width:900px){.stage{min-height:auto}}
+
+  /* ===== SECTION SHELL ===== */
+  .sec{padding:74px 0}
+  .sec-head{text-align:center;max-width:680px;margin:0 auto 50px}
+  .eyebrow{font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--blue);margin-bottom:14px;font-family:"JetBrains Mono",monospace}
+  .sec-head h2{font-family:"Noto Sans SC",sans-serif;font-weight:900;font-size:clamp(28px,3.6vw,40px);letter-spacing:-.01em;line-height:1.2;margin-bottom:14px}
+  .sec-head p{color:var(--ink-soft);font-size:16px}
+
+  /* ===== MODES (interactive) ===== */
+  .seg{display:inline-flex;background:#fff;border:1px solid var(--line);border-radius:14px;padding:5px;gap:4px;box-shadow:var(--shadow-sm);margin:0 auto 40px;position:relative;left:50%;transform:translateX(-50%)}
+  .seg button{
+    font-family:inherit;border:none;background:none;cursor:pointer;
+    padding:10px 20px;border-radius:10px;font-size:14.5px;font-weight:700;color:var(--ink-soft);
+    transition:color .25s;position:relative;z-index:2;white-space:nowrap;
+  }
+  .seg button.on{color:#fff}
+  .seg .glide{position:absolute;z-index:1;top:5px;bottom:5px;border-radius:10px;background:var(--grad);transition:left .32s cubic-bezier(.5,.1,.2,1),width .32s cubic-bezier(.5,.1,.2,1);box-shadow:0 8px 18px -8px rgba(99,52,232,.6)}
+  .mode-stage{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:38px;box-shadow:var(--shadow)}
+  .mode-info h3{font-family:"Noto Sans SC",sans-serif;font-size:25px;font-weight:900;margin-bottom:8px;letter-spacing:-.01em}
+  .mode-info .tagk{font-family:"JetBrains Mono",monospace;font-size:12px;font-weight:600;color:var(--purple);background:var(--tint-purple);display:inline-block;padding:4px 11px;border-radius:7px;margin-bottom:18px}
+  .mode-info p{color:var(--ink-2);font-size:16px;line-height:1.7;margin-bottom:16px}
+  .mode-info ul{list-style:none;display:flex;flex-direction:column;gap:10px}
+  .mode-info li{display:flex;gap:10px;align-items:flex-start;font-size:14.5px;color:var(--ink-2)}
+  .mode-info li svg{width:18px;height:18px;color:var(--blue);flex:0 0 auto;margin-top:2px}
+  /* mini editor demo */
+  .demo{background:var(--bg);border:1px solid var(--line);border-radius:16px;padding:0;overflow:hidden;box-shadow:var(--shadow-sm)}
+  .demo-bar{display:flex;align-items:center;gap:7px;padding:11px 14px;background:#fff;border-bottom:1px solid var(--line-2);font-size:12px;color:var(--ink-soft);font-weight:600}
+  .demo-bar .traffic i{width:10px;height:10px}
+  .demo-bar .fn{margin-left:6px;font-family:"JetBrains Mono",monospace;font-size:11.5px}
+  .demo-body{padding:22px 20px;min-height:170px;font-family:"Noto Sans SC",sans-serif}
+  .demo-line{display:flex;gap:12px;font-size:15px;line-height:1.7}
+  .demo-line .ln{font-family:"JetBrains Mono",monospace;color:#aeb4c7;font-size:13px;user-select:none;flex:0 0 16px;text-align:right;padding-top:1px}
+  .demo-line .ct{color:var(--ink)}
+  .demo-cur{display:inline-block;width:2px;height:17px;background:var(--blue);vertical-align:-3px;animation:blink 1s step-end infinite}
+  .demo-status{display:flex;align-items:center;gap:8px;margin-top:18px;font-size:12.5px;color:var(--ink-soft);font-weight:600}
+  .demo-status .rec{width:8px;height:8px;border-radius:50%;background:#22C55E;animation:pulse 1.4s infinite}
+  @media(max-width:820px){.mode-stage{grid-template-columns:1fr;padding:26px}.seg{flex-wrap:wrap}}
+
+  /* ===== FEATURE GRID ===== */
+  .fgrid{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+  .fcard{
+    background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:32px;
+    box-shadow:var(--shadow-sm);transition:transform .25s,box-shadow .25s,border-color .25s;
+  }
+  .fcard:hover{transform:translateY(-4px);box-shadow:var(--shadow);border-color:#dde3f2}
+  .fcard .tile{width:56px;height:56px;border-radius:16px;display:grid;place-items:center;margin-bottom:20px;background:var(--grad-soft);border:1px solid #fff}
+  .fcard .tile svg{width:27px;height:27px;color:var(--blue)}
+  .fcard h3{font-family:"Noto Sans SC",sans-serif;font-size:21px;font-weight:900;margin-bottom:14px;letter-spacing:-.01em}
+  .fcard ul{list-style:none;display:flex;flex-direction:column;gap:11px}
+  .fcard li{display:flex;gap:10px;font-size:15px;color:var(--ink-2);line-height:1.55}
+  .fcard li b{color:var(--ink);font-weight:700}
+  .fcard li .bull{flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:var(--purple);margin-top:9px}
+  @media(max-width:820px){.fgrid{grid-template-columns:1fr}}
+
+  /* ===== SPECS STRIP ===== */
+  .specs{background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:14px;display:grid;grid-template-columns:repeat(4,1fr);gap:14px;box-shadow:var(--shadow-sm)}
+  .spec{padding:22px 20px;border-radius:16px;background:var(--bg);text-align:center}
+  .spec .v{font-family:"JetBrains Mono",monospace;font-weight:700;font-size:clamp(20px,2.4vw,27px);letter-spacing:-.01em;margin-bottom:6px}
+  .spec .k{font-size:13px;color:var(--ink-soft);font-weight:600}
+  .lat-chips{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:6px}
+  .lat-chips span{font-family:"JetBrains Mono",monospace;font-size:11px;font-weight:600;color:var(--blue);background:var(--tint-blue);padding:3px 8px;border-radius:6px}
+  @media(max-width:820px){.specs{grid-template-columns:1fr 1fr}}
+
+  /* ===== DOWNLOAD CTA ===== */
+  .cta-sec{padding:30px 0 90px}
+  .cta{
+    position:relative;overflow:hidden;border-radius:30px;padding:64px 40px;text-align:center;
+    background:var(--grad);color:#fff;box-shadow:0 50px 100px -45px rgba(99,52,232,.7);
+  }
+  .cta::before{content:"";position:absolute;inset:0;background:radial-gradient(600px 300px at 20% 0%,rgba(255,255,255,.22),transparent 60%);pointer-events:none}
+  .cta::after{content:"";position:absolute;left:-10%;bottom:-60%;width:60%;height:140%;background:radial-gradient(circle,rgba(255,255,255,.14),transparent 60%);pointer-events:none}
+  .cta h2{position:relative;font-family:"Noto Sans SC",sans-serif;font-size:clamp(28px,4vw,44px);font-weight:900;letter-spacing:-.01em;margin-bottom:14px;line-height:1.2}
+  .cta p{position:relative;font-size:16.5px;opacity:.92;margin-bottom:34px}
+  .cta-row{position:relative;display:flex;gap:16px;justify-content:center;flex-wrap:wrap}
+  .btn-on-grad{background:#fff;color:var(--ink);box-shadow:0 20px 40px -16px rgba(20,20,40,.4)}
+  .btn-on-grad .t1{color:var(--purple);opacity:1;font-weight:700}
+  .btn-on-grad:hover{transform:translateY(-2px)}
+  .btn-on-grad .ico svg{width:26px;height:26px}
+  .btn-ghost{background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.4)}
+  .btn-ghost:hover{background:rgba(255,255,255,.2);transform:translateY(-2px)}
+  .btn-ghost .ico svg{width:24px;height:24px}
+  .btn-ghost .t1{opacity:.85}
+  .platforms{position:relative;margin-top:28px;font-size:13.5px;opacity:.9;display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap}
+  .platforms .div{width:1px;height:14px;background:rgba(255,255,255,.4)}
+
+  /* ===== FOOTER ===== */
+  footer{padding:38px 0 60px;border-top:1px solid var(--line)}
+  .foot-in{display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap}
+  .foot-in .brand{font-size:17px}
+  .foot-in .meta{font-size:13px;color:var(--ink-soft)}
+  .foot-links{display:flex;gap:22px}
+  .foot-links a{color:var(--ink-2);text-decoration:none;font-size:13.5px;font-weight:600}
+  .foot-links a:hover{color:var(--blue)}
+
+  .reveal{opacity:0;transform:translateY(24px);transition:opacity .7s cubic-bezier(.2,.6,.2,1),transform .7s cubic-bezier(.2,.6,.2,1)}
+  .reveal.in{opacity:1;transform:none}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav id="nav">
+  <div class="wrap nav-in">
+    <div class="brand">
+      <span class="mk">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v4"/></svg>
+      </span>
+      Vibe XASR
+    </div>
+    <div class="nav-links">
+      <a href="#modes">三种模式</a>
+      <a href="#features">特性</a>
+      <a href="#download">下载</a>
+      <a href="https://github.com/Gilgamesh-J/X-ASR" target="_blank" rel="noopener">开源引擎 X-ASR</a>
+    </div>
+    <div class="nav-right">
+      <a class="nav-feedback" href="https://github.com/Gilgamesh-J/X-ASR/issues" target="_blank" rel="noopener">问题反馈</a>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<header class="hero">
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <span class="pill"><span class="dot"></span>100% 本地运行 · 一个字都不上云</span>
+      <h1 class="wordmark grad-text">Vibe XASR</h1>
+      <div class="subtag"><span>为 Vibe Coding 而生的本地语音输入法</span></div>
+      <h2 class="headline">按住说话，中英文实时变文字，<br>直接落到光标处。</h2>
+      <p class="lede"><b>100% 本地离线、隐私不上云</b>;语音识别由开源项目 <a href="https://github.com/Gilgamesh-J/X-ASR" target="_blank" rel="noopener" style="color:var(--blue);font-weight:700;text-decoration:underline;text-underline-offset:2px">X-ASR</a> 引擎驱动,<b>中英文自由说</b>、混说无缝切换。原生 macOS 应用(Universal,Apple Silicon + Intel 通吃),菜单栏常驻,随时随地按住说话。</p>
+      <div class="dl-row">
+        <a class="btn btn-mac" href="https://github.com/Gilgamesh-J/X-ASR/releases" target="_blank" rel="noopener">
+          <span class="ico">
+            <svg viewBox="0 0 24 24" fill="#fff"><path d="M16.5 3c.1 1.2-.4 2.3-1.1 3.1-.8.9-2 1.6-3.2 1.5-.1-1.2.5-2.4 1.2-3.1.8-.9 2.1-1.5 3.1-1.5zM20 17.3c-.5 1.2-.8 1.7-1.5 2.8-1 1.5-2.3 3.3-4 3.3-1.5 0-1.9-1-3.9-1-2 0-2.4 1-3.9 1-1.7 0-2.9-1.7-3.9-3.1C-.1 17-.4 11.6 2 8.9c1-1.3 2.6-2.1 4.1-2.1 1.6 0 2.6 1 3.9 1 1.3 0 2-1 3.9-1 1.4 0 2.8.8 3.8 2-3.3 1.8-2.8 6.6.3 8.5z"/></svg>
+          </span>
+          <span class="tx"><span class="t1">下载 macOS 版</span><span class="t2">macOS 15+</span></span>
+        </a>
+        <a class="btn btn-win" href="https://github.com/Gilgamesh-J/X-ASR/releases" target="_blank" rel="noopener">
+          <span class="ico">
+            <svg viewBox="0 0 24 24" fill="#7C3AED"><path d="M3 5.7 10.5 4.6v6.6H3V5.7zM3 12.8h7.5v6.6L3 18.3v-5.5zM11.5 4.4 21 3v8.2h-9.5V4.4zM11.5 12.8H21V21l-9.5-1.4v-6.8z"/></svg>
+          </span>
+          <span class="tx"><span class="t1">Windows 版<span class="soon">抢先体验</span></span><span class="t2">测试中</span></span>
+        </a>
+      </div>
+      <div class="repo-links">
+        <a class="repo-btn" href="https://github.com/Gilgamesh-J/X-ASR" target="_blank" rel="noopener" title="开源语音引擎 X-ASR">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.58 2 12.25c0 4.53 2.87 8.37 6.84 9.73.5.1.68-.22.68-.49 0-.24-.01-.88-.01-1.73-2.78.62-3.37-1.37-3.37-1.37-.46-1.18-1.11-1.49-1.11-1.49-.91-.64.07-.62.07-.62 1 .07 1.53 1.06 1.53 1.06.89 1.57 2.34 1.12 2.91.85.09-.66.35-1.12.63-1.38-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.28 2.75 1.05A9.34 9.34 0 0 1 12 6.84c.85 0 1.71.12 2.51.34 1.91-1.33 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.81-4.57 5.06.36.32.68.94.68 1.9 0 1.37-.01 2.48-.01 2.82 0 .27.18.6.69.49A10.03 10.03 0 0 0 22 12.25C22 6.58 17.52 2 12 2z"/></svg>
+          引擎基于开源 X-ASR
+          <svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8"/></svg>
+        </a>
+      </div>
+    </div>
+
+    <!-- ONCALL MOCK -->
+    <div class="stage">
+      <div class="glow"></div>
+      <div class="oncall-wrap">
+      <div class="oncall">
+        <div class="oc-bar">
+          <div class="traffic"><i></i><i></i><i></i></div>
+          <div class="oc-title">Vibe XASR <span class="live"><span class="pulse"></span>听写中</span></div>
+          <div class="oc-actions-top">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="9" y1="5" x2="9" y2="19"/><line x1="15" y1="5" x2="15" y2="19"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+          </div>
+        </div>
+        <div class="oc-body">
+          <div class="oc-text" id="ocText"></div>
+          <div class="wave" id="wave"></div>
+        </div>
+        <div class="oc-foot">
+          <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>复制</button>
+          <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>查看</button>
+          <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="9" y1="5" x2="9" y2="19"/><line x1="15" y1="5" x2="15" y2="19"/></svg>暂停</button>
+          <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>停止</button>
+        </div>
+      </div>
+      <div class="menubar">
+        <span class="mic"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v4"/></svg></span>
+        快捷键一键听写
+      </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- MODES -->
+<section class="sec" id="modes">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow">three modes</div>
+      <h2>三种听写模式，场景全覆盖</h2>
+      <p>从最稳的整句插入，到所见即所得的流式输入，再到常驻待命的 OnCall。</p>
+    </div>
+    <div class="seg reveal" id="seg">
+      <span class="glide" id="glide"></span>
+      <button class="on" data-m="0">说完插入</button>
+      <button data-m="1">逐字插入</button>
+      <button data-m="2">持续候机 OnCall</button>
+    </div>
+    <div class="mode-stage reveal">
+      <div class="mode-info">
+        <div class="tagk" id="mTag">MODE · INSERT-ON-FINISH</div>
+        <h3 id="mTitle">说完插入</h3>
+        <p id="mDesc">说完一句一次性写入，最稳，适配所有 App。识别完成后整句送达，绝不打断你的输入节奏。</p>
+        <ul id="mList"></ul>
+      </div>
+      <div class="demo">
+        <div class="demo-bar">
+          <div class="traffic"><i style="background:#FF5F57"></i><i style="background:#FEBC2E"></i><i style="background:#28C840"></i></div>
+          <span class="fn" id="demoFn">weekly-notes.md</span>
+        </div>
+        <div class="demo-body">
+          <div class="demo-line"><span class="ln">1</span><span class="ct" id="demoText"></span></div>
+          <div class="demo-status"><span class="rec"></span><span id="demoStatus">正在聆听…</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section class="sec" id="features" style="padding-top:20px">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow">why vibe xasr</div>
+      <h2>本地 · 隐私 · 极速 · 中英文自由说</h2>
+      <p>一切都在你的设备上发生——隐私不上云，极速上屏，中英文随心切换。</p>
+    </div>
+    <div class="fgrid">
+      <div class="fcard reveal">
+        <div class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></div>
+        <h3>100% 本地，隐私至上</h3>
+        <ul>
+          <li><span class="bull"></span><span>全程离线在设备上运行，<b>语音和文字绝不上云</b></span></li>
+          <li><span class="bull"></span><span>本地历史可查看、逐条复制 / 编辑 / 导出（JSON / 纯文本）</span></li>
+          <li><span class="bull"></span><span>关闭历史也有 <b>60 秒缓冲</b>（带倒计时），不怕说半天凭空消失</span></li>
+          <li><span class="bull"></span><span>使用统计：累计已说多少字、为你节省多少时间</span></li>
+        </ul>
+      </div>
+      <div class="fcard reveal">
+        <div class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h8l-1 8 10-12h-8l1-8z"/></svg></div>
+        <h3>又快又准（X-ASR 驱动）</h3>
+        <ul>
+          <li><span class="bull"></span><span>流式 <b>X-ASR (zh-en)</b> 识别引擎 + FireRedVAD 端点检测</span></li>
+          <li><span class="bull"></span><span>中英混说无缝切换（code-switching），中文自动去字间空格</span></li>
+          <li><span class="bull"></span><span>延迟档位自选 <b>160 / 480 / 960 / 1920ms</b>，模型按需下载</span></li>
+          <li><span class="bull"></span><span>即使小声说话也能准确识别</span></li>
+        </ul>
+      </div>
+      <div class="fcard reveal">
+        <div class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 0 3-3h7z"/></svg></div>
+        <h3>个性化词典</h3>
+        <ul>
+          <li><span class="bull"></span><span><b>自定义词</b>：常用人名 / 品牌 / 术语加进词典，专名识别更准</span></li>
+          <li><span class="bull"></span><span><b>同音字纠正</b>：念不准、l/n 平翘舌前后鼻音不分，也能纠回词典里的写法</span></li>
+          <li><span class="bull"></span><span><b>替换规则</b>：识别错形一键改成目标词，生造词 / 品牌名也能搞定</span></li>
+          <li><span class="bull"></span><span>全部本地实时生效，不联网、数据不出设备</span></li>
+        </ul>
+      </div>
+      <div class="fcard reveal">
+        <div class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0L14.06 8.5A2 2 0 0 0 15.5 9.94l6.14 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg></div>
+        <h3>听写更顺手</h3>
+        <ul>
+          <li><span class="bull"></span><span><b>去口水词</b>：自动删掉「嗯 / 呃 / 那个」等语气词，折叠口吃式重复</span></li>
+          <li><span class="bull"></span><span><b>数字规整</b>：中文数字自动转阿拉伯，「二零二六」→「2026」</span></li>
+          <li><span class="bull"></span><span><b>口令</b>：说一个触发词，自动展开成整段预存文本——邮箱、签名、样板代码</span></li>
+          <li><span class="bull"></span><span><b>自选麦克风</b>：指定录音设备，不再只用系统默认</span></li>
+          <li><span class="bull"></span><span><b>起止提示音</b>：听写起止轻提示音，五种音色，音量低 / 中 / 高</span></li>
+        </ul>
+      </div>
+      <div class="fcard reveal">
+        <div class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M2 13h20"/></svg></div>
+        <h3>适合这些场景</h3>
+        <ul>
+          <li><span class="bull"></span><span><b>Vibe Coding</b> —— 边说边写，让灵感不断流</span></li>
+          <li><span class="bull"></span><span>会议记录 / 写作表达，长文不再手酸</span></li>
+          <li><span class="bull"></span><span>聊天、邮件、文档输入，落到任意光标处</span></li>
+          <li><span class="bull"></span><span>OnCall 常驻待命，永远为你随时听写</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- DOWNLOAD CTA -->
+<section class="cta-sec" id="download">
+  <div class="wrap">
+    <div class="cta reveal">
+      <h2>让语音，成为你的生产力加速器</h2>
+      <p>免费下载，开箱即装。100% 本地离线、隐私不上云。一句话开始：按住说话，直接落到光标处。</p>
+      <div class="cta-row">
+        <a class="btn btn-on-grad" href="https://github.com/Gilgamesh-J/X-ASR/releases" target="_blank" rel="noopener">
+          <span class="ico"><svg viewBox="0 0 24 24" fill="#7C3AED"><path d="M16.5 3c.1 1.2-.4 2.3-1.1 3.1-.8.9-2 1.6-3.2 1.5-.1-1.2.5-2.4 1.2-3.1.8-.9 2.1-1.5 3.1-1.5zM20 17.3c-.5 1.2-.8 1.7-1.5 2.8-1 1.5-2.3 3.3-4 3.3-1.5 0-1.9-1-3.9-1-2 0-2.4 1-3.9 1-1.7 0-2.9-1.7-3.9-3.1C-.1 17-.4 11.6 2 8.9c1-1.3 2.6-2.1 4.1-2.1 1.6 0 2.6 1 3.9 1 1.3 0 2-1 3.9-1 1.4 0 2.8.8 3.8 2-3.3 1.8-2.8 6.6.3 8.5z"/></svg></span>
+          <span class="tx"><span class="t1">下载 macOS 版</span><span class="t2">macOS 15+</span></span>
+        </a>
+        <a class="btn btn-ghost" href="https://github.com/Gilgamesh-J/X-ASR/releases" target="_blank" rel="noopener">
+          <span class="ico"><svg viewBox="0 0 24 24" fill="#fff"><path d="M3 5.7 10.5 4.6v6.6H3V5.7zM3 12.8h7.5v6.6L3 18.3v-5.5zM11.5 4.4 21 3v8.2h-9.5V4.4zM11.5 12.8H21V21l-9.5-1.4v-6.8z"/></svg></span>
+          <span class="tx"><span class="t1">Windows 版</span><span class="t2">抢先体验 · 测试中</span></span>
+        </a>
+      </div>
+      <div class="platforms">
+        <span>✓ macOS 已稳定可用</span>
+        <span class="div"></span>
+        <span>Windows 抢先体验</span>
+        <span class="div"></span>
+        <a href="https://github.com/Gilgamesh-J/X-ASR" target="_blank" rel="noopener" style="color:#fff;font-weight:700;text-decoration:underline;text-underline-offset:3px">引擎基于开源 X-ASR ↗</a>
+      </div>
+      <p style="margin-top:18px;font-size:13.5px;line-height:1.75;color:rgba(255,255,255,.82);max-width:600px;margin-left:auto;margin-right:auto">
+        💡 Windows 版已完成首次编译,目前仍处早期测试阶段,可能存在一些尚未发现的问题,非常欢迎试用并把反馈告诉我们。为获得最稳定的体验,建议优先使用 macOS 版;待我们把 Windows 版打磨稳定后,再正式向大家推荐 🙂
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="wrap foot-in">
+    <div>
+      <div class="brand"><span class="mk">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v4"/></svg>
+      </span>Vibe XASR</div>
+      <div class="meta" style="margin-top:8px">为 Vibe Coding 而生的本地语音输入法 · 100% 本地运行</div>
+    </div>
+    <div class="foot-links">
+      <a href="#modes">三种模式</a>
+      <a href="#features">特性</a>
+      <a href="#download">下载</a>
+      <a href="https://github.com/Gilgamesh-J/X-ASR" target="_blank" rel="noopener">开源引擎 X-ASR</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  /* nav shadow */
+  const nav=document.getElementById('nav');
+  addEventListener('scroll',()=>nav.classList.toggle('scrolled',scrollY>10));
+
+  /* reveal on scroll */
+  const io=new IntersectionObserver((es)=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.12});
+  document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+
+  /* waveform bars */
+  const wave=document.getElementById('wave');
+  const N=42;
+  for(let i=0;i<N;i++){const b=document.createElement('i');wave.appendChild(b)}
+  const bars=[...wave.children];
+  function animWave(){
+    bars.forEach((b,i)=>{
+      const h=6+Math.abs(Math.sin(Date.now()/240+i*0.55))*Math.random()*34;
+      b.style.height=h.toFixed(1)+'px';
+    });
+    requestAnimationFrame(animWave);
+  }
+  animWave();
+
+  /* OnCall streaming text */
+  const ocText=document.getElementById('ocText');
+  const ocPhrases=[
+    "这是一个本地语音输入工具，100% 在设备端运行，隐私安全。支持中英文实时识别，直接落到光标处。",
+    "帮我写一个 function 处理用户输入，要支持 streaming 流式返回。",
+    "按住说话，松手即写入。中英混说无缝切换，永远为你待命。"
+  ];
+  let pi=0;
+  function typeOC(){
+    const txt=ocPhrases[pi];let c=0;
+    ocText.innerHTML='<span class="caret"></span>';
+    const t=setInterval(()=>{
+      c++;
+      ocText.innerHTML=txt.slice(0,c)+'<span class="caret"></span>';
+      if(c>=txt.length){clearInterval(t);setTimeout(()=>{pi=(pi+1)%ocPhrases.length;typeOC()},2600)}
+    },55);
+  }
+  typeOC();
+
+  /* MODES interactive */
+  const modes=[
+    {tag:"MODE · INSERT-ON-FINISH",title:"说完插入",fn:"weekly-notes.md",status:"识别完成 · 整句写入 ✓",
+     desc:"说完一句一次性写入，最稳，适配所有 App。识别完成后整句送达，绝不打断你的输入节奏。",
+     list:["最高兼容性，任何输入框都能用","识别完成才写入，零误触","适合正式文档与邮件"],
+     demo:"把这周的进度整理成三条要点，发给 team 同步一下。",mode:"finish"},
+    {tag:"MODE · STREAMING",title:"逐字插入",fn:"chat.tsx",status:"流式输入中…所见即所得",
+     desc:"边说边逐字流式打进输入框，所见即所得。说到哪写到哪，实时感拉满。",
+     list:["逐字流式上屏，实时反馈","所见即所得，边想边说","适合聊天与即兴表达"],
+     demo:"边说边写，逐字实时上屏，所见即所得",mode:"stream"},
+    {tag:"MODE · ON-CALL",title:"持续候机 OnCall",fn:"floating.swift",status:"常驻后台 · 免按键待命",
+     desc:"常驻后台、免按键，右上角悬浮窗实时显示识别内容,可复制 / 查看 / 暂停 / 停止——永远为你待命。",
+     list:["免按键常驻，随时开口即录","悬浮窗实时显示，可复制查看","暂停 / 停止随心控制"],
+     demo:"OnCall 待命中 —— 开口即录，悬浮窗实时显示",mode:"oncall"}
+  ];
+  const seg=document.getElementById('seg');
+  const glide=document.getElementById('glide');
+  const btns=[...seg.querySelectorAll('button')];
+  const mTag=document.getElementById('mTag'),mTitle=document.getElementById('mTitle'),mDesc=document.getElementById('mDesc'),mList=document.getElementById('mList');
+  const demoFn=document.getElementById('demoFn'),demoText=document.getElementById('demoText'),demoStatus=document.getElementById('demoStatus');
+  let demoTimer=null;
+  function moveGlide(btn){glide.style.left=btn.offsetLeft+'px';glide.style.width=btn.offsetWidth+'px';}
+  function setMode(i){
+    const m=modes[i];
+    btns.forEach((b,j)=>b.classList.toggle('on',j===i));
+    moveGlide(btns[i]);
+    mTag.textContent=m.tag;mTitle.textContent=m.title;mDesc.textContent=m.desc;demoFn.textContent=m.fn;
+    mList.innerHTML=m.list.map(x=>`<li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span>${x}</span></li>`).join('');
+    demoStatus.textContent="正在聆听…";
+    clearInterval(demoTimer);
+    if(m.mode==='finish'){
+      demoText.innerHTML='<span class="demo-cur"></span>';
+      setTimeout(()=>{demoText.innerHTML=m.demo+'<span class="demo-cur"></span>';demoStatus.textContent=m.status;},900);
+    }else if(m.mode==='stream'){
+      let c=0;demoText.innerHTML='<span class="demo-cur"></span>';demoStatus.textContent=m.status;
+      demoTimer=setInterval(()=>{c++;demoText.innerHTML=m.demo.slice(0,c)+'<span class="demo-cur"></span>';if(c>=m.demo.length)clearInterval(demoTimer);},90);
+    }else{
+      let c=0;demoText.innerHTML='<span class="demo-cur"></span>';demoStatus.textContent=m.status;
+      demoTimer=setInterval(()=>{c++;demoText.innerHTML=m.demo.slice(0,c)+'<span class="demo-cur"></span>';if(c>=m.demo.length)clearInterval(demoTimer);},70);
+    }
+  }
+  btns.forEach((b,i)=>b.addEventListener('click',()=>setMode(i)));
+  addEventListener('load',()=>setMode(0));
+  setMode(0);
+  addEventListener('resize',()=>moveGlide(btns[[...btns].findIndex(b=>b.classList.contains('on'))]||btns[0]));
+</script>
+</body>
+</html>
