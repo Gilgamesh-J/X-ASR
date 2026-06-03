@@ -1026,24 +1026,24 @@ public sealed class SettingsForm : Form
         statusRow.Controls.Add(new Label
         {
             Text = _app.ApiRunning
-                ? (zh ? $"● 运行中 · http://127.0.0.1:{_app.ApiBoundPort}" : $"● Running · http://127.0.0.1:{_app.ApiBoundPort}")
-                : (zh ? "○ 未启动" : "○ Stopped"),
+                ? L10n.T("share.status.running", $"http://127.0.0.1:{_app.ApiBoundPort}")
+                : L10n.T("share.status.stopped"),
             Font = Theme.Mono(9.5f), ForeColor = _app.ApiRunning ? Theme.Success : Theme.TextMuted,
             AutoSize = false, Location = new Point(16, 6), Size = new Size(w - 32, 18), BackColor = Color.Transparent,
         });
 
         var keyRow = new Panel { BackColor = Theme.Surface, Width = w, Height = 66 };
-        keyRow.Controls.Add(new Label { Text = zh ? "访问密钥(每个请求都要带)" : "Access key (required on every request)", Font = Theme.Ui(9.5f), ForeColor = Theme.Text, AutoSize = false, Location = new Point(16, 8), Size = new Size(w - 32, 18), BackColor = Color.Transparent });
+        keyRow.Controls.Add(new Label { Text = L10n.T("share.key.label"), Font = Theme.Ui(9.5f), ForeColor = Theme.Text, AutoSize = false, Location = new Point(16, 8), Size = new Size(w - 32, 18), BackColor = Color.Transparent });
         keyRow.Controls.Add(new TextBox { Text = _app.ApiKey, ReadOnly = true, Font = Theme.Mono(9.5f), BackColor = Theme.Surface2, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle, Location = new Point(16, 31), Size = new Size(w - 32 - 140, 24) });
-        var copyKey = new VibeButton { Text = zh ? "复制" : "Copy", Style = VibeButton.Kind.Ghost, Size = new Size(60, 26), Location = new Point(w - 16 - 60, 30) };
+        var copyKey = new VibeButton { Text = L10n.T("share.copy"), Style = VibeButton.Kind.Ghost, Size = new Size(60, 26), Location = new Point(w - 16 - 60, 30) };
         copyKey.Click += (_, _) => { try { Clipboard.SetText(_app.ApiKey); } catch { } };
-        var reset = new VibeButton { Text = zh ? "重置" : "Reset", Style = VibeButton.Kind.Ghost, Size = new Size(60, 26), Location = new Point(w - 16 - 60 - 66, 30) };
+        var reset = new VibeButton { Text = L10n.T("share.reset"), Style = VibeButton.Kind.Ghost, Size = new Size(60, 26), Location = new Point(w - 16 - 60 - 66, 30) };
         reset.Click += (_, _) => { _app.RegenerateApiKey(); RebuildCurrentTab(); };
         keyRow.Controls.Add(copyKey); keyRow.Controls.Add(reset);
 
         var skillRow = new Panel { BackColor = Theme.Surface, Width = w, Height = 52 };
-        skillRow.Controls.Add(new Label { Text = zh ? "把下面地址贴进 AI 助手即可接入:" : "Paste this into your AI agent to connect:", Font = Theme.Ui(9f), ForeColor = Theme.TextMuted, AutoSize = false, Location = new Point(16, 6), Size = new Size(w - 32, 16), BackColor = Color.Transparent });
-        var skill = new VibeButton { Text = zh ? "复制接入地址 (/skill)" : "Copy connect URL (/skill)", Style = VibeButton.Kind.Solid, Size = new Size(200, 28), Location = new Point(16, 20) };
+        skillRow.Controls.Add(new Label { Text = L10n.T("share.skill.hint"), Font = Theme.Ui(9f), ForeColor = Theme.TextMuted, AutoSize = false, Location = new Point(16, 6), Size = new Size(w - 32, 16), BackColor = Color.Transparent });
+        var skill = new VibeButton { Text = L10n.T("share.skill.copy"), Style = VibeButton.Kind.Solid, Size = new Size(200, 28), Location = new Point(16, 20) };
         skill.Click += (_, _) => { int port = _app.ApiBoundPort > 0 ? _app.ApiBoundPort : S.ApiPort; try { Clipboard.SetText($"http://127.0.0.1:{port}/skill?key={_app.ApiKey}"); } catch { } };
         skillRow.Controls.Add(skill);
 
@@ -1053,15 +1053,15 @@ public sealed class SettingsForm : Form
             ("OpenClaw", ".openclaw/skills/vibe_xasr/"),
             ("Claude Code", ".claude/skills/vibe_xasr/"),
             ("Hermes", ".hermes/skills/vibe_xasr/"),
-            (zh ? "通用 / 其他 AI" : "Generic / other AI", null),
+            (L10n.T("share.agent.generic"), null),
         };
         string? selAgentDir = agents[0].dir;
         var installRow = new Panel { BackColor = Theme.Surface, Width = w, Height = 58 };
-        installRow.Controls.Add(new Label { Text = zh ? "一键安装到你的 AI 助手:" : "One-tap install into your AI assistant:", Font = Theme.Ui(9f), ForeColor = Theme.TextMuted, AutoSize = false, Location = new Point(16, 6), Size = new Size(w - 32, 16), BackColor = Color.Transparent });
+        installRow.Controls.Add(new Label { Text = L10n.T("share.install.title"), Font = Theme.Ui(9f), ForeColor = Theme.TextMuted, AutoSize = false, Location = new Point(16, 6), Size = new Size(w - 32, 16), BackColor = Color.Transparent });
         var agentSel = new VibeSelect { Width = 170, Options = agents.Select(a => (a.dir ?? "generic", a.label)).ToArray(), Value = agents[0].dir!, Location = new Point(16, 26) };
         agentSel.SelectionChanged += (_, v) => selAgentDir = v == "generic" ? null : v;
         installRow.Controls.Add(agentSel);
-        var copyCmd = new VibeButton { Text = zh ? "复制安装指令" : "Copy install command", Style = VibeButton.Kind.Ghost, Size = new Size(150, 28), Location = new Point(196, 25) };
+        var copyCmd = new VibeButton { Text = L10n.T("share.copyCmd"), Style = VibeButton.Kind.Ghost, Size = new Size(150, 28), Location = new Point(196, 25) };
         copyCmd.Click += (_, _) =>
         {
             int port = _app.ApiBoundPort > 0 ? _app.ApiBoundPort : S.ApiPort;
@@ -1072,20 +1072,16 @@ public sealed class SettingsForm : Form
                 : (zh ? $"请帮我安装 Vibe XASR 技能:先 `mkdir -p ~/{selAgentDir}`,再 `curl -s -H \"Authorization: Bearer {key}\" \"{baseUrl}/skill\" -o ~/{selAgentDir}SKILL.md`"
                        : $"Please install the Vibe XASR skill: first `mkdir -p ~/{selAgentDir}`, then `curl -s -H \"Authorization: Bearer {key}\" \"{baseUrl}/skill\" -o ~/{selAgentDir}SKILL.md`");
             try { Clipboard.SetText(cmd); } catch { }
-            copyCmd.Text = zh ? "已复制" : "Copied";
+            copyCmd.Text = L10n.T("share.copied");
         };
         installRow.Controls.Add(copyCmd);
 
-        col.AddGroup(zh ? "共享 · 把语音数据接到 AI 编程助手" : "SHARE · feed your dictation to AI coding agents", new List<Control>
+        col.AddGroup(L10n.T("share.group.title"), new List<Control>
         {
-            Row(zh ? "启用本地共享" : "Enable local share",
-                zh ? "在本机开一个只读 HTTP 接口,让你的编程助手读取记录 / 词典 / 口令。默认只监听 127.0.0.1,不出本机。"
-                   : "Open a local read-only HTTP API so coding agents can read your records / dictionary / snippets. Localhost-only by default.",
+            Row(L10n.T("share.enable.title"), L10n.T("share.enable.help"),
                 Toggle(S.ApiEnabled, on => { _app.SetApiEnabled(on); RebuildCurrentTab(); })),
             statusRow,
-            Row(zh ? "允许局域网访问" : "Allow LAN access",
-                zh ? "默认仅本机(127.0.0.1)。开启后同一局域网的设备也能访问,请谨慎。"
-                   : "Off → 127.0.0.1 only. On → reachable from your LAN; use with care.",
+            Row(L10n.T("share.lan.title"), L10n.T("share.lan.help"),
                 Toggle(S.ApiAllowLAN, on => { _app.SetApiAllowLAN(on); RebuildCurrentTab(); })),
             keyRow,
             skillRow,
