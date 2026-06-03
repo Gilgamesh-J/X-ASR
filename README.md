@@ -149,14 +149,28 @@ We welcome more experiments and real-world use cases built on top of **X-ASR**. 
 ### ⬇️ Desktop Package Download
 
 <p align="center">
-  <img src="assets/applications/vibe-xasr/icon.png" width="96" alt="Vibe XASR app icon">
+  <img src="assets/applications/vibe-xasr/icon.png" width="88" alt="Vibe XASR app icon">
   <br>
-  <b>Vibe XASR</b>
+  <b>Vibe XASR</b> · a local voice input method powered by X-ASR
+  <br><br>
+  <a href="https://github.com/Gilgamesh-J/X-ASR/releases"><b>⬇️&nbsp; Download for macOS &nbsp;→</b></a>
+  <br>
+  <sub>Universal (Apple Silicon + Intel) · macOS 15.0+ · signed &amp; notarized · auto-updates in-app</sub>
 </p>
 
-| Version | Platform | International | China mainland |
-|:---:|:---:|:---:|:---:|
-| `1.1.2` | macOS universal<br><sub>x86_64 + arm64, macOS 15.0+</sub> | [Download from Hugging Face](https://huggingface.co/GilgameshWind/X-ASR-zh-en/resolve/main/applications/vibe-xasr/VibeXASR-1.1.2-macos-universal.dmg?download=true) | [Download from ModelScope](https://modelscope.cn/models/Gilgamesh-J/X-ASR-zh-en/file/view/master/applications/vibe-xasr/VibeXASR-1.1.2-macos-universal.dmg?status=1) |
+> **Hold a hotkey, speak, and the text lands right at your cursor — 100% local & offline, your data never leaves the device.** The X-ASR streaming engine turns Chinese & English speech (freely code-switched) into text in real time, system-wide.
+
+**Core features**
+
+- 🎙️ **Three dictation modes** — insert-on-finish · live streaming (types as you talk) · OnCall standby (floating window)
+- 🀄 **Chinese ⇄ English** free code-switching, inserted in real time at the cursor
+- 📋 **Built-in pad & history** — saved by date; copy / edit / export
+- 📖 **Personal dictionary** — hotwords, homophone correction, replace rules
+- 🔢 **Number normalization & filler cleanup** — “二零二六” → “2026”, drops “um / uh / 那个”
+- 🌐 **Localized UI** — 中文 / English / 日本語 / 한국어
+- 🔒 **Privacy-first & auto-update** — fully offline; one-click upgrades inside the app
+
+<sub>🪟 A **Windows** build is also available (in [Releases](https://github.com/Gilgamesh-J/X-ASR/releases)) — an early **preview**, not yet fully tested, kept in sync with the latest macOS features. Please [report issues](https://github.com/Gilgamesh-J/X-ASR/issues) as you run into them.</sub>
 
 <a id="evaluation"></a>
 

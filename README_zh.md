@@ -149,14 +149,28 @@
 ### ⬇️ 桌面应用下载
 
 <p align="center">
-  <img src="assets/applications/vibe-xasr/icon.png" width="96" alt="Vibe XASR app icon">
+  <img src="assets/applications/vibe-xasr/icon.png" width="88" alt="Vibe XASR app icon">
   <br>
-  <b>Vibe XASR</b>
+  <b>Vibe XASR</b> · 基于 X-ASR 的本地语音输入法
+  <br><br>
+  <a href="https://github.com/Gilgamesh-J/X-ASR/releases"><b>⬇️&nbsp; 下载 macOS 版 &nbsp;→</b></a>
+  <br>
+  <sub>Universal(Apple Silicon + Intel)· macOS 15.0+ · 已签名公证 · App 内自动更新</sub>
 </p>
 
-| 版本 | 平台 | 国际用户 | 国内用户 |
-|:---:|:---:|:---:|:---:|
-| `1.1.2` | macOS universal<br><sub>x86_64 + arm64，macOS 15.0+</sub> | [从 Hugging Face 下载](https://huggingface.co/GilgameshWind/X-ASR-zh-en/resolve/main/applications/vibe-xasr/VibeXASR-1.1.2-macos-universal.dmg?download=true) | [从 ModelScope 下载](https://modelscope.cn/models/Gilgamesh-J/X-ASR-zh-en/file/view/master/applications/vibe-xasr/VibeXASR-1.1.2-macos-universal.dmg?status=1) |
+> **按住热键说话,文字直接落到光标处 —— 100% 本地、离线,数据永不出设备。** 由 X-ASR 流式引擎驱动,中英文混说无缝切换、实时上屏,全系统通用。
+
+**核心功能**
+
+- 🎙️ **三种听写模式** —— 说完插入 · 逐字流式(边说边上屏)· OnCall 持续候机(悬浮窗)
+- 🀄 **中英文自由混说**,实时落到光标处
+- 📋 **内置便签 + 历史记录** —— 按日期保存,复制 / 编辑 / 导出
+- 📖 **个性化词典** —— 热词、同音字纠正、替换规则
+- 🔢 **数字规整 + 去口水词** —— 「二零二六」→「2026」,自动删「嗯 / 呃 / 那个」
+- 🌐 **多语言界面** —— 中文 / English / 日本語 / 한국어
+- 🔒 **隐私优先 + 自动更新** —— 全程离线;App 内一键升级
+
+<sub>🪟 也提供 **Windows 版**(见 [Releases](https://github.com/Gilgamesh-J/X-ASR/releases))—— 早期**预览版**,尚未充分测试,会持续同步 macOS 最新功能;遇到问题欢迎及时[提交反馈](https://github.com/Gilgamesh-J/X-ASR/issues)。</sub>
 
 <a id="评测结果"></a>
 
