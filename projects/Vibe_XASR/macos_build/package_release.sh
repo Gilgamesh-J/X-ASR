@@ -69,9 +69,10 @@ echo "完成: $(cd "$(dirname "$DMG")" && pwd)/$(basename "$DMG")  (v$VER)"
 echo "== 附:Sparkle 更新包 + appcast =="
 # Sparkle in-place update payload = a zip of the STAPLED app (notarization ticket
 # travels inside, so Gatekeeper passes after extraction). appcast.xml (small) is
-# served from GitHub Pages (docs/); the zip itself is a GitHub Releases asset.
+# served via raw.githubusercontent.com from projects/docs/ on main (this IS the app's
+# SUFeedURL); the zip itself is a GitHub Releases asset on Gilgamesh-J/X-ASR.
 SPARKLE_BIN="native/third_party/sparkle/bin"
-DOCS="../docs"
+DOCS="../../docs"   # = projects/docs/ — the exact path the app's SUFeedURL fetches
 UPDATE_ZIP="native/dist/VibeXASR-${VER}.zip"
 BUILD_NUM="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "native/app/Resources/Info.plist" 2>/dev/null || echo 1)"
 if [ -x "$SPARKLE_BIN/sign_update" ]; then
@@ -79,14 +80,14 @@ if [ -x "$SPARKLE_BIN/sign_update" ]; then
   ditto -c -k --keepParent "$APP" "$UPDATE_ZIP"
   SIG_LINE="$("$SPARKLE_BIN/sign_update" "$UPDATE_ZIP")"   # sparkle:edSignature="…" length="…"
   PUBDATE="$(date '+%a, %d %b %Y %H:%M:%S %z')"
-  DL_URL="https://github.com/liutaocode/Vibe_XASR/releases/download/v${VER}/VibeXASR-${VER}.zip"
+  DL_URL="https://github.com/Gilgamesh-J/X-ASR/releases/download/vibe-v${VER}/VibeXASR-${VER}.zip"
   mkdir -p "$DOCS"
   cat > "$DOCS/appcast.xml" <<XML
 <?xml version="1.0" encoding="utf-8"?>
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
   <channel>
     <title>Vibe XASR</title>
-    <link>https://liutaocode.github.io/Vibe_XASR/appcast.xml</link>
+    <link>https://raw.githubusercontent.com/Gilgamesh-J/X-ASR/main/projects/docs/appcast.xml</link>
     <description>Vibe XASR 自动更新源 / auto-update feed</description>
     <language>zh</language>
     <item>
@@ -95,7 +96,7 @@ if [ -x "$SPARKLE_BIN/sign_update" ]; then
       <sparkle:version>${BUILD_NUM}</sparkle:version>
       <sparkle:shortVersionString>${VER}</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
-      <link>https://github.com/liutaocode/Vibe_XASR/releases/tag/v${VER}</link>
+      <link>https://github.com/Gilgamesh-J/X-ASR/releases/tag/vibe-v${VER}</link>
       <enclosure url="${DL_URL}" type="application/octet-stream" ${SIG_LINE} />
     </item>
   </channel>
@@ -105,8 +106,8 @@ XML
   echo
   echo "发布这次更新,还差两步(都是对外操作,确认后执行):"
   echo "  1) 把 dmg + 更新 zip 传到 Release:"
-  echo "     gh release create v${VER} \"$DMG\" \"$UPDATE_ZIP\" -R liutaocode/Vibe_XASR -t \"Vibe XASR v${VER}\" --notes \"…\""
-  echo "  2) 提交并推送 docs/appcast.xml(GitHub Pages 刷新后,旧版 App 即可检测到新版)"
+  echo "     gh release create vibe-v${VER} \"$DMG\" \"$UPDATE_ZIP\" -R Gilgamesh-J/X-ASR -t \"Vibe XASR v${VER}\" --notes \"…\""
+  echo "  2) 提交并推送 projects/docs/appcast.xml(push 到 main 后 raw.githubusercontent.com 即刻生效,旧版 App 即可检测到新版)"
 else
   echo "   跳过:未找到 $SPARKLE_BIN/sign_update"
 fi
