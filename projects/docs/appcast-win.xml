@@ -12,12 +12,15 @@
     <description>Vibe XASR Windows auto-update feed</description>
     <language>zh</language>
     <item>
-      <title>Vibe XASR 1.4.3.1-beta</title>
-      <pubDate>Wed, 03 Jun 2026 23:20:00 +0800</pubDate>
-      <link>https://github.com/Gilgamesh-J/X-ASR/releases/tag/vibe-v1.4.3</link>
+      <title>Vibe XASR 1.4.4.1-beta</title>
+      <pubDate>Thu, 04 Jun 2026 13:25:00 +0800</pubDate>
+      <link>https://github.com/Gilgamesh-J/X-ASR/releases/tag/vibe-v1.4.4</link>
       <description><![CDATA[
-        <h3>Vibe XASR 1.4.3.1-beta (Windows)</h3>
+        <h3>Vibe XASR 1.4.4.1-beta (Windows)</h3>
         <ul>
+          <li>对齐 macOS 1.4.4:去口水词修复 —— 不再误删「额 / 額 / 诶」(金额 / 额外 / 余额 完整保留);
+              重复折叠阈值改为 ≥4 次(「三三三」「我我我」不再被折,只折真正口吃如「这这这这」)。
+              另含「共享」设置页四语言 + 复制按钮复制后短暂提示「已复制」再复位。</li>
           <li>对齐 macOS 1.4.3:逐字模式不再回改(最终的去口水词 / 数字规整 / 口令只进历史与剪贴板,
               不删改已上屏的文字);ITN 更稳(「一二三四五六七八九十」不再误并成数字);新增「自检 ·
               快捷键测试」;「共享」支持一键生成各 AI 助手(OpenClaw / Claude Code / Hermes / 通用)安装指令。</li>
@@ -33,12 +36,12 @@
         </ul>
       ]]></description>
       <enclosure
-        url="https://github.com/Gilgamesh-J/X-ASR/releases/download/vibe-v1.4.3/VibeXASR-1.4.3.1-windows-x64.msi"
+        url="https://github.com/Gilgamesh-J/X-ASR/releases/download/vibe-v1.4.4/VibeXASR-1.4.4.1-windows-x64.msi"
         sparkle:os="windows"
-        sparkle:version="1.4.3.1"
-        sparkle:shortVersionString="1.4.3.1-beta"
-        sparkle:edSignature="dOQvTqIAxGTdgUGSBx8VoG6HlsojcEppskAmfajED+xIrR1C6aOPbs2HzVmiL8XO4It6LajCtMN7WlRE3mf1BA=="
-        length="628588544"
+        sparkle:version="1.4.4.1"
+        sparkle:shortVersionString="1.4.4.1-beta"
+        sparkle:edSignature="Q6AVFWGf/SsCZR2ifTH35V1xCb8iLn0bkclbT/1SffjMyKCGM6Eug5GKKu8gmL330vXHV/PvKoxvam662qO5Cg=="
+        length="628580352"
         type="application/octet-stream" />
     </item>
   </channel>
