@@ -45,6 +45,19 @@ internal static class LlmProviders
 
     public static LlmProvider Find(string key) => All.FirstOrDefault(p => p.Key == key) ?? All[0];
     public static bool IsBuiltin(string key) => All.Any(p => p.Key == key);
+
+    // Chinese display names for the zh locale (brand names like OpenAI / Claude / Groq stay English).
+    // Faithful port of macOS CloudProvidersUI.zhNames.
+    private static readonly Dictionary<string, string> ZhNames = new()
+    {
+        ["qwen"] = "通义千问", ["aliyun"] = "阿里云百炼", ["doubao"] = "豆包 / 火山方舟",
+        ["moonshot"] = "月之暗面 Kimi", ["kimicodingplan"] = "Kimi 编程套餐",
+        ["zhipuai"] = "智谱AI", ["zhipuaicodingplan"] = "智谱AI 编程套餐",
+        ["minimaxtokenplan"] = "MiniMax Token 套餐", ["qianfan"] = "百度千帆",
+        ["xiaomimimo"] = "小米 MiMo", ["siliconcloud"] = "硅基流动",
+    };
+    public static string LocalizedLabel(string key, bool zh)
+        => zh && ZhNames.TryGetValue(key, out var z) ? z : Find(key).Label;
 }
 
 /// <summary>The 4 processing toggles → the "auto" system prompt. Port of buildAutoPrompt.</summary>

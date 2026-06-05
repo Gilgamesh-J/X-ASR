@@ -23,6 +23,7 @@ public sealed partial class SettingsForm
 
     // transient tab state
     private bool _cloudShowKey;
+    private bool _cloudRebuilding;   // true during RebuildCurrentTab → field Leave-commits are suppressed
     private (bool done, bool ok, int ping, string add, string msg) _cloudTest;
     private string? _cloudEditTpl;
     private string? _cloudEditProf;
@@ -82,7 +83,7 @@ public sealed partial class SettingsForm
 
     private string CloudProviderLabel(string key)
     {
-        if (LlmProviders.IsBuiltin(key)) return LlmProviders.Find(key).Label;
+        if (LlmProviders.IsBuiltin(key)) return LlmProviders.LocalizedLabel(key, Zh);
         return _cloudCustoms.FirstOrDefault(c => c.Id == key)?.Label ?? (string.IsNullOrEmpty(key) ? "自定义" : key);
     }
 
@@ -137,7 +138,7 @@ public sealed partial class SettingsForm
             var modelField = CloudInset(mx, y, half, 42);
             var modelBox = new TextBox { Text = S.CloudModel, BorderStyle = BorderStyle.None, Font = Theme.Ui(10.5f), BackColor = CFieldBg,
                 ForeColor = Theme.Text, Location = new Point(12, 12), Size = new Size(half - 12 - 28, 20) };
-            modelBox.Leave += (_, _) => { S.CloudModel = modelBox.Text.Trim(); _cloudTest = default; _app.ApplyCloudSettings(); };
+            modelBox.Leave += (_, _) => { if (_cloudRebuilding) return; S.CloudModel = modelBox.Text.Trim(); _cloudTest = default; _app.ApplyCloudSettings(); };
             modelField.Controls.Add(modelBox);
             if (prov.Models.Length > 0)
             {
@@ -152,9 +153,9 @@ public sealed partial class SettingsForm
             // base url
             y = CloudFieldLabel(card, Zh ? "API 地址(Base URL)" : "API base URL", pad, y);
             var baseField = CloudInset(pad, y, innerW, 42);
-            var baseBox = new TextBox { Text = S.CloudBaseURL, BorderStyle = BorderStyle.None, Font = Theme.Ui(10.5f), BackColor = CFieldBg,
+            var baseBox = new TextBox { Text = S.CloudBaseURL, PlaceholderText = prov.BaseUrl, BorderStyle = BorderStyle.None, Font = Theme.Ui(10.5f), BackColor = CFieldBg,
                 ForeColor = Theme.Text, Location = new Point(12, 12), Size = new Size(innerW - 24, 20) };
-            baseBox.Leave += (_, _) => { S.CloudBaseURL = baseBox.Text.Trim(); _cloudTest = default; _app.ApplyCloudSettings(); };
+            baseBox.Leave += (_, _) => { if (_cloudRebuilding) return; S.CloudBaseURL = baseBox.Text.Trim(); _cloudTest = default; _app.ApplyCloudSettings(); };
             baseField.Controls.Add(baseBox); card.Controls.Add(baseField);
             y += 42 + 12;
 
@@ -163,7 +164,7 @@ public sealed partial class SettingsForm
             var keyField = CloudInset(pad, y, innerW, 42);
             var keyBox = new TextBox { Text = S.CloudApiKey, UseSystemPasswordChar = !_cloudShowKey, BorderStyle = BorderStyle.None,
                 Font = Theme.Mono(10f), BackColor = CFieldBg, ForeColor = Theme.Text, Location = new Point(12, 12), Size = new Size(innerW - 12 - 66, 20) };
-            keyBox.Leave += (_, _) => { S.CloudApiKey = keyBox.Text; _cloudTest = default; _app.ApplyCloudSettings(); };
+            keyBox.Leave += (_, _) => { if (_cloudRebuilding) return; S.CloudApiKey = keyBox.Text; _cloudTest = default; _app.ApplyCloudSettings(); };
             keyField.Controls.Add(keyBox);
             var showBtn = new Label { Text = _cloudShowKey ? (Zh ? "隐藏" : "Hide") : (Zh ? "显示" : "Show"), Font = Theme.Ui(9f),
                 ForeColor = Theme.TextMuted, AutoSize = false, Location = new Point(innerW - 58, 9), Size = new Size(48, 24),
@@ -179,12 +180,12 @@ public sealed partial class SettingsForm
             var tempField = CloudInset(pad, y, half, 42);
             var tempBox = new TextBox { Text = S.CloudTemperature.ToString("0.##"), BorderStyle = BorderStyle.None, Font = Theme.Ui(10.5f),
                 BackColor = CFieldBg, ForeColor = Theme.Text, Location = new Point(12, 12), Size = new Size(half - 24, 20) };
-            tempBox.Leave += (_, _) => { if (double.TryParse(tempBox.Text, out var t)) { S.CloudTemperature = Math.Min(2, Math.Max(0, t)); _app.ApplyCloudSettings(); } };
+            tempBox.Leave += (_, _) => { if (_cloudRebuilding) return; if (double.TryParse(tempBox.Text, out var t)) { S.CloudTemperature = Math.Min(2, Math.Max(0, t)); _app.ApplyCloudSettings(); } };
             tempField.Controls.Add(tempBox); card.Controls.Add(tempField);
             var maxField = CloudInset(mx, y, half, 42);
             var maxBox = new TextBox { Text = S.CloudMaxTokens.ToString(), BorderStyle = BorderStyle.None, Font = Theme.Ui(10.5f),
                 BackColor = CFieldBg, ForeColor = Theme.Text, Location = new Point(12, 12), Size = new Size(half - 24, 20) };
-            maxBox.Leave += (_, _) => { if (int.TryParse(maxBox.Text, out var n)) { S.CloudMaxTokens = Math.Max(1, n); _app.ApplyCloudSettings(); } };
+            maxBox.Leave += (_, _) => { if (_cloudRebuilding) return; if (int.TryParse(maxBox.Text, out var n)) { S.CloudMaxTokens = Math.Max(1, n); _app.ApplyCloudSettings(); } };
             maxField.Controls.Add(maxBox); card.Controls.Add(maxField);
             y += 42 + 18;
 
@@ -536,11 +537,12 @@ internal sealed class CloudProviderPopup : Form
     {
         Controls.Clear();
         int y = 10, w = Width;
-        Controls.Add(new Label { Text = "选择服务商", Font = Theme.Ui(9f), ForeColor = Theme.TextMuted, AutoSize = false,
+        bool zh = L10n.Resolved == Lang.Zh;
+        Controls.Add(new Label { Text = zh ? "选择服务商" : "Choose provider", Font = Theme.Ui(9f), ForeColor = Theme.TextMuted, AutoSize = false,
             Location = new Point(12, y), Size = new Size(w - 24, 18), BackColor = Color.Transparent });
         y += 24;
         foreach (var p in LlmProviders.All)
-            y = Row(p.Key, p.Mark, p.Label, p.Cls, false, y);
+            y = Row(p.Key, p.Mark, LlmProviders.LocalizedLabel(p.Key, zh), p.Cls, false, y);
         if (_customs.Count > 0)
         {
             Controls.Add(new Panel { Location = new Point(12, y + 2), Size = new Size(w - 24, 1), BackColor = Theme.Hairline }); y += 8;

@@ -170,6 +170,7 @@ public sealed partial class SettingsForm : Form
 
     private void RebuildCurrentTab()
     {
+        _cloudRebuilding = true;   // disposing old controls must not fire their Leave-commits (cloud url race)
         _modelTimer.Stop();
         _micMeter?.Stop();
         _micMeter = null;
@@ -208,6 +209,7 @@ public sealed partial class SettingsForm : Form
             });
         }
         _content.ResumeLayout();
+        _cloudRebuilding = false;
     }
 
     // ---- General ----
