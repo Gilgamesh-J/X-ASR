@@ -52,6 +52,9 @@ public interface IAppController
     void SetApiPort(int port);
     string RegenerateApiKey();
 
+    // ----- AI 润色 (cloud LLM refinement) -----
+    void ApplyCloudSettings();   // persist 润色 settings + reconfigure the refiner backend
+
     // ----- permissions (Windows: microphone privacy) -----
     bool MicGranted();
     void OpenMicPrivacy();

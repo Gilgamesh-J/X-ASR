@@ -17,7 +17,7 @@ namespace VibeXASR.Windows.Ui;
 /// </summary>
 public sealed class OverlayForm : Form
 {
-    public enum OverlayState { Hidden, Listening, Inserted, OnCall }
+    public enum OverlayState { Hidden, Listening, Inserted, OnCall, Refining }
 
     private OverlayState _state = OverlayState.Hidden;
     private string _text = string.Empty;
@@ -116,6 +116,22 @@ public sealed class OverlayForm : Form
         var t = new System.Windows.Forms.Timer { Interval = 1100 };
         t.Tick += (_, _) => { t.Stop(); t.Dispose(); HideOverlay(); };
         t.Start();
+    }
+
+    /// <summary>Show "✨ 润色中…" while the cloud LLM refines the final text (before insert).</summary>
+    public void ShowRefining()
+    {
+        if (InvokeRequired) { BeginInvoke(ShowRefining); return; }
+        if (_state == OverlayState.OnCall) return;
+        _state = OverlayState.Refining;
+        int tw = TextRenderer.MeasureText(L10n.T("hud.refining"), Theme.Ui(11.5f, FontStyle.Bold)).Width;
+        Size = new Size(Math.Max(200, 52 + tw + 22), 56);
+        ApplyClickThrough(true);
+        ApplyRoundedRegion(Height / 2f);
+        PositionBottomCenter();
+        if (!_anim.Enabled) _anim.Start();
+        Invalidate();
+        ShowNoActivate();
     }
 
     /// <summary>Enter the persistent OnCall panel (top-right, interactive).</summary>
@@ -231,6 +247,16 @@ public sealed class OverlayForm : Form
             TextRenderer.DrawText(g, L10n.T("hud.insertedN", CharCount(_text)),
                 Theme.Ui(11.5f, FontStyle.Bold), new Rectangle(48, 0, Width - 48 - 14, Height),
                 Theme.Success, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+            return;
+        }
+
+        // Refining: AI polish in progress — accent orb + "✨ 润色中…" (a pulsing dot via the orb glow).
+        if (_state == OverlayState.Refining)
+        {
+            PaintOrb(g, new PointF(28, Height / 2f), 12, false);
+            TextRenderer.DrawText(g, L10n.T("hud.refining"),
+                Theme.Ui(11.5f, FontStyle.Bold), new Rectangle(48, 0, Width - 48 - 14, Height),
+                Theme.AccentA, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
             return;
         }
 

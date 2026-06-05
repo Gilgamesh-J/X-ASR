@@ -16,6 +16,7 @@ using VibeXASR.Windows.Sharing;
 using VibeXASR.Windows.Models;
 using VibeXASR.Windows.Storage;
 using VibeXASR.Windows.Ui;
+using VibeXASR.Windows.Refine;
 
 namespace VibeXASR.Windows;
 
@@ -89,6 +90,7 @@ public sealed class TrayApp : IDisposable, IAppController
 
         BuildTray();
         RefreshCorrections();   // 词典: load homophone table + replacement rules
+        ConfigureRefiner();     // AI 润色: configure the cloud refiner from settings
         CueSound.Shared.SetVolume(_settings.CueVolume);   // 提示音: sync cue volume from settings
         _api = new LocalApiServer(_settings, _history);   // 共享: local read-only HTTP API
         _api.Restart(_settings.ApiEnabled, _settings.ApiPort, _settings.ApiAllowLAN);
@@ -572,6 +574,14 @@ public sealed class TrayApp : IDisposable, IAppController
         // 词典 post-processing: homophone (pinyin) correction → text replacements, before insert.
         var text = ApplyCorrections(e.Text);
 
+        // AI 润色 (Beta): cloud-refine the final text before insert — Paste mode only (Type streams
+        // live; OnCall is a session log). Async + HUD; any failure/timeout falls back to `text`.
+        if (Refiner.Active && _settings.Mode == DictationMode.Paste)
+        {
+            _ = RefineAndInsertAsync(e.Text, text);
+            return;
+        }
+
         var modeTag = _settings.Mode.ToString().ToLowerInvariant();
         _history.Append(text, modeTag, ephemeral: !_settings.HistoryEnabled);
 
@@ -600,6 +610,56 @@ public sealed class TrayApp : IDisposable, IAppController
         }
         RefreshOpenWindows();
     }
+
+    /// <summary>Cloud-refine the final text (Beta), then insert. Paste mode only. Shows the 润色中 HUD;
+    /// any error/timeout/guardrail-reject falls back to the rule-version text (never drops text).</summary>
+    private async Task RefineAndInsertAsync(string rawAsr, string ruleText)
+    {
+        CloudRequestLog.Shared.PendingOriginal = rawAsr;   // log input = raw ASR (no rules)
+        _overlay?.ShowRefining();
+        string finalText;
+        try { finalText = await Refiner.PolishAsync(ruleText); }
+        catch (Exception ex) { Diag.Log("refine failed: " + ex.Message); finalText = ruleText; }
+        RunOnUi(() =>
+        {
+            _history.Append(finalText, "paste", ephemeral: !_settings.HistoryEnabled);
+            TextInserter.InsertText(finalText);
+            MaybeOverwriteClipboard(finalText);
+            _overlay?.SetText(finalText);
+            _overlay?.ShowInserted();
+            RefreshOpenWindows();
+        });
+    }
+
+    /// <summary>(Re)configure the AI refiner from settings: cloud backend when enabled + key/url/model
+    /// present, else off. Called on launch and whenever the 润色 settings change. No engine rebuild.</summary>
+    private void ConfigureRefiner()
+    {
+        CloudRequestLog.Shared.Enabled = _settings.CloudLogEnabled;
+        if (_settings.CloudEnabled && !string.IsNullOrWhiteSpace(_settings.CloudApiKey)
+            && !string.IsNullOrWhiteSpace(_settings.CloudBaseURL) && !string.IsNullOrWhiteSpace(_settings.CloudModel))
+        {
+            Refiner.Backend = new CloudRefiner(_settings.CloudBaseURL, _settings.CloudModel, _settings.CloudApiKey,
+                _settings.CloudTemperature, _settings.CloudMaxTokens, _settings.CloudProvider);
+            Refiner.TimeoutSeconds = 25;
+            Refiner.SystemProvider = BuildCloudSystem;
+            Diag.Log($"refiner: cloud ready provider={_settings.CloudProvider} model={_settings.CloudModel}");
+        }
+        else Refiner.Backend = null;
+    }
+
+    /// <summary>Cloud system prompt from the 4 toggles, with {{hotwords}}/{{date}} filled; {{transcript}}
+    /// is left for the backend (filled at refine time).</summary>
+    private string BuildCloudSystem()
+    {
+        var sys = CloudPrompt.BuildAuto(_settings.CloudNumbers, _settings.CloudFillers,
+                                        _settings.CloudRestate, _settings.CloudHotwords);
+        var hotwords = _settings.HotwordsEnabled ? _settings.HotwordsText.Replace("\n", "、") : "";
+        return CloudPrompt.FillStatic(sys, hotwords, DateTime.Now.ToString("yyyy-MM-dd"));
+    }
+
+    /// <summary>Apply changed 润色 settings: persist + reconfigure the backend. (IAppController)</summary>
+    public void ApplyCloudSettings() { _settings.Save(); ConfigureRefiner(); }
 
     /// <summary>Apply the post-processors to a final result, matching the macOS pipeline order:
     /// pinyin homophone correction → text replacements → 去口水词 → 数字规整 (ITN) → 口令 expansion.

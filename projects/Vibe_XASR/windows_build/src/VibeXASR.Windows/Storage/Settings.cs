@@ -165,6 +165,45 @@ public sealed class Settings
     /// <summary>Snippets as JSON: <c>[{"t":"trigger","x":"expansion"}]</c>. Persisted; parsed live.</summary>
     public string SnippetsJson { get; set; } = "[]";
 
+    // ---- AI 润色 (cloud LLM refinement, Beta) ----
+
+    /// <summary>Master switch for cloud LLM refinement of the FINAL text (Beta). Off by default — it
+    /// rewrites spoken text and sends it to a third-party API, so it is strictly opt-in.</summary>
+    public bool CloudEnabled { get; set; } = false;
+
+    /// <summary>Provider key (see Refine.LlmProviders): "openai" / "deepseek" / "ark" / … / "custom".</summary>
+    public string CloudProvider { get; set; } = "openai";
+
+    /// <summary>OpenAI-compatible base URL (without the trailing /chat/completions).</summary>
+    public string CloudBaseURL { get; set; } = "https://api.openai.com/v1";
+
+    /// <summary>Model id (free text).</summary>
+    public string CloudModel { get; set; } = "gpt-4o-mini";
+
+    /// <summary>Sampling temperature 0..1 (refinement default 0.3).</summary>
+    public double CloudTemperature { get; set; } = 0.3;
+
+    /// <summary>Max output tokens (default 2048).</summary>
+    public int CloudMaxTokens { get; set; } = 2048;
+
+    /// <summary>The four "auto" processing toggles (numbers / fillers / restatement / hotwords).</summary>
+    public bool CloudNumbers { get; set; } = true;
+    public bool CloudFillers { get; set; } = true;
+    public bool CloudRestate { get; set; } = true;
+    public bool CloudHotwords { get; set; } = true;
+
+    /// <summary>Record recent requests (for troubleshooting). On by default.</summary>
+    public bool CloudLogEnabled { get; set; } = true;
+
+    /// <summary>API key — NEVER written to settings.json; stored DPAPI-encrypted (per-user) via SecretStore,
+    /// mirroring macOS's Keychain handling ("encrypted on this machine only, never uploaded").</summary>
+    [JsonIgnore]
+    public string CloudApiKey
+    {
+        get => SecretStore.Get("cloud_api_key");
+        set => SecretStore.Set("cloud_api_key", value ?? "");
+    }
+
     // ---- persistence ----
 
     private static readonly JsonSerializerOptions JsonOpts = new()

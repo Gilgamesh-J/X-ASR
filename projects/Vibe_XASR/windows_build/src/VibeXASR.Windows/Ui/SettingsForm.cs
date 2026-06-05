@@ -124,6 +124,7 @@ public sealed class SettingsForm : Form
             ("snippet", "tab.snippet", "⚡"),
             ("model", "tab.model", "🧠"),
             ("share", "tab.share", "🔗"),
+            ("cloud", "tab.cloud", "✨"),
             ("records", "tab.records", "📋"),
             ("permissions", "tab.permissions", "🔐"),
             ("about", "tab.about", "ⓘ"),
@@ -191,6 +192,7 @@ public sealed class SettingsForm : Form
                 case "snippet": BuildSnippets(col); break;
                 case "model": BuildModel(col); _modelTimer.Start(); break;
                 case "share": BuildShare(col); break;
+                case "cloud": BuildCloudLLM(col); break;
                 case "records": BuildRecords(); break;
                 case "permissions": BuildPermissions(col); break;
                 default: BuildAbout(col); break;
@@ -1092,6 +1094,111 @@ public sealed class SettingsForm : Form
             installRow,
         });
     }
+
+    // ---- AI 润色 (cloud LLM refinement, Beta) ----
+    private void BuildCloudLLM(Column col)
+    {
+        bool zh = L10n.Resolved == Lang.Zh;
+        int w = _innerWidth;
+
+        var provs = Refine.LlmProviders.All;
+        var provSel = new VibeSelect { Width = 320, Options = provs.Select(p => (p.Key, p.Label)).ToArray(), Value = S.CloudProvider };
+        provSel.SelectionChanged += (_, key) =>
+        {
+            S.CloudProvider = key;
+            var p = Refine.LlmProviders.Find(key);
+            if (key != "custom") { S.CloudBaseURL = p.BaseUrl; S.CloudModel = p.DefaultModel; }
+            _app.ApplyCloudSettings();
+            RebuildCurrentTab();
+        };
+
+        var baseBox = new TextBox { Text = S.CloudBaseURL, Font = Theme.Mono(9.5f), BackColor = Theme.Surface2, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle, Width = 320 };
+        baseBox.Leave += (_, _) => { S.CloudBaseURL = baseBox.Text.Trim(); _app.ApplyCloudSettings(); };
+        var modelBox = new TextBox { Text = S.CloudModel, Font = Theme.Mono(9.5f), BackColor = Theme.Surface2, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle, Width = 320 };
+        modelBox.Leave += (_, _) => { S.CloudModel = modelBox.Text.Trim(); _app.ApplyCloudSettings(); };
+
+        // API key (password) + test connection
+        var keyRow = new Panel { BackColor = Theme.Surface, Width = w, Height = 94 };
+        keyRow.Controls.Add(new Label { Text = zh ? "API Key(仅本机加密保存,绝不上传)" : "API key (encrypted on this machine, never uploaded)", Font = Theme.Ui(9.5f), ForeColor = Theme.Text, AutoSize = false, Location = new Point(16, 8), Size = new Size(w - 32, 18), BackColor = Color.Transparent });
+        var keyBox = new TextBox { Text = S.CloudApiKey, UseSystemPasswordChar = true, Font = Theme.Mono(9.5f), BackColor = Theme.Surface2, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle, Location = new Point(16, 31), Size = new Size(w - 32, 24) };
+        keyBox.Leave += (_, _) => { S.CloudApiKey = keyBox.Text; _app.ApplyCloudSettings(); };
+        keyRow.Controls.Add(keyBox);
+        var testBtn = new VibeButton { Text = zh ? "测试连接" : "Test connection", Style = VibeButton.Kind.Ghost, Size = new Size(110, 28), Location = new Point(16, 60) };
+        var testStatus = new Label { Text = "", Font = Theme.Ui(9f), ForeColor = Theme.TextMuted, AutoSize = false, Location = new Point(136, 62), Size = new Size(w - 152, 24), BackColor = Color.Transparent };
+        testBtn.Click += async (_, _) =>
+        {
+            S.CloudApiKey = keyBox.Text; S.CloudBaseURL = baseBox.Text.Trim(); S.CloudModel = modelBox.Text.Trim();
+            _app.ApplyCloudSettings();
+            testBtn.Enabled = false; testStatus.ForeColor = Theme.TextMuted; testStatus.Text = zh ? "测试中…" : "Testing…";
+            var r = await Refine.CloudRefiner.TestConnectionAsync(S.CloudBaseURL, S.CloudModel, S.CloudApiKey);
+            testBtn.Enabled = true;
+            if (r.ok) { testStatus.ForeColor = Theme.Success; testStatus.Text = zh ? $"✓ 连通 · 往返 {r.ping} ms · 润色约 +{r.add}" : $"✓ OK · {r.ping} ms RTT · refine ≈ +{r.add}"; }
+            else { testStatus.ForeColor = Theme.Error; testStatus.Text = "✗ " + r.msg; }
+        };
+        keyRow.Controls.Add(testBtn); keyRow.Controls.Add(testStatus);
+
+        col.AddGroup(zh ? "AI 润色 · 用云端大模型把口述整理成想表达的样子 (Beta)" : "AI POLISH · refine your dictation with a cloud LLM (Beta)", new List<Control>
+        {
+            Row(zh ? "启用云端润色" : "Enable cloud refinement",
+                zh ? "把最终文本发给你配置的大模型整理(去口水词 / 改口 / 数字 / 热词)。会改写口语并发往第三方接口,默认关闭。仅「粘贴」模式生效。"
+                   : "Send the final text to your LLM for cleanup. It rewrites speech and calls a third-party API; off by default. Paste mode only.",
+                Toggle(S.CloudEnabled, on => { S.CloudEnabled = on; _app.ApplyCloudSettings(); RebuildCurrentTab(); })),
+            Row(zh ? "服务商" : "Provider", null, provSel),
+            Row("Base URL", null, baseBox),
+            Row(zh ? "模型" : "Model", null, modelBox),
+            keyRow,
+        });
+
+        col.AddGroup(zh ? "整理项 · 自动拼成提示词" : "Processing · builds the prompt", new List<Control>
+        {
+            Row(zh ? "数字规整" : "Numbers → digits", null, Toggle(S.CloudNumbers, on => { S.CloudNumbers = on; _app.ApplyCloudSettings(); })),
+            Row(zh ? "去口水词" : "Remove fillers", null, Toggle(S.CloudFillers, on => { S.CloudFillers = on; _app.ApplyCloudSettings(); })),
+            Row(zh ? "改口纠正(只留最终说法)" : "Keep the final restatement", null, Toggle(S.CloudRestate, on => { S.CloudRestate = on; _app.ApplyCloudSettings(); })),
+            Row(zh ? "按热词表纠正" : "Apply the hotword list", null, Toggle(S.CloudHotwords, on => { S.CloudHotwords = on; _app.ApplyCloudSettings(); })),
+        });
+
+        var tempSel = new VibeSelect { Width = 130, Options = new[] { ("0", zh ? "0 精确" : "0 exact"), ("0.3", zh ? "0.3 默认" : "0.3 default"), ("0.7", zh ? "0.7 灵活" : "0.7 loose") }, Value = S.CloudTemperature.ToString("0.#") };
+        tempSel.SelectionChanged += (_, v) => { if (double.TryParse(v, out var t)) { S.CloudTemperature = t; _app.ApplyCloudSettings(); } };
+        var maxSel = new VibeSelect { Width = 130, Options = new[] { ("1024", "1024"), ("2048", "2048"), ("4096", "4096") }, Value = S.CloudMaxTokens.ToString() };
+        maxSel.SelectionChanged += (_, v) => { if (int.TryParse(v, out var n)) { S.CloudMaxTokens = n; _app.ApplyCloudSettings(); } };
+
+        col.AddGroup(zh ? "高级 · 最近请求" : "Advanced · request log", new List<Control>
+        {
+            Row(zh ? "采样温度" : "Temperature", zh ? "越低越稳;润色建议 0~0.3。" : "Lower = steadier; 0–0.3 for refinement.", tempSel),
+            Row(zh ? "最大输出 Tokens" : "Max output tokens", zh ? "单次内容超过它会跳过润色(避免被截断)。" : "Content over this skips refine (avoids truncation).", maxSel),
+            Row(zh ? "记录最近请求" : "Log recent requests", zh ? "仅存本机,便于排查。" : "Stored locally, for troubleshooting.", Toggle(S.CloudLogEnabled, on => { S.CloudLogEnabled = on; _app.ApplyCloudSettings(); })),
+            BuildCloudLog(zh, w),
+        });
+    }
+
+    private Control BuildCloudLog(bool zh, int w)
+    {
+        var host = new Panel { BackColor = Theme.Surface, Width = w };
+        var entries = Refine.CloudRequestLog.Shared.Snapshot();
+        int y = 6;
+        var clearBtn = new VibeButton { Text = zh ? "清空" : "Clear", Style = VibeButton.Kind.Ghost, Size = new Size(60, 24), Location = new Point(w - 16 - 60, y) };
+        clearBtn.Click += (_, _) => { Refine.CloudRequestLog.Shared.Clear(); RebuildCurrentTab(); };
+        host.Controls.Add(clearBtn);
+        host.Controls.Add(new Label { Text = zh ? $"最近 {entries.Count} 条" : $"{entries.Count} recent", Font = Theme.Ui(9f), ForeColor = Theme.TextMuted, AutoSize = false, Location = new Point(16, y + 3), Size = new Size(220, 18), BackColor = Color.Transparent });
+        y += 30;
+        foreach (var e in entries.Take(6))
+        {
+            var color = e.Status == "ok" ? Theme.Success : (e.Status is "timeout" or "skipped" ? Theme.AccentB : Theme.Error);
+            host.Controls.Add(new Label { Text = $"{e.At:HH:mm:ss} · {e.Status} · {e.Ms}ms · {e.Model}", Font = Theme.Mono(8.5f), ForeColor = color, AutoSize = false, Location = new Point(16, y), Size = new Size(w - 32, 16), BackColor = Color.Transparent });
+            y += 17;
+            host.Controls.Add(new Label { Text = Trunc1(e.Output, 64), Font = Theme.Ui(8.5f), ForeColor = Theme.TextMuted, AutoSize = false, Location = new Point(28, y), Size = new Size(w - 44, 16), BackColor = Color.Transparent });
+            y += 21;
+        }
+        if (entries.Count == 0)
+        {
+            host.Controls.Add(new Label { Text = zh ? "(暂无记录 —— 启用后说一段话试试)" : "(no requests yet — enable it and dictate)", Font = Theme.Ui(9f), ForeColor = Theme.TextMuted, AutoSize = false, Location = new Point(16, y), Size = new Size(w - 32, 18), BackColor = Color.Transparent });
+            y += 22;
+        }
+        host.Height = y + 4;
+        return host;
+    }
+
+    private static string Trunc1(string s, int n) => s.Length > n ? s.Substring(0, n) + "…" : s;
 
     // ---- About ----
 
