@@ -76,6 +76,8 @@ struct LLMTab: View {
     // 最近请求(排查)
     @State private var reqLog: [CloudReqLogEntry] = []
     @State private var copiedId: UUID?   // 刚复制成 Issue 的那条(短暂高亮)
+    // 非 nil = 用户想开启润色("cloud"/"local")但当前听写模式冲突,弹窗征询切换。
+    @State private var pendingEnable: String?
     private let logTimer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
     private let promptCo = CloudPromptCoordinator()
 
@@ -93,9 +95,9 @@ struct LLMTab: View {
         if !CloudProvidersUI.isBuiltin(cfg.provider),
            let c = customProviders.first(where: { $0.id == cfg.provider }) {
             return CloudProviderUI(key: c.id, label: c.label, mark: String(c.label.prefix(1)).uppercased(),
-                                   cls: "custom", desc: "自定义服务商", baseURL: c.baseURL,
-                                   keyHint: "API Key", modelLabel: "模型 / 接入点 ID", defaultModel: "",
-                                   models: [], price: "按你所选服务商计费")
+                                   cls: "custom", desc: l10n.t("llm.custom"), baseURL: c.baseURL,
+                                   keyHint: "API Key", modelLabel: l10n.t("llm.field.modelOrEndpoint"), defaultModel: "",
+                                   models: [], price: l10n.t("llm.price.perToken"))
         }
         return CloudProvidersUI.find(cfg.provider)
     }
@@ -110,22 +112,43 @@ struct LLMTab: View {
         if on, s.refiner { s.applyRefiner(false) }   // 云端 ⟂ 本地:开云端 → 关本地
         commit()
     }
+    /// 本地润色开启(含云端 ⟂ 本地互斥)。
+    private func enableLocal() {
+        if cfg.enabled { cfg.enabled = false; commit() }   // 开本地 → 关云端
+        s.applyRefiner(true)
+    }
+
+    // ===== 开启润色:若当前听写模式与「说完插入」冲突,先弹窗征询切换 =====
+    private func requestEnable(_ which: String) {
+        if s.insert == "paste" { doEnable(which) }   // 不冲突,直接开
+        else { pendingEnable = which }               // 冲突 → 弹窗
+    }
+    private func doEnable(_ which: String) {
+        if which == "cloud" { setEnabled(true) } else { enableLocal() }
+    }
+    /// 弹窗点「切换并开启」:先切到说完插入,再开启对应润色。
+    private func confirmPendingEnable() {
+        guard let which = pendingEnable else { return }
+        s.applyInsert("paste")
+        doEnable(which)
+        pendingEnable = nil
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("云端大模型").sectionLabel(scheme)
+            Text(l10n.t("llm.sec.cloud")).sectionLabel(scheme)
             cloudCard
 
             if cfg.enabled {
-                Text("最近请求 · 排查").sectionLabel(scheme)
+                Text(l10n.t("llm.sec.requests")).sectionLabel(scheme)
                 requestLogCard
-                Text("润色处理项 · 自动拼成 Prompt").sectionLabel(scheme)
+                Text(l10n.t("llm.sec.mods")).sectionLabel(scheme)
                 modsCard
-                Text("提示词模板").sectionLabel(scheme)
+                Text(l10n.t("llm.sec.templates")).sectionLabel(scheme)
                 promptCard
             }
 
-            Text("本地大模型").sectionLabel(scheme)
+            Text(l10n.t("llm.sec.local")).sectionLabel(scheme)
             localCard
         }
         .onChange(of: s.cloud) { _, newVal in   // 外部(如重置)同步进来
@@ -138,6 +161,14 @@ struct LLMTab: View {
         }
         .onAppear { reqLog = s.cloudRecentRequests() }
         .onReceive(logTimer) { _ in if cfg.enabled { reqLog = s.cloudRecentRequests() } }
+        .alert(l10n.t("llm.enable.conflict.title"),
+               isPresented: Binding(get: { pendingEnable != nil },
+                                    set: { if !$0 { pendingEnable = nil } })) {
+            Button(l10n.t("llm.enable.conflict.switch")) { confirmPendingEnable() }
+            Button(l10n.t("llm.cancel"), role: .cancel) { pendingEnable = nil }
+        } message: {
+            Text(l10n.t("llm.enable.conflict.msg"))
+        }
     }
 
     // ===== 本地大模型卡(Beta + 在线下载)=====
@@ -146,23 +177,22 @@ struct LLMTab: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 8) {
-                        Text("AI 润色（本地）").font(Vibe.Fonts.ui(15.5, weight: .semibold))
+                        Text(l10n.t("llm.local.title")).font(Vibe.Fonts.ui(15.5, weight: .semibold))
                             .foregroundStyle(Vibe.Palette.text(scheme))
                         betaBadge
                     }
-                    Text("用本地大模型整理——去口癖、改口时只留最终说法。完全离线、隐私最佳，但质量有限（重要内容请核对）。首次启用需联网下载模型（约 378 MB），之后完全离线。")
+                    Text(l10n.t("llm.local.desc"))
                         .font(Vibe.Fonts.ui(12.5)).foregroundStyle(Vibe.Palette.textMuted(scheme))
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer()
                 #if arch(arm64)
                 VibeToggle(on: Binding(get: { s.refiner }, set: { on in
-                    if on, cfg.enabled { cfg.enabled = false; commit() }   // 本地 ⟂ 云端:开本地 → 关云端
-                    s.applyRefiner(on)
+                    if on { requestEnable("local") } else { s.applyRefiner(false) }
                 }))
                 #else
                 // Intel 不支持本地润色 → 灰显不可开,引导用云端。
-                Text("仅 Apple Silicon")
+                Text(l10n.t("llm.local.aschip"))
                     .font(Vibe.Fonts.ui(11.5, weight: .medium)).foregroundStyle(Vibe.Palette.textMuted(scheme))
                     .padding(.horizontal, 10).padding(.vertical, 5)
                     .background(Capsule().fill(Color.white.opacity(0.06)))
@@ -190,18 +220,18 @@ struct LLMTab: View {
         if let p = prog {
             HStack(spacing: 11) {
                 ProgressBar(fraction: p).frame(maxWidth: 220)
-                Text(p > 0 ? "正在下载模型 \(Int(p * 100))%" : "正在连接下载…")
+                Text(p > 0 ? l10n.t("llm.local.downloading", Int(p * 100)) : l10n.t("llm.local.connecting"))
                     .font(Vibe.Fonts.mono(11.5)).foregroundStyle(Vibe.Palette.textMuted(scheme))
                 Spacer(minLength: 0)
             }
         } else if avail {
             HStack(spacing: 9) {
                 Circle().fill(Color(red: 0.20, green: 0.83, blue: 0.6)).frame(width: 8, height: 8)
-                Text("模型已就绪 · 完全离线运行")
+                Text(l10n.t("llm.local.ready"))
                     .font(Vibe.Fonts.ui(12.5, weight: .semibold))
                     .foregroundStyle(Color(red: 0.20, green: 0.83, blue: 0.6))
                 Spacer(minLength: 0)
-                Button("删除模型") { _ = relay.deleteRefiner() }
+                Button(l10n.t("llm.local.delete")) { _ = relay.deleteRefiner() }
                     .buttonStyle(.plain).font(Vibe.Fonts.ui(12))
                     .foregroundStyle(Vibe.Palette.error)
                     .padding(.horizontal, 11).padding(.vertical, 6)
@@ -210,18 +240,18 @@ struct LLMTab: View {
         } else if failed {
             HStack(spacing: 9) {
                 Circle().fill(Color(red: 0.96, green: 0.38, blue: 0.48)).frame(width: 8, height: 8)
-                Text("下载失败 · 请检查网络后重试")
+                Text(l10n.t("llm.local.failed"))
                     .font(Vibe.Fonts.ui(12.5, weight: .semibold))
                     .foregroundStyle(Color(red: 0.96, green: 0.38, blue: 0.48))
                 Spacer(minLength: 0)
-                downloadBtn("重试下载")
+                downloadBtn(l10n.t("llm.local.retry"))
             }
         } else {
             HStack(spacing: 9) {
-                Text("首次启用需下载模型（约 378 MB）")
+                Text(l10n.t("llm.local.firstdl"))
                     .font(Vibe.Fonts.ui(12.5)).foregroundStyle(Vibe.Palette.textMuted(scheme))
                 Spacer(minLength: 0)
-                downloadBtn("下载模型")
+                downloadBtn(l10n.t("llm.local.download"))
             }
         }
     }
@@ -238,13 +268,13 @@ struct LLMTab: View {
     /// 镜像到自己的 HuggingFace 仓库后在线下载。
     private var refinerSourceLine: some View {
         HStack(spacing: 6) {
-            Text("模型来源").font(Vibe.Fonts.ui(11.5)).foregroundStyle(Vibe.Palette.textMuted(scheme).opacity(0.8))
+            Text(l10n.t("llm.local.source")).font(Vibe.Fonts.ui(11.5)).foregroundStyle(Vibe.Palette.textMuted(scheme).opacity(0.8))
             Link(destination: URL(string: "https://modelscope.cn/models/MuyuanJ/Qwen3-refiner-0.6B-MLX")!) {
                 Text("Qwen3-refiner-0.6B · MuyuanJ").font(Vibe.Fonts.mono(11))
                     .foregroundStyle(Color(red: 0.49, green: 0.63, blue: 1)).lineLimit(1).truncationMode(.middle)
             }
             Spacer(minLength: 0)
-            Text("量化 GGUF · 首次联网下载").font(Vibe.Fonts.ui(11)).foregroundStyle(Vibe.Palette.textMuted(scheme).opacity(0.6))
+            Text(l10n.t("llm.local.quant")).font(Vibe.Fonts.ui(11)).foregroundStyle(Vibe.Palette.textMuted(scheme).opacity(0.6))
         }
     }
 
@@ -261,18 +291,20 @@ struct LLMTab: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 8) {
-                        Text("调用云端大模型").font(Vibe.Fonts.ui(15.5, weight: .semibold))
+                        Text(l10n.t("llm.cloud.title")).font(Vibe.Fonts.ui(15.5, weight: .semibold))
                             .foregroundStyle(Vibe.Palette.text(scheme))
-                        Text("推荐").font(Vibe.Fonts.ui(10.5, weight: .semibold))
+                        Text(l10n.t("badge.recommended")).font(Vibe.Fonts.ui(10.5, weight: .semibold))
                             .foregroundStyle(Color(red: 0.70, green: 0.66, blue: 1))
                             .padding(.horizontal, 8).padding(.vertical, 2)
                             .background(Capsule().fill(Color(red: 0.55, green: 0.48, blue: 0.94).opacity(0.16)))
                     }
-                    Text("润色质量更高、速度更快，需联网并消耗服务商额度。API Key 仅加密存储在本机，不会上传。")
+                    Text(l10n.t("llm.cloud.desc"))
                         .font(Vibe.Fonts.ui(12.5)).foregroundStyle(Vibe.Palette.textMuted(scheme))
                 }
                 Spacer()
-                VibeToggle(on: Binding(get: { cfg.enabled }, set: { setEnabled($0) }))
+                VibeToggle(on: Binding(get: { cfg.enabled }, set: { on in
+                    if on { requestEnable("cloud") } else { setEnabled(false) }
+                }))
             }
             .padding(.bottom, cfg.enabled ? 14 : 0)
 
@@ -280,7 +312,7 @@ struct LLMTab: View {
                 profilesBar
                 // 服务商 + 模型
                 HStack(spacing: 16) {
-                    fieldCol("服务商") {
+                    fieldCol(l10n.t("llm.field.provider")) {
                         // 整行可点开下拉(Button + popover —— 避开 Menu(.borderlessButton) 在本
                         // macOS 会缩成最小、露系统箭头的问题);popover 内含内置 + 自定义 + 增删改。
                         Button { showProviderMenu.toggle() } label: {
@@ -297,10 +329,10 @@ struct LLMTab: View {
                         .buttonStyle(.plain)
                         .popover(isPresented: $showProviderMenu, arrowEdge: .bottom) { providerPopover }
                     }
-                    fieldCol(prov.modelLabel) {
+                    fieldCol(prov.modelLabel == "模型" ? l10n.t("llm.field.model") : prov.modelLabel) {
                         // 可输入(自定义模型名 / Ark 接入点 ID)+ 下拉选预设。
                         HStack(spacing: 6) {
-                            TextField("模型名 / 接入点 ID", text: Binding(get: { cfg.model }, set: { cfg.model = $0; commit() }))
+                            TextField(l10n.t("llm.model.placeholder"), text: Binding(get: { cfg.model }, set: { cfg.model = $0; commit() }))
                                 .textFieldStyle(.plain).font(Vibe.Fonts.ui(13.5))
                             if !prov.models.isEmpty {
                                 Menu {
@@ -317,7 +349,7 @@ struct LLMTab: View {
                         .padding(.horizontal, 13).frame(maxWidth: .infinity).frame(height: 42).background(fieldBG)
                     }
                 }
-                fieldCol("API 地址（Base URL）") {
+                fieldCol(l10n.t("llm.field.baseurl")) {
                     TextField(prov.baseURL, text: Binding(get: { cfg.baseURL }, set: { cfg.baseURL = $0; commit() }))
                         .textFieldStyle(.plain).font(Vibe.Fonts.ui(13.5))
                         .padding(.horizontal, 13).frame(height: 42)
@@ -330,7 +362,7 @@ struct LLMTab: View {
                             if showKey { TextField(prov.keyHint, text: keyBinding) }
                             else { SecureField(prov.keyHint, text: keyBinding) }
                         }.textFieldStyle(.plain).font(.system(size: 13, design: .monospaced))
-                        Button(showKey ? "隐藏" : "显示") { showKey.toggle() }
+                        Button(showKey ? l10n.t("llm.hide") : l10n.t("llm.show")) { showKey.toggle() }
                             .buttonStyle(.plain).font(Vibe.Fonts.ui(11.5))
                             .foregroundStyle(Vibe.Palette.textMuted(scheme))
                             .padding(.horizontal, 9).padding(.vertical, 5)
@@ -342,13 +374,13 @@ struct LLMTab: View {
 
                 // 高级:Temperature + Max Tokens
                 HStack(spacing: 16) {
-                    fieldCol("Temperature（0~1 越低越稳，润色建议 0.3）") {
+                    fieldCol(l10n.t("llm.field.temperature")) {
                         TextField("0.3", value: Binding(get: { cfg.temperature },
                                                         set: { cfg.temperature = min(2, max(0, $0)); commit() }), format: .number)
                             .textFieldStyle(.plain).font(Vibe.Fonts.ui(13.5))
                             .padding(.horizontal, 13).frame(maxWidth: .infinity).frame(height: 42).background(fieldBG)
                     }
-                    fieldCol("Max Tokens（最大输出长度）") {
+                    fieldCol(l10n.t("llm.field.maxtokens")) {
                         TextField("2048", value: Binding(get: { cfg.maxTokens },
                                                          set: { cfg.maxTokens = max(1, $0); commit() }), format: .number)
                             .textFieldStyle(.plain).font(Vibe.Fonts.ui(13.5))
@@ -361,8 +393,8 @@ struct LLMTab: View {
                 HStack(spacing: 14) {
                     Button { runTest() } label: {
                         HStack(spacing: 8) {
-                            if testing { ProgressView().controlSize(.small); Text("测试中…") }
-                            else { Text("测试连接与延迟") }
+                            if testing { ProgressView().controlSize(.small); Text(l10n.t("llm.testing")) }
+                            else { Text(l10n.t("llm.test.btn")) }
                         }
                     }
                     .buttonStyle(.plain).disabled(testing)
@@ -375,17 +407,17 @@ struct LLMTab: View {
                         if t.ok {
                             HStack(spacing: 9) {
                                 Circle().fill(Color(red: 0.20, green: 0.83, blue: 0.6)).frame(width: 8, height: 8)
-                                Text("连接正常").foregroundStyle(Color(red: 0.20, green: 0.83, blue: 0.6)).fontWeight(.semibold)
-                                chip("单次往返 \(t.ping)ms"); chip("整段润色约 \(t.add)（含往返+生成）")
+                                Text(l10n.t("llm.test.ok")).foregroundStyle(Color(red: 0.20, green: 0.83, blue: 0.6)).fontWeight(.semibold)
+                                chip(l10n.t("llm.test.rtt", t.ping)); chip(l10n.t("llm.test.full", t.add))
                             }.font(Vibe.Fonts.ui(12.5))
                         } else {
                             HStack(spacing: 9) {
                                 Circle().fill(Color(red: 0.96, green: 0.38, blue: 0.48)).frame(width: 8, height: 8)
-                                Text("测试失败 · \(t.msg)").foregroundStyle(Color(red: 0.96, green: 0.38, blue: 0.48)).fontWeight(.semibold)
+                                Text(l10n.t("llm.test.fail", t.msg)).foregroundStyle(Color(red: 0.96, green: 0.38, blue: 0.48)).fontWeight(.semibold)
                             }.font(Vibe.Fonts.ui(12.5))
                         }
                     } else {
-                        Text("会发送一次极短请求，测量真实往返延迟。")
+                        Text(l10n.t("llm.test.hint"))
                             .font(Vibe.Fonts.ui(12.5)).foregroundStyle(Vibe.Palette.textMuted(scheme).opacity(0.8))
                     }
                 }
@@ -404,7 +436,7 @@ struct LLMTab: View {
     // ===== 我的配置栏(保存/一键切换)=====
     private var profilesBar: some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text("我的配置 · 保存当前设置，一键切换 / 恢复(点选套用、双击改名)")
+            Text(l10n.t("llm.profiles.hint"))
                 .font(Vibe.Fonts.ui(12)).foregroundStyle(Vibe.Palette.textMuted(scheme))
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
@@ -412,7 +444,7 @@ struct LLMTab: View {
                     Button { saveCurrentAsProfile() } label: {
                         HStack(spacing: 5) {
                             Image(systemName: "plus").font(.system(size: 11))
-                            Text("保存当前为配置").font(Vibe.Fonts.ui(13))
+                            Text(l10n.t("llm.profiles.save")).font(Vibe.Fonts.ui(13))
                         }
                         .foregroundStyle(Color(red: 0.62, green: 0.58, blue: 1))
                         .padding(.horizontal, 12).frame(height: 32).contentShape(Rectangle())
@@ -451,26 +483,26 @@ struct LLMTab: View {
     private var requestLogCard: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
-                Text("记录每次云端调用,便于排查 / 提 issue · 最近 20 条")
+                Text(l10n.t("llm.log.hint"))
                     .font(Vibe.Fonts.ui(12.5)).foregroundStyle(Vibe.Palette.textMuted(scheme))
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 6)
                 if cfg.logEnabled {
-                    Button("刷新") { reqLog = s.cloudRecentRequests() }
+                    Button(l10n.t("llm.refresh")) { reqLog = s.cloudRecentRequests() }
                         .buttonStyle(.plain).font(Vibe.Fonts.ui(12)).foregroundStyle(Color(red: 0.62, green: 0.58, blue: 1))
-                    Button("清空") { s.cloudClearRequests(); reqLog = [] }
+                    Button(l10n.t("llm.clear")) { s.cloudClearRequests(); reqLog = [] }
                         .buttonStyle(.plain).font(Vibe.Fonts.ui(12)).foregroundStyle(Vibe.Palette.textMuted(scheme))
                 }
-                Text("记录").font(Vibe.Fonts.ui(12)).foregroundStyle(Vibe.Palette.textMuted(scheme))
+                Text(l10n.t("llm.log.label")).font(Vibe.Fonts.ui(12)).foregroundStyle(Vibe.Palette.textMuted(scheme))
                 VibeToggle(on: Binding(get: { cfg.logEnabled }, set: { cfg.logEnabled = $0; commit() }))
             }
             if !cfg.logEnabled {
-                Text("「记录请求」已关闭,不再保存。打开后保存最近 20 条(从「输入」改成「输出」+ 提示词),用于排查或一键提交 issue。")
+                Text(l10n.t("llm.log.off"))
                     .font(Vibe.Fonts.ui(12)).foregroundStyle(Vibe.Palette.textMuted(scheme).opacity(0.8))
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 12)
             } else if reqLog.isEmpty {
-                Text("还没有记录。说一段话(≥6 字),这里会列出每次云端请求:从「原始 ASR」改成「结果」、耗时与成功/超时/失败,并可一键复制调试记录贴去 GitHub issue 反馈。")
+                Text(l10n.t("llm.log.empty"))
                     .font(Vibe.Fonts.ui(12)).foregroundStyle(Vibe.Palette.textMuted(scheme).opacity(0.8))
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 12)
@@ -488,7 +520,7 @@ struct LLMTab: View {
                             Text("\(e.ms)ms").font(Vibe.Fonts.mono(11)).foregroundStyle(Vibe.Palette.textMuted(scheme))
                             Text(logText(e.status)).font(Vibe.Fonts.ui(11.5, weight: .semibold)).foregroundStyle(logColor(e.status))
                             Button { copyIssue(e) } label: {
-                                Text(copiedId == e.id ? "已复制 ✓" : "复制调试记录")
+                                Text(copiedId == e.id ? l10n.t("llm.log.copied") : l10n.t("llm.log.copy"))
                                     .font(Vibe.Fonts.ui(11, weight: .medium))
                                     .foregroundStyle(copiedId == e.id ? Color(red: 0.20, green: 0.83, blue: 0.6) : Color(red: 0.62, green: 0.58, blue: 1))
                                     .padding(.horizontal, 8).padding(.vertical, 3)
@@ -518,8 +550,8 @@ struct LLMTab: View {
     }
     private func logText(_ s: String) -> String {
         switch s {
-        case "ok": return "成功"; case "timeout": return "超时"
-        case "skipped": return "超 token"; default: return "失败"
+        case "ok": return l10n.t("llm.status.ok"); case "timeout": return l10n.t("llm.status.timeout")
+        case "skipped": return l10n.t("llm.status.skipped"); default: return l10n.t("llm.status.failed")
         }
     }
     /// 变更行三态:失败 → 显示错误;原始==结果 → 「无修改」;否则 → 从「原始 ASR」改成「结果」。
@@ -533,11 +565,11 @@ struct LLMTab: View {
                 + Text("  ·  \(logText(e.status)):\(e.output)").foregroundStyle(logColor(e.status))
             } else if inp == outp {
                 Text("「\(inp)」").foregroundStyle(Vibe.Palette.text(scheme))
-                + Text("  ·  无修改").foregroundStyle(faint)
+                + Text("  ·  \(l10n.t("llm.log.nochange"))").foregroundStyle(faint)
             } else {
-                Text("从 ").foregroundStyle(faint)
+                Text(l10n.t("llm.log.from")).foregroundStyle(faint)
                 + Text("「\(inp)」").foregroundStyle(Vibe.Palette.textMuted(scheme))
-                + Text(" 改成 ").foregroundStyle(faint)
+                + Text(l10n.t("llm.log.to")).foregroundStyle(faint)
                 + Text("「\(outp)」").foregroundStyle(Vibe.Palette.text(scheme))
             }
         }
@@ -546,30 +578,30 @@ struct LLMTab: View {
     /// 服务商 key → 显示名(内置查目录,自定义查列表)。
     private func providerLabel(_ key: String) -> String {
         if CloudProvidersUI.isBuiltin(key) { return CloudProvidersUI.localizedLabel(key) }
-        return customProviders.first { $0.id == key }?.label ?? (key.isEmpty ? "自定义" : key)
+        return customProviders.first { $0.id == key }?.label ?? (key.isEmpty ? l10n.t("llm.custom") : key)
     }
     /// 把一条请求拼成可直接贴去 issue 的 Markdown(含服务商/模型/输入输出/提示词)。
     private func issueMarkdown(_ e: CloudReqLogEntry) -> String {
         """
-        ## Vibe XASR · 云端润色问题反馈
+        \(l10n.t("llm.issue.title"))
 
-        - 服务商: \(providerLabel(e.provider)) (`\(e.provider)`)
-        - 模型: `\(e.model)`
-        - 接口: \(e.baseURL)
-        - 结果: \(logText(e.status)) · \(e.ms)ms
-        - 时间: \(e.at.formatted(.dateTime.year().month().day().hour().minute().second()))
+        - \(l10n.t("llm.issue.provider")): \(providerLabel(e.provider)) (`\(e.provider)`)
+        - \(l10n.t("llm.issue.model")): `\(e.model)`
+        - \(l10n.t("llm.issue.api")): \(e.baseURL)
+        - \(l10n.t("llm.issue.result")): \(logText(e.status)) · \(e.ms)ms
+        - \(l10n.t("llm.issue.time")): \(e.at.formatted(.dateTime.year().month().day().hour().minute().second()))
 
-        ### 输入(规则处理后)
+        ### \(l10n.t("llm.issue.input"))
         ```
         \(e.input)
         ```
 
-        ### 输出(大模型返回)
+        ### \(l10n.t("llm.issue.output"))
         ```
         \(e.output)
         ```
 
-        ### 提示词
+        ### \(l10n.t("llm.issue.prompt"))
         ```
         \(e.prompt)
         ```
@@ -582,10 +614,10 @@ struct LLMTab: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { if copiedId == e.id { copiedId = nil } }
         // 弹出提示:可粘贴到 GitHub issue 反馈。
         let alert = NSAlert()
-        alert.messageText = "调试记录已复制到剪贴板"
-        alert.informativeText = "可粘贴到我们的 GitHub issue 反馈问题(已含服务商 / 模型 / 输入输出 / 提示词)。"
-        alert.addButton(withTitle: "好")
-        alert.addButton(withTitle: "打开 issue 页面")
+        alert.messageText = l10n.t("llm.copy.alert.title")
+        alert.informativeText = l10n.t("llm.copy.alert.body")
+        alert.addButton(withTitle: l10n.t("llm.ok"))
+        alert.addButton(withTitle: l10n.t("llm.copy.alert.open"))
         if alert.runModal() == .alertSecondButtonReturn,
            let url = URL(string: "https://github.com/Gilgamesh-J/X-ASR/issues/new") {
             NSWorkspace.shared.open(url)
@@ -595,16 +627,16 @@ struct LLMTab: View {
     // ===== 处理项卡 =====
     private var modsCard: some View {
         SettingsGroup(label: "") {
-            SettingsRow(title: "数字规整", help: "把口语数字转成阿拉伯：一百二十三 → 123、三点半 → 3:30、百分之二十 → 20%。成语、计数词不动。") {
+            SettingsRow(title: l10n.t("llm.mod.numbers.title"), help: l10n.t("llm.mod.numbers.help")) {
                 VibeToggle(on: Binding(get: { cfg.numbers }, set: { cfg.numbers = $0; commit() }))
             }
-            SettingsRow(title: "去口水词", help: "去掉「嗯 / 呃 / 唉」和口吃重复（那个那个 → 那个）。叠词（看看 / 想想）保留。") {
+            SettingsRow(title: l10n.t("llm.mod.fillers.title"), help: l10n.t("llm.mod.fillers.help")) {
                 VibeToggle(on: Binding(get: { cfg.fillers }, set: { cfg.fillers = $0; commit() }))
             }
-            SettingsRow(title: "改口纠正", help: "说话中途自我更正时，只保留最终说法，删掉被改掉的前半句。") {
+            SettingsRow(title: l10n.t("llm.mod.restate.title"), help: l10n.t("llm.mod.restate.help")) {
                 VibeToggle(on: Binding(get: { cfg.restate }, set: { cfg.restate = $0; commit() }))
             }
-            SettingsRow(title: "热词修正", help: "参照「词典」里的专有名词与术语，修正同音 / 近音误写。在此仅开关，词条在「词典」页维护。") {
+            SettingsRow(title: l10n.t("llm.mod.hotwords.title"), help: l10n.t("llm.mod.hotwords.help")) {
                 VibeToggle(on: Binding(get: { cfg.hotwords }, set: { cfg.hotwords = $0; commit() }))
             }
         }
@@ -616,11 +648,11 @@ struct LLMTab: View {
             // 模板 chips
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    chipT("⚡ 自动", active: cfg.activeTemplate == "auto") { cfg.activeTemplate = "auto"; commit() }
+                    chipT(l10n.t("llm.tpl.auto"), active: cfg.activeTemplate == "auto") { cfg.activeTemplate = "auto"; commit() }
                     ForEach(templates) { t in
                         templateChip(t)
                     }
-                    Button { addTemplate() } label: { Text("＋ 新建模板") }
+                    Button { addTemplate() } label: { Text(l10n.t("llm.tpl.new")) }
                         .buttonStyle(.plain).font(Vibe.Fonts.ui(13))
                         .foregroundStyle(Vibe.Palette.textMuted(scheme))
                         .padding(.horizontal, 13).frame(height: 34)
@@ -629,7 +661,7 @@ struct LLMTab: View {
             }
             // 占位符工具条
             HStack(spacing: 8) {
-                Text("插入占位符").font(Vibe.Fonts.ui(12)).foregroundStyle(Vibe.Palette.textMuted(scheme))
+                Text(l10n.t("llm.tpl.insertToken")).font(Vibe.Fonts.ui(12)).foregroundStyle(Vibe.Palette.textMuted(scheme))
                 ForEach(CloudSeeds.tokens, id: \.token) { tk in
                     Button { promptCo.insert(tk.token) } label: { Text(tk.token) }
                         .buttonStyle(.plain).font(.system(size: 11.5, design: .monospaced))
@@ -638,14 +670,14 @@ struct LLMTab: View {
                         .background(RoundedRectangle(cornerRadius: 6).fill(Color(red: 0.55, green: 0.48, blue: 0.94).opacity(0.12)))
                 }
                 Spacer()
-                Text("调用时自动替换").font(Vibe.Fonts.ui(11)).foregroundStyle(Vibe.Palette.textMuted(scheme).opacity(0.7))
+                Text(l10n.t("llm.tpl.autoReplace")).font(Vibe.Fonts.ui(11)).foregroundStyle(Vibe.Palette.textMuted(scheme).opacity(0.7))
             }
             // 编辑器
             CloudPromptEditor(text: promptBinding, coordinator: promptCo)
                 .frame(minHeight: 172)
                 .background(RoundedRectangle(cornerRadius: 12).fill(Color.black.opacity(0.25))
                     .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Vibe.Palette.hairline(scheme))))
-            Text("「自动」由上方开关实时拼成；改后可恢复自动。模板可增删改、双击标签改名，点选即套用。占位符调用时自动替换（热词取自「词典」）。")
+            Text(l10n.t("llm.tpl.hint"))
                 .font(Vibe.Fonts.ui(12)).foregroundStyle(Vibe.Palette.textMuted(scheme).opacity(0.8))
         }
         .padding(20)
@@ -719,8 +751,9 @@ struct LLMTab: View {
     // ===== 我的配置(保存/切换/改名/删除)=====
     private func saveCurrentAsProfile() {
         var n = profiles.count + 1
-        var name = "配置\(n)", id = "prof\(n)"
-        while profiles.contains(where: { $0.name == name }) { n += 1; name = "配置\(n)" }
+        let base = l10n.t("llm.profile.default")
+        var name = "\(base)\(n)", id = "prof\(n)"
+        while profiles.contains(where: { $0.name == name }) { n += 1; name = "\(base)\(n)" }
         while profiles.contains(where: { $0.id == id }) { n += 1; id = "prof\(n)" }
         profiles.append(CloudProfiles.snapshot(cfg, id: id, name: name))
         editingProfileId = id     // 立刻进入改名
@@ -748,8 +781,9 @@ struct LLMTab: View {
     }
     private func addTemplate() {
         let id = "t\(templates.count + 1)-\(templates.count)"
-        var n = templates.count + 1, name = "模板\(n)"
-        while templates.contains(where: { $0.name == name }) { n += 1; name = "模板\(n)" }
+        let base = l10n.t("llm.tpl.default")
+        var n = templates.count + 1, name = "\(base)\(n)"
+        while templates.contains(where: { $0.name == name }) { n += 1; name = "\(base)\(n)" }
         let cur = promptBinding.wrappedValue
         templates.append(CloudTemplate(id: id, name: name, content: cur))
         cfg.activeTemplate = id; editingId = id; commit()
@@ -793,7 +827,7 @@ struct LLMTab: View {
     }
     private var providerList: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text("选择服务商").font(Vibe.Fonts.ui(11.5, weight: .medium))
+            Text(l10n.t("llm.prov.select")).font(Vibe.Fonts.ui(11.5, weight: .medium))
                 .foregroundStyle(Vibe.Palette.textMuted(scheme)).padding(.leading, 6).padding(.bottom, 4)
             ForEach(CloudProvidersUI.all, id: \.key) { p in
                 providerPickRow(id: p.key, mark: p.mark, label: CloudProvidersUI.localizedLabel(p.key), custom: false)
@@ -808,7 +842,7 @@ struct LLMTab: View {
             Button { startAddProvider() } label: {
                 HStack(spacing: 7) {
                     Image(systemName: "plus.circle.fill").font(.system(size: 13))
-                    Text("新增服务商").font(Vibe.Fonts.ui(13)); Spacer()
+                    Text(l10n.t("llm.prov.add")).font(Vibe.Fonts.ui(13)); Spacer()
                 }
                 .foregroundStyle(Color(red: 0.62, green: 0.58, blue: 1))
                 .padding(.horizontal, 8).frame(height: 34).contentShape(Rectangle())
@@ -846,21 +880,21 @@ struct LLMTab: View {
     }
     private var providerForm: some View {
         VStack(alignment: .leading, spacing: 11) {
-            Text(isNewProvider ? "新增服务商" : "编辑服务商").font(Vibe.Fonts.ui(13.5, weight: .semibold))
+            Text(isNewProvider ? l10n.t("llm.prov.add") : l10n.t("llm.prov.edit")).font(Vibe.Fonts.ui(13.5, weight: .semibold))
                 .foregroundStyle(Vibe.Palette.text(scheme))
-            formField("名称", placeholder: "如 DeepSeek / Moonshot / 本地 Ollama",
+            formField(l10n.t("llm.prov.name"), placeholder: l10n.t("llm.prov.name.ph"),
                       get: { providerEditor?.label ?? "" }, set: { providerEditor?.label = $0 })
-            formField("API 地址（Base URL）", placeholder: "https://api.xxx.com/v1",
+            formField(l10n.t("llm.field.baseurl"), placeholder: "https://api.xxx.com/v1",
                       get: { providerEditor?.baseURL ?? "" }, set: { providerEditor?.baseURL = $0 })
-            Text("兼容 OpenAI /chat/completions 接口即可;具体模型在「模型」框填写。")
+            Text(l10n.t("llm.prov.form.hint"))
                 .font(Vibe.Fonts.ui(11)).foregroundStyle(Vibe.Palette.textMuted(scheme).opacity(0.8))
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             HStack {
-                Button("取消") { providerEditor = nil }
+                Button(l10n.t("llm.cancel")) { providerEditor = nil }
                     .buttonStyle(.plain).font(Vibe.Fonts.ui(12.5)).foregroundStyle(Vibe.Palette.textMuted(scheme))
                 Spacer()
-                Button("保存") { saveProvider() }
+                Button(l10n.t("llm.save")) { saveProvider() }
                     .buttonStyle(.plain).font(Vibe.Fonts.ui(12.5, weight: .semibold)).foregroundStyle(.white)
                     .padding(.horizontal, 14).frame(height: 32)
                     .background(RoundedRectangle(cornerRadius: 8).fill(providerFormValid ? Vibe.Palette.accentA : Vibe.Palette.accentA.opacity(0.4)))

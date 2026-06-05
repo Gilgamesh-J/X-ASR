@@ -335,6 +335,8 @@ public final class SettingsState: ObservableObject {
         self.apiEnabled = bridge.apiEnabled
         self.apiAllowLAN = bridge.apiAllowLAN
         self.apiKey = bridge.apiKey
+        // 不变式:AI 润色开启时听写只能是「说完插入」(兼容旧版遗留的冲突组合)。
+        if polishOn { forcePasteForPolish() }
     }
 
     // ---- write-throughs (bridge present) or local fallback (preview) -------
@@ -416,12 +418,20 @@ public final class SettingsState: ObservableObject {
     public func applyRefiner(_ on: Bool) {
         refiner = on
         bridge?.refinerEnabled = on
+        if on { forcePasteForPolish() }   // 本地润色开启 → 听写只支持「说完插入」
     }
     /// 写回云端配置(整包)。UI 改任意字段后调它持久化 + 触发后端刷新。
     public func applyCloud(_ c: CloudConfigDTO) {
         cloud = c
         bridge?.cloudConfig = c
+        if c.enabled { forcePasteForPolish() }   // 云端润色开启 → 听写只支持「说完插入」
     }
+
+    /// AI 润色(云端或本地任一)是否开启。开启时听写只支持「说完插入」(paste),
+    /// 逐字插入 / 持续候机 与逐句润色冲突,故置灰、需先关润色才能切换。
+    public var polishOn: Bool { refiner || cloud.enabled }
+    /// 润色开启时把听写模式锁回「说完插入」。
+    private func forcePasteForPolish() { if insert != "paste" { applyInsert("paste") } }
     public func testCloud() async -> CloudTestResult {
         await bridge?.testCloud(cloud) ?? .init(msg: "未连接")
     }
@@ -820,6 +830,8 @@ private struct DictationModeList: View {
     @ObservedObject var s: SettingsState
     @ObservedObject var l10n: L10n
     @Environment(\.colorScheme) private var scheme
+    /// 非 nil = 用户点了与 AI 润色冲突的模式,弹窗征询是否切换(切换=关润色)。
+    @State private var pendingMode: String?
 
     /// (value, titleKey, descKey) for the three modes.
     private var modes: [(String, String, String)] {
@@ -835,23 +847,52 @@ private struct DictationModeList: View {
                 Text(l10n.t("dict.mode"))
                     .font(Vibe.Fonts.ui(13.5, weight: .medium))
                     .foregroundStyle(Vibe.Palette.text(scheme))
+                if s.polishOn {
+                    Text(l10n.t("dict.mode.lockedByPolish"))
+                        .font(Vibe.Fonts.ui(11.5))
+                        .foregroundStyle(Vibe.Palette.textMuted(scheme))
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, 13).padding(.bottom, 6).padding(.horizontal, 16)
 
             VStack(spacing: 8) {
                 ForEach(modes, id: \.0) { mode in
+                    // AI 润色开启时,只有「说完插入」可选;另两个置灰、点击弹切换提示。
+                    let locked = s.polishOn && mode.0 != "paste"
                     DictationModeRow(
                         title: l10n.t(mode.1),
                         desc: l10n.t(mode.2),
+                        badge: mode.0 == "paste" ? l10n.t("badge.recommended") : nil,
+                        locked: locked,
                         selected: s.insert == mode.0
-                    ) { s.applyInsert(mode.0) }
+                    ) {
+                        if locked { pendingMode = mode.0 } else { s.applyInsert(mode.0) }
+                    }
                 }
             }
             .padding(.horizontal, 16).padding(.bottom, 13)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Vibe.Palette.surface(scheme))
+        .alert(l10n.t("dict.mode.conflict.title"),
+               isPresented: Binding(get: { pendingMode != nil },
+                                    set: { if !$0 { pendingMode = nil } })) {
+            Button(l10n.t("dict.mode.conflict.switch"), role: .destructive) {
+                if let m = pendingMode { switchOffPolish(then: m) }
+                pendingMode = nil
+            }
+            Button(l10n.t("llm.cancel"), role: .cancel) { pendingMode = nil }
+        } message: {
+            Text(l10n.t("dict.mode.conflict.msg"))
+        }
+    }
+
+    /// 关闭 AI 润色(云端 + 本地)后切到目标听写模式。
+    private func switchOffPolish(then mode: String) {
+        if s.cloud.enabled { var c = s.cloud; c.enabled = false; s.applyCloud(c) }
+        if s.refiner { s.applyRefiner(false) }
+        s.applyInsert(mode)
     }
 }
 
@@ -861,6 +902,8 @@ private struct DictationModeRow: View {
     @Environment(\.colorScheme) private var scheme
     var title: String
     var desc: String
+    var badge: String? = nil
+    var locked: Bool = false
     var selected: Bool
     var action: () -> Void
     var body: some View {
@@ -881,9 +924,22 @@ private struct DictationModeRow: View {
                 }
                 .padding(.top, 1)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(title)
-                        .font(Vibe.Fonts.ui(13, weight: .semibold))
-                        .foregroundStyle(Vibe.Palette.text(scheme))
+                    HStack(spacing: 7) {
+                        Text(title)
+                            .font(Vibe.Fonts.ui(13, weight: .semibold))
+                            .foregroundStyle(Vibe.Palette.text(scheme))
+                        if let badge {
+                            Text(badge).font(Vibe.Fonts.ui(10, weight: .semibold))
+                                .foregroundStyle(Color(red: 0.62, green: 0.58, blue: 1))
+                                .padding(.horizontal, 7).padding(.vertical, 2)
+                                .background(Capsule().fill(Color(red: 0.55, green: 0.48, blue: 0.94).opacity(0.16)))
+                        }
+                        if locked {
+                            Image(systemName: "lock.fill")
+                                .font(.system(size: 9.5))
+                                .foregroundStyle(Vibe.Palette.textMuted(scheme))
+                        }
+                    }
                     Text(desc)
                         .font(Vibe.Fonts.ui(11.5))
                         .foregroundStyle(Vibe.Palette.textMuted(scheme))
@@ -906,6 +962,7 @@ private struct DictationModeRow: View {
                                            : Vibe.Palette.hairline(scheme),
                                   lineWidth: selected ? 1.5 : 1)
             )
+            .opacity(locked ? 0.5 : 1)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -940,17 +997,17 @@ private struct DictationTab: View {
             }
             // 开启「大模型」润色(本地或云端)时,数字规整 + 去口水词由它接管 → 置灰(互斥,不重复做)。
             SettingsRow(title: l10n.t("dict.itn"),
-                        help: (s.refiner || s.cloud.enabled) ? l10n.t("dict.byLLM") : l10n.t("dict.itn.help")) {
+                        help: s.polishOn ? l10n.t("dict.byLLM") : l10n.t("dict.itn.help")) {
                 VibeToggle(on: Binding(get: { s.itn }, set: { s.applyItn($0) }))
             }
-            .disabled(s.refiner || s.cloud.enabled)
-            .opacity((s.refiner || s.cloud.enabled) ? 0.5 : 1)
+            .disabled(s.polishOn)
+            .opacity(s.polishOn ? 0.5 : 1)
             SettingsRow(title: l10n.t("dict.defiller"),
-                        help: (s.refiner || s.cloud.enabled) ? l10n.t("dict.defiller.byLLM") : l10n.t("dict.defiller.help")) {
+                        help: s.polishOn ? l10n.t("dict.defiller.byLLM") : l10n.t("dict.defiller.help")) {
                 VibeToggle(on: Binding(get: { s.defiller }, set: { s.applyDefiller($0) }))
             }
-            .disabled(s.refiner || s.cloud.enabled)
-            .opacity((s.refiner || s.cloud.enabled) ? 0.5 : 1)
+            .disabled(s.polishOn)
+            .opacity(s.polishOn ? 0.5 : 1)
             // Typeless-style cue sound on dictation start/stop (default on) + timbre.
             SettingsRow(title: l10n.t("dict.cue"), help: l10n.t("dict.cue.help")) {
                 VibeToggle(on: Binding(get: { s.cueEnabled }, set: { s.applyCueEnabled($0) }))
