@@ -25,6 +25,27 @@ public protocol ModelManagerBridge: AnyObject {
     func startDownload(_ tier: LatencyTier)
     func cancelDownload(_ tier: LatencyTier)
     @discardableResult func deleteTier(_ tier: LatencyTier) -> Bool
+
+    // ----- AI 润色(本地 Beta)GGUF —— 在线按需下载 -----
+    /// 模型是否已就绪(本地存在)。
+    func refinerAvailable() -> Bool
+    /// 0...1 下载中;nil 表示未在下载。
+    func refinerDownloadProgress() -> Double?
+    /// 上一次下载是否失败(可重试)。
+    func refinerDownloadFailed() -> Bool
+    /// 触发在线下载(缺模型时);已就绪 / 正在下载则 no-op。
+    func startRefinerDownload()
+    /// 删除已下载的模型(释放空间 / 重新下载)。返回删除后是否确已不存在。
+    @discardableResult func deleteRefiner() -> Bool
+}
+
+/// 默认实现:让预览 / 旧 host 在不实现 refiner 下载时仍能编译(全部惰性)。
+public extension ModelManagerBridge {
+    func refinerAvailable() -> Bool { false }
+    func refinerDownloadProgress() -> Double? { nil }
+    func refinerDownloadFailed() -> Bool { false }
+    func startRefinerDownload() {}
+    @discardableResult func deleteRefiner() -> Bool { false }
 }
 
 // MARK: - History window

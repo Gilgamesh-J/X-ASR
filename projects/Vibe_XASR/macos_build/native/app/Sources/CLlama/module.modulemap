@@ -1,0 +1,10 @@
+// system-library shim over the llama.cpp C API (libllama).
+// Mirrors CSherpa: the modulemap points directly at the header via a relative
+// path (no -Xcc -I needed — that doesn't reach a systemLibrary module build).
+// llama.h #include "ggml.h" resolves against its own dir, so llama.h + ggml*.h
+// both live in native/llama/dist/include (staged by build.sh). Linking (-lllama
+// + -L dist/lib) is done in Package.swift's VibeIME linkerSettings.
+module CLlama {
+    header "../../../llama/dist/include/llama.h"
+    export *
+}

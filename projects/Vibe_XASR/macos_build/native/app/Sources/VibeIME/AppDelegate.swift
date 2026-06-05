@@ -26,6 +26,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// so the floating HUD panel (bound to `hudModel`) never shows during a try.
     private let tryHUD = HUDModel()
     private var hudPanel: NSPanel!
+    // AI 润色异步等待 → HUD「润色中」+「立即插入」。一段释放后润色未返回时持有规则版兜底。
+    private var pendingPolishRaw: String?
+    private var pendingPolishRule: String?
+    private var polishTask: Task<Void, Never>?
+    private var slowWork: DispatchWorkItem?
+    private var finalizeFallbackWork: DispatchWorkItem?   // 空点一下的兜底收尾
+    /// 本次润色前,本地规则(同音字/替换)所做改动的描述,注入 {{changes}} 供大模型复核。
+    private var currentRuleChanges = "(无)"
+    /// 是否有就绪的润色后端(云端或本地)。判定走异步润色路径,而非看本地开关(云端开关是 cloudEnabled)。
+    private var refinerActive: Bool { Refiner.shared.backend?.isReady == true }
     private var settingsWindow: NSWindow?
     private var onboardingWindow: NSWindow?
     private var padWindow: NSWindow?
@@ -252,6 +262,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
         }
         return true
+    }
+
+    /// 退出时直接干净结束进程,跳过 C++ atexit 静态析构 —— llama.cpp 的 ggml-metal 在退出
+    /// 析构时有竞争会 abort(后台 Metal 初始化线程未完成)。设置/历史均实时落盘,无需退出清理;
+    /// OS 会回收一切。这样退出不再崩溃、不弹报告(仅 AI 润色开启、加载了 Metal 时才会触发)。
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        _exit(0)
     }
 
     // ============================================================
@@ -517,6 +534,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.contentView = hosting
 
         hudPanel = panel
+        hudModel.onInsertNow = { [weak self] in self?.insertNowFromHUD() }
         positionHUD()
     }
 
@@ -706,6 +724,67 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         replacementRules = store.replacementsEnabled ? Replacements.parse(store.replacementsText) : []
         snippetRules = store.snippetsEnabled ? AppDelegate.parseSnippets(store.snippetsJSON) : []
         PinyinNormalizer.shared.setWords(store.pinyinFuzzyEnabled ? HotwordsStore.normalize(store.hotwordsText) : [])
+        refreshRefiner()
+    }
+
+    /// 配置 AI 润色(Beta)后端:开启 + 模型就绪 → 异步加载 LlamaRefiner;否则 backend=nil(no-op),
+    /// 开启但模型缺失时触发在线下载。每次启动 + 设置变化(经 refreshCorrections)时调用。
+    private func refreshRefiner() {
+        CloudRequestLog.shared.enabled = store.cloudLogEnabled   // 同步「记录请求」开关
+        // 云端优先(开 + Key/URL/模型就绪);否则本地;都不行 → nil(安全 no-op)。
+        if store.cloudEnabled {
+            let cloud = CloudRefiner(baseURL: store.cloudBaseURL, model: store.cloudModel, apiKey: store.cloudApiKey,
+                                     temperature: store.cloudTemperature, maxTokens: store.cloudMaxTokens,
+                                     provider: store.cloudProvider)
+            if cloud.isReady {
+                Refiner.shared.backend = cloud
+                Refiner.shared.timeout = 25   // 云端比本地慢得多(网络+生成);本地 0.5s,云端常 3~8s,4s 会误超时回退
+                Refiner.shared.systemProvider = { [weak self] in self?.buildCloudSystem() ?? "" }
+                return
+            }
+        }
+        #if VIBE_LLAMA
+        if store.refinerEnabled {
+            Refiner.shared.timeout = 4    // 本地 llama 快,4s 足够
+            Refiner.shared.systemProvider = { Refiner.systemPrompt }   // 本地用固定指令
+            if ModelPaths.refinerAvailable() {
+                if !(Refiner.shared.backend is LlamaRefiner) {
+                    let path = ModelPaths.refinerModelPath()
+                    Task.detached(priority: .utility) {
+                        let b = LlamaRefiner(modelPath: path)          // 后台加载,不卡主线程
+                        await MainActor.run { Refiner.shared.backend = b }
+                    }
+                }
+            } else {
+                Refiner.shared.backend = nil
+                ModelDownloader.shared.startRefinerDownload()           // 缺模型 → 在线拉
+            }
+            return
+        }
+        #endif
+        Refiner.shared.backend = nil
+    }
+
+    /// 云端 system:取当前模板(自动/自定义)→ 替换 {{hotwords}}(词典)、{{date}}(今天),保留
+    /// {{transcript}}(由 CloudRefiner 在 refine 时替换为转写)。
+    private func buildCloudSystem() -> String {
+        let tpl: String
+        if store.cloudActiveTemplate == "auto" {
+            let ovr = store.cloudAutoOverride
+            tpl = ovr.isEmpty ? buildAutoPrompt(store.cloudMods) : ovr
+        } else if let c = AppDelegate.cloudTemplate(store.cloudTemplatesJSON, id: store.cloudActiveTemplate) {
+            tpl = c
+        } else {
+            tpl = buildAutoPrompt(store.cloudMods)
+        }
+        let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd"
+        return PromptFill.staticTokens(tpl, hotwords: store.hotwordsText, date: df.string(from: Date()),
+                                       changes: currentRuleChanges)
+    }
+    static func cloudTemplate(_ json: String, id: String) -> String? {
+        guard let data = json.data(using: .utf8),
+              let arr = try? JSONDecoder().decode([PromptTemplate].self, from: data) else { return nil }
+        return arr.first { $0.id == id }?.content
     }
 
     /// Parse the snippets JSON ([{"t":trigger,"x":text}]) into replacement rules.
@@ -732,9 +811,95 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         return s
     }
 
+    /// 与 `corrected(isFinal: true)` 同序,但在 Defiller 之后、ITN 之前插入 AI 润色(Beta,异步)。
+    /// 顺序原因(见 refiner_eval 评估):refiner 会擅自改数字且不稳,故必须排在规则 ITN 之前,
+    /// 让数字最终由可靠的 ChineseITN 负责。`Refiner.polish` 内部未就绪/超时/护栏不过 → 原样返回。
+    private func correctedFinalAsync(_ t: String) async -> String {
+        let raw = t
+        var s = PinyinNormalizer.shared.normalize(t)
+        let afterPinyin = s
+        if !replacementRules.isEmpty { s = Replacements.apply(s, replacementRules) }
+        let afterRepl = s
+        // 记录本地规则(同音字 / 替换)对识别文本的改动,注入 {{changes}} 让大模型复核(本地可能弄错)。
+        currentRuleChanges = AppDelegate.describeRuleChanges(raw: raw, afterPinyin: afterPinyin, afterRepl: afterRepl)
+        // 请求日志的 input 用「原始 ASR」(引擎原始输出 raw,不含任何规则)。
+        CloudRequestLog.shared.pendingOriginal = raw
+        // AI 润色接管「去口水词 + 数字规整」→ 与听写的 Defiller/ITN 互斥,这里都不再跑规则版(UI 已置灰)。
+        s = await Refiner.shared.polish(s)                       // ★ AI 润色
+        if !snippetRules.isEmpty { s = Replacements.expand(s, snippetRules) }
+        return s
+    }
+    /// 描述本地规则对识别文本做的改动,供 {{changes}} 注入提示词,让大模型复核纠错。
+    static func describeRuleChanges(raw: String, afterPinyin: String, afterRepl: String) -> String {
+        var lines: [String] = []
+        if afterPinyin != raw { lines.append("· 同音字纠正:「\(raw)」→「\(afterPinyin)」") }
+        if afterRepl != afterPinyin { lines.append("· 替换规则:「\(afterPinyin)」→「\(afterRepl)」") }
+        return lines.isEmpty ? "(无,本地规则未改动)" : lines.joined(separator: "\n")
+    }
+
+    /// 完成一段 final:记录 + 屏显 + 插入。抽出以便"同步路径"与"refiner 异步路径"共用。
+    /// refiner 关时,行为与改造前的 onFinal 完全等价(零回归)。
+    private func finishFinal(rawText: String, final: String) {
+        recordFinal(final)
+        hudModel.partialText = final
+        if store.insertMethod == "type" {
+            // 逐字模式:refiner 开(云端或本地)→ 一次性回改成润色版(用户已接受"说完整理");
+            // refiner 关 → 维持原行为,只 converge 到 streaming-level,不回改 final-only 修正。
+            if refinerActive {
+                inserter.update(final)
+            } else {
+                inserter.update(corrected(rawText, isFinal: false))
+            }
+            if store.clipboardOverwrite { Paste.setClipboard(final) }
+        } else {
+            Paste.insert(final, restore: !store.clipboardOverwrite)
+        }
+    }
+
+    /// 润色返回(或用户点「立即插入」)→ 收尾插入 + 清状态 + HUD 收。
+    /// 用 pendingPolishRaw 作单次守卫:两条路径(完成 / 立即插入)谁先到谁收,另一条 no-op。
+    private func finalizePolish(final: String) {
+        guard let raw = pendingPolishRaw else { return }
+        pendingPolishRaw = nil; pendingPolishRule = nil
+        polishTask?.cancel(); polishTask = nil
+        finalizeFallbackWork?.cancel(); finalizeFallbackWork = nil
+        cancelPolishSlow()
+        hudModel.polishSlow = false; hudModel.polishHint = nil
+        hudPanel?.ignoresMouseEvents = true
+        finishFinal(rawText: raw, final: final)
+        if store.insertMethod != "type" {
+            hudModel.phase = .done
+            hideHUD(after: 0.8)
+        }
+        setStatusIcon(engineReady ? "🎙" : "⏳")
+    }
+
+    /// HUD「立即插入 ✓」:不再等大模型,用已备好的规则版立即插入。
+    private func insertNowFromHUD() {
+        guard let rule = pendingPolishRule else { return }
+        finalizePolish(final: rule)
+    }
+
+    /// 润色等待超过 1s 仍未返回 → 判定「过慢」:显示「立即插入」(并让 HUD 可点)+ 提示更换服务商。
+    private func armPolishSlow() {
+        cancelPolishSlow()
+        let w = DispatchWorkItem { [weak self] in
+            guard let self, self.pendingPolishRaw != nil else { return }
+            self.hudModel.polishSlow = true
+            self.hudPanel?.ignoresMouseEvents = false
+            self.hudModel.polishHint = "AI 大模型润色过慢，建议更换大模型服务商"
+        }
+        slowWork = w
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: w)
+    }
+    private func cancelPolishSlow() { slowWork?.cancel(); slowWork = nil }
+
     private func beginDictation() {
         guard !onboardingActive, !inTry, !onCallActive else { return }
         guard engineReady, let engine else { return }
+        // 上一段润色还没返回就又开始 → 先把上一段用规则版立即插入,避免丢字 / HUD 错乱。
+        if pendingPolishRaw != nil, let rule = pendingPolishRule { finalizePolish(final: rule) }
+        finalizeFallbackWork?.cancel(); finalizeFallbackWork = nil
         inserter.reset()
 
         engine.onPartial = { [weak self] text in
@@ -752,22 +917,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         engine.onFinal = { [weak self] text in
             DispatchQueue.main.async {
                 guard let self else { return }
-                let final = self.corrected(text)
-                // Insert + record happen HERE, where the text is the real final. (The
-                // old code read a buffer synchronously in endDictation before this
-                // async ran → empty text → no insert, no history. That was the bug.)
-                self.recordFinal(final)
-                self.hudModel.partialText = final
-                if self.store.insertMethod == "type" {
-                    // 逐字 mode types live as you speak; do NOT re-apply the FINAL-only
-                    // corrections (filler removal / number ITN / snippet expansion) on
-                    // screen — that would delete and retype the tail, which feels awful.
-                    // Converge only to the streaming-level text (pinyin/replacements,
-                    // already shown). History + clipboard still get the full correction.
-                    self.inserter.update(self.corrected(text, isFinal: false))
-                    if self.store.clipboardOverwrite { Paste.setClipboard(final) }
-                } else {
-                    Paste.insert(final, restore: !self.store.clipboardOverwrite)
+                // 无就绪润色后端(云端或本地)→ 原同步路径(零回归)。
+                // 注:此前误用本地开关 store.refinerEnabled 判定 → 云端只开 cloudEnabled 时被跳过、从不调用;
+                //     改用 refinerActive(后端就绪即可)。
+                if !self.refinerActive {
+                    self.finishFinal(rawText: text, final: self.corrected(text))
+                    return
+                }
+                // 没识别到内容(空点一下)→ 不润色、不显示,静默收掉(不出现「已插入」「AI 润色中」)。
+                if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    self.finalizeFallbackWork?.cancel(); self.finalizeFallbackWork = nil
+                    self.hudModel.reset()
+                    self.hideHUD(after: 0)
+                    return
+                }
+                // 润色开(云端/本地):先备好规则版(超时回退 / 「立即插入」用),HUD 进「润色中」,
+                // 异步等润色返回再替换插入。Refiner 内部超时/护栏不过会安全回退规则版,绝不卡死或丢字。
+                let rule = self.corrected(text)
+                self.pendingPolishRaw = text
+                self.pendingPolishRule = rule
+                self.hudModel.partialText = self.corrected(text, isFinal: false)
+                if self.store.insertMethod != "type" {     // 仅 paste 模式有 HUD
+                    self.hudModel.phase = .polishing
+                    self.armPolishSlow()
+                }
+                self.polishTask?.cancel()
+                self.polishTask = Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    let final = await self.correctedFinalAsync(text)
+                    if Task.isCancelled { return }
+                    self.finalizePolish(final: final)
                 }
             }
         }
@@ -811,9 +990,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // was the "shows text but never inserts / history empty" bug).
         engine?.endSession()
         if store.cueEnabled { CueSound.shared.play(theme: store.cueTheme, start: false) }
-        hudModel.phase = .done
+        // 润色开(paste):释放后异步等大模型 —— onFinal 会把 HUD 切到 .polishing、润色完成再 .done。
+        // 这里不能立刻 .done/隐藏,否则 HUD 早早消失而文本几秒后才真正插入。
+        if refinerActive && store.insertMethod != "type" {
+            if hudModel.partialText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                // 空点一下、没识别到任何内容 → 不显示任何收尾态(「已插入」「AI 润色中」都不要),
+                // 同步置 idle 避免闪屏,然后直接收掉面板。
+                hudModel.reset()
+                hideHUD(after: 0)
+            } else {
+                // 说了话才进「润色中」(转圈);等润色返回再插入。
+                hudModel.phase = .polishing
+                // 兜底:万一 onFinal 不触发,0.7s 后若仍在 .polishing 且没真正启动润色 → 静默收掉。
+                finalizeFallbackWork?.cancel()
+                let fb = DispatchWorkItem { [weak self] in
+                    guard let self, self.hudModel.phase == .polishing, self.pendingPolishRaw == nil else { return }
+                    self.hideHUD(after: 0)
+                }
+                finalizeFallbackWork = fb
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.7, execute: fb)
+            }
+        } else {
+            hudModel.phase = .done
+            hideHUD(after: 0.8)
+        }
         setStatusIcon(engineReady ? "🎙" : "⏳")
-        hideHUD(after: 0.8)
     }
 
     /// Append a final to history (if enabled) + the Pad (if enabled).
@@ -1264,6 +1465,12 @@ extension AppDelegate: SettingsBridge {
         get { store.defillerEnabled }
         set { store.defillerEnabled = newValue }
     }
+    // AI 润色(本地 Beta):写 store 即 post(changed) → refreshCorrections → refreshRefiner
+    // (开启且模型缺失 → 触发在线下载;就绪 → 后台加载 LlamaRefiner)。
+    var refinerEnabled: Bool {
+        get { store.refinerEnabled }
+        set { store.refinerEnabled = newValue }
+    }
     // Voice snippets (trigger → multi-line expansion)
     var snippetsEnabled: Bool {
         get { store.snippetsEnabled }
@@ -1273,6 +1480,44 @@ extension AppDelegate: SettingsBridge {
         get { store.snippetsJSON }
         set { store.snippetsJSON = newValue }   // persist only; applySnippets() commits
     }
+    // 云端大模型:整包配置在 store/Keychain ↔ UI DTO 之间映射。
+    var cloudConfig: CloudConfigDTO {
+        get {
+            CloudConfigDTO(enabled: store.cloudEnabled, provider: store.cloudProvider,
+                           baseURL: store.cloudBaseURL, model: store.cloudModel,
+                           numbers: store.cloudModNumbers, fillers: store.cloudModFillers,
+                           restate: store.cloudModRestate, hotwords: store.cloudModHotwords,
+                           apiKey: store.cloudApiKey, templatesJSON: store.cloudTemplatesJSON,
+                           activeTemplate: store.cloudActiveTemplate, autoOverride: store.cloudAutoOverride,
+                           customProvidersJSON: store.cloudCustomProvidersJSON,
+                           temperature: store.cloudTemperature, maxTokens: store.cloudMaxTokens,
+                           logEnabled: store.cloudLogEnabled, profilesJSON: store.cloudProfilesJSON)
+        }
+        set {
+            store.cloudProvider = newValue.provider; store.cloudBaseURL = newValue.baseURL
+            store.cloudModel = newValue.model
+            store.cloudModNumbers = newValue.numbers; store.cloudModFillers = newValue.fillers
+            store.cloudModRestate = newValue.restate; store.cloudModHotwords = newValue.hotwords
+            store.cloudApiKey = newValue.apiKey; store.cloudTemplatesJSON = newValue.templatesJSON
+            store.cloudActiveTemplate = newValue.activeTemplate; store.cloudAutoOverride = newValue.autoOverride
+            store.cloudCustomProvidersJSON = newValue.customProvidersJSON
+            store.cloudTemperature = newValue.temperature; store.cloudMaxTokens = newValue.maxTokens
+            store.cloudLogEnabled = newValue.logEnabled
+            store.cloudProfilesJSON = newValue.profilesJSON
+            store.cloudEnabled = newValue.enabled   // 最后置 enabled,触发一次 refreshRefiner
+        }
+    }
+    func testCloud(_ cfg: CloudConfigDTO) async -> CloudTestResult {
+        let r = await CloudRefiner.testConnection(baseURL: cfg.baseURL, model: cfg.model, apiKey: cfg.apiKey)
+        return CloudTestResult(ok: r.ok, ping: r.ping, add: r.add, msg: r.msg)
+    }
+    func cloudRecentRequests() -> [CloudReqLogEntry] {
+        CloudRequestLog.shared.snapshot().map {
+            CloudReqLogEntry(id: $0.id, at: $0.at, provider: $0.provider, baseURL: $0.baseURL, model: $0.model,
+                             status: $0.status, ms: $0.ms, input: $0.input, output: $0.output, prompt: $0.prompt)
+        }
+    }
+    func cloudClearRequests() { CloudRequestLog.shared.clear() }
     func applySnippets() { store.commitSnippets(); refreshCorrections() }
 
     // Microphone input-device picker

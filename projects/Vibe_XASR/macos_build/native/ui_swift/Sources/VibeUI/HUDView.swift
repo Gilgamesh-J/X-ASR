@@ -190,6 +190,32 @@ private struct BreatheModifier: ViewModifier {
     }
 }
 
+// MARK: - Polishing spinner (云端/本地大模型润色中的动态球)
+
+/// 润色等待时的动态指示:accent 球轻微呼吸 + 一圈白色弧线匀速旋转 + ✨,既"在动"又不喧宾夺主。
+private struct PolishingSpinner: View {
+    @State private var spin = false
+    @State private var pulse = false
+    var body: some View {
+        ZStack {
+            Circle().fill(Vibe.accentGradient)
+                .frame(width: 28, height: 28)
+                .shadow(color: Vibe.Palette.accentA.opacity(pulse ? 0.65 : 0.35), radius: pulse ? 14 : 9)
+                .scaleEffect(pulse ? 1.05 : 1.0)
+            Circle().trim(from: 0, to: 0.72)
+                .stroke(Color.white.opacity(0.92), style: StrokeStyle(lineWidth: 2.4, lineCap: .round))
+                .frame(width: 19, height: 19)
+                .rotationEffect(.degrees(spin ? 360 : 0))
+            Text("✨").font(.system(size: 10))
+        }
+        .frame(width: 28, height: 28)
+        .onAppear {
+            withAnimation(.linear(duration: 0.85).repeatForever(autoreverses: false)) { spin = true }
+            withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) { pulse = true }
+        }
+    }
+}
+
 // MARK: - Blinking caret "▌" / pause dots "…"
 
 /// `.cursor` / `.caret`: accent-b "▌" blinking at 1s step-end.
@@ -254,6 +280,12 @@ public struct HUDView: View {
                 if !isExpanded { Spacer(minLength: 8) }
                 rightStatus
             }
+            if model.phase == .polishing, let hint = model.polishHint {
+                Text(hint)
+                    .font(Vibe.Fonts.ui(11))
+                    .foregroundStyle(Vibe.Palette.textMuted(scheme))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if isExpanded, model.phase != .error, !model.partialText.isEmpty {
                 expandedBar
             }
@@ -263,7 +295,8 @@ public struct HUDView: View {
         .frame(minWidth: 280, maxWidth: isExpanded ? 560 : 620, alignment: .leading)
         .glassPanel(cornerRadius: isExpanded ? 22 : Vibe.Radius.pill,
                     glow: model.phase == .cancel ? Vibe.Palette.error : nil,
-                    glowRadius: model.phase == .cancel ? 2 : 0)
+                    glowRadius: model.phase == .cancel ? 2 : 0,
+                    shadow: false)   // 浮窗只要圆角,不要阴影(用户要求)
         // cancel form gets a 2px error ring (box-shadow ... 0 0 0 2px error)
         .overlay(
             Group {
@@ -283,7 +316,11 @@ public struct HUDView: View {
             if model.phase != .error, model.phase.isListening {
                 Waveform(level: model.level, phase: model.phase, bars: barCount)
             }
-            Orb(phase: model.phase, errorIcon: model.errorInfo?.icon)
+            if model.phase == .polishing {
+                PolishingSpinner()
+            } else {
+                Orb(phase: model.phase, errorIcon: model.errorInfo?.icon)
+            }
         }
         .frame(width: 40, height: 40)
     }
@@ -364,6 +401,24 @@ public struct HUDView: View {
             Text(l10n.t("hud.inserted"))
                 .font(Vibe.Fonts.ui(12.5, weight: .semibold))
                 .foregroundStyle(Vibe.Palette.success)
+        case .polishing:
+            if model.polishSlow {
+                // 等久了:给「立即插入 ✓」——用规则版立即插入,不再等大模型。
+                Button { model.onInsertNow?() } label: {
+                    HStack(spacing: 5) {
+                        Text("✓").font(.system(size: 12, weight: .bold))
+                        Text("立即插入").font(Vibe.Fonts.ui(12.5, weight: .semibold))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.vertical, 6).padding(.horizontal, 12)
+                    .background(Capsule().fill(Vibe.Palette.accentA))
+                }
+                .buttonStyle(.plain)
+            } else {
+                Text("AI 润色中")
+                    .font(Vibe.Fonts.ui(12.5, weight: .semibold))
+                    .foregroundStyle(Vibe.Palette.accentB)
+            }
         case .cancel:
             Text(l10n.t("hud.cancelled"))
                 .font(Vibe.Fonts.ui(12.5, weight: .semibold))

@@ -201,6 +201,7 @@ public struct GlassPanel: ViewModifier {
     var cornerRadius: CGFloat
     var extraGlow: Color? = nil
     var extraGlowRadius: CGFloat = 0
+    var shadow: Bool = true
 
     public func body(content: Content) -> some View {
         content
@@ -219,8 +220,18 @@ public struct GlassPanel: ViewModifier {
                     .strokeBorder(Vibe.Palette.innerStroke(scheme), lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-            .shadow(color: Vibe.Shadow.floatColor(scheme),
-                    radius: Vibe.Shadow.floatRadius, x: 0, y: Vibe.Shadow.floatY)
+            // 阴影由圆角形状投射(放在 clipShape 之后的 background),而不是直接打在含 .ultraThinMaterial
+            // 的内容上 —— 否则材质层会让阴影按「矩形包围盒」渲染。shadow:false 时彻底不要阴影(HUD)。
+            .background(
+                Group {
+                    if shadow {
+                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                            .fill(Vibe.Palette.glass(scheme))
+                            .shadow(color: Vibe.Shadow.floatColor(scheme),
+                                    radius: Vibe.Shadow.floatRadius, x: 0, y: Vibe.Shadow.floatY)
+                    }
+                }
+            )
             .modifier(OptionalGlow(color: extraGlow, radius: extraGlowRadius))
     }
 }
@@ -241,8 +252,9 @@ public extension View {
     /// Apply the floating glass treatment used by the HUD and menu panel.
     func glassPanel(cornerRadius: CGFloat,
                     glow: Color? = nil,
-                    glowRadius: CGFloat = 0) -> some View {
+                    glowRadius: CGFloat = 0,
+                    shadow: Bool = true) -> some View {
         modifier(GlassPanel(cornerRadius: cornerRadius,
-                            extraGlow: glow, extraGlowRadius: glowRadius))
+                            extraGlow: glow, extraGlowRadius: glowRadius, shadow: shadow))
     }
 }

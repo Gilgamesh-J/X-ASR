@@ -35,3 +35,6 @@ macos_build/native/sherpa/dist/
 macos_build/native/third_party/onnxruntime/
 macos_build/models/firered/firered_vad.onnx
 macos_build/native/app/Resources/silero_vad.onnx
+# llama.cpp 源码 + 构建产物(库/量化 GGUF)—— 体积大、属构建依赖,不提交;build.sh/convert_to_gguf.sh 保留。
+macos_build/native/llama/llama.cpp/
+macos_build/native/llama/dist/

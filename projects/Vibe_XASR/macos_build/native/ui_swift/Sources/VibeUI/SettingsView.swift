@@ -59,6 +59,14 @@ public protocol SettingsBridge: AnyObject {
     var itnEnabled: Bool { get set }
     /// Filler-word removal (嗯/呃/repeats) on final text. Applied live.
     var defillerEnabled: Bool { get set }
+    /// AI polish (Beta): LLM tidy of final text (fillers + self-corrections). Applied live.
+    var refinerEnabled: Bool { get set }
+    /// 云端大模型配置(整包传递);测试连接(异步,实测往返延迟)。
+    var cloudConfig: CloudConfigDTO { get set }
+    func testCloud(_ cfg: CloudConfigDTO) async -> CloudTestResult
+    /// 最近若干条云端润色请求(排查用,最新在前);清空。
+    func cloudRecentRequests() -> [CloudReqLogEntry]
+    func cloudClearRequests()
 
     // ----- Replacements (post-recognition corrections) -----
     var replacementsEnabled: Bool { get set }
@@ -169,6 +177,11 @@ public extension SettingsBridge {
     var pinyinFuzzyEnabled: Bool { get { true } set {} }
     var itnEnabled: Bool { get { true } set {} }
     var defillerEnabled: Bool { get { true } set {} }
+    var refinerEnabled: Bool { get { false } set {} }
+    var cloudConfig: CloudConfigDTO { get { .init() } set {} }
+    func testCloud(_ cfg: CloudConfigDTO) async -> CloudTestResult { .init(msg: "预览不可用") }
+    func cloudRecentRequests() -> [CloudReqLogEntry] { [] }
+    func cloudClearRequests() {}
     var replacementsEnabled: Bool { get { false } set {} }
     var replacementsText: String { get { "" } set {} }
     func applyReplacements() {}
@@ -225,6 +238,15 @@ public final class ModelManagerRelay: ObservableObject {
     func startDownload(_ tier: LatencyTier) { manager?.startDownload(tier) }
     func cancelDownload(_ tier: LatencyTier) { manager?.cancelDownload(tier) }
     @discardableResult func deleteTier(_ tier: LatencyTier) -> Bool { manager?.deleteTier(tier) ?? false }
+
+    // AI 润色(本地 Beta)GGUF 下载 —— 透传给 LLMTab。
+    func refinerAvailable() -> Bool { manager?.refinerAvailable() ?? false }
+    func refinerDownloadProgress() -> Double? { manager?.refinerDownloadProgress() ?? nil }
+    func refinerDownloadFailed() -> Bool { manager?.refinerDownloadFailed() ?? false }
+    func startRefinerDownload() { manager?.startRefinerDownload() }
+    @discardableResult func deleteRefiner() -> Bool { manager?.deleteRefiner() ?? false }
+    /// 当前下载线路(refiner 与 ASR 共用同一 source);用于展示「下载来源」。
+    var refinerSource: ModelDownloadSource { (manager as? ModelDownloadSourcing)?.source ?? .modelScope }
 }
 
 private extension ObservableObject {
@@ -265,6 +287,8 @@ public final class SettingsState: ObservableObject {
     @Published public var pinyinFuzzy = true
     @Published public var itn = true
     @Published public var defiller = true
+    @Published public var refiner = false
+    @Published public var cloud = CloudConfigDTO()
     @Published public var replacementsEnabled = false
     @Published public var replacementsText = ""
     @Published public var snippetsEnabled = true
@@ -302,6 +326,8 @@ public final class SettingsState: ObservableObject {
         self.pinyinFuzzy = bridge.pinyinFuzzyEnabled
         self.itn = bridge.itnEnabled
         self.defiller = bridge.defillerEnabled
+        self.refiner = bridge.refinerEnabled
+        self.cloud = bridge.cloudConfig
         self.replacementsEnabled = bridge.replacementsEnabled
         self.replacementsText = bridge.replacementsText
         self.snippetsEnabled = bridge.snippetsEnabled
@@ -387,6 +413,20 @@ public final class SettingsState: ObservableObject {
         defiller = on
         bridge?.defillerEnabled = on
     }
+    public func applyRefiner(_ on: Bool) {
+        refiner = on
+        bridge?.refinerEnabled = on
+    }
+    /// 写回云端配置(整包)。UI 改任意字段后调它持久化 + 触发后端刷新。
+    public func applyCloud(_ c: CloudConfigDTO) {
+        cloud = c
+        bridge?.cloudConfig = c
+    }
+    public func testCloud() async -> CloudTestResult {
+        await bridge?.testCloud(cloud) ?? .init(msg: "未连接")
+    }
+    public func cloudRecentRequests() -> [CloudReqLogEntry] { bridge?.cloudRecentRequests() ?? [] }
+    public func cloudClearRequests() { bridge?.cloudClearRequests() }
     public func inputDevices() -> [(uid: String, name: String)] { bridge?.inputDevices() ?? [] }
     public func applyInputDevice(_ uid: String) {
         inputDeviceUID = uid
@@ -898,12 +938,19 @@ private struct DictationTab: View {
             SettingsRow(title: l10n.t("dict.history"), help: l10n.t("dict.history.help")) {
                 VibeToggle(on: Binding(get: { s.history }, set: { s.applyHistory($0) }))
             }
-            SettingsRow(title: l10n.t("dict.itn"), help: l10n.t("dict.itn.help")) {
+            // 开启「大模型」润色(本地或云端)时,数字规整 + 去口水词由它接管 → 置灰(互斥,不重复做)。
+            SettingsRow(title: l10n.t("dict.itn"),
+                        help: (s.refiner || s.cloud.enabled) ? l10n.t("dict.byLLM") : l10n.t("dict.itn.help")) {
                 VibeToggle(on: Binding(get: { s.itn }, set: { s.applyItn($0) }))
             }
-            SettingsRow(title: l10n.t("dict.defiller"), help: l10n.t("dict.defiller.help")) {
+            .disabled(s.refiner || s.cloud.enabled)
+            .opacity((s.refiner || s.cloud.enabled) ? 0.5 : 1)
+            SettingsRow(title: l10n.t("dict.defiller"),
+                        help: (s.refiner || s.cloud.enabled) ? l10n.t("dict.defiller.byLLM") : l10n.t("dict.defiller.help")) {
                 VibeToggle(on: Binding(get: { s.defiller }, set: { s.applyDefiller($0) }))
             }
+            .disabled(s.refiner || s.cloud.enabled)
+            .opacity((s.refiner || s.cloud.enabled) ? 0.5 : 1)
             // Typeless-style cue sound on dictation start/stop (default on) + timbre.
             SettingsRow(title: l10n.t("dict.cue"), help: l10n.t("dict.cue.help")) {
                 VibeToggle(on: Binding(get: { s.cueEnabled }, set: { s.applyCueEnabled($0) }))
@@ -935,6 +982,8 @@ private struct DictationTab: View {
         }
     }
 }
+
+// ---- AI 功能 tab —— 完整实现在 CloudLLMTab.swift(本地润色 + 云端大模型)。
 
 // ---- Hotwords tab (contextual biasing) ------------------------------------
 
@@ -2161,6 +2210,10 @@ private struct AboutTab: View {
                 FeedbackLinks(l10n: l10n)
                     .padding(.top, 9)
 
+                // 引导式提交 issue:填「功能 / 问题 / 预期」→ 打开预填好的 GitHub 新建 issue 页。
+                FeedbackForm()
+                    .padding(.top, 14)
+
                 // (About) BIG, prominent X-ASR credit — the core ASR model this
                 // whole app is built around.
                 XASRCredit(l10n: l10n)
@@ -2185,6 +2238,85 @@ private struct AboutTab: View {
             .padding(.vertical, 36).padding(.horizontal, 24)
             .background(Vibe.Palette.surface(scheme))
         }
+    }
+}
+
+/// 引导式提交 issue 的表单:填「使用的功能 / 遇到的问题 / 预期结果」三项,点按钮直接打开
+/// 一个已预填标题+正文的 GitHub「新建 issue」页,用户确认即可提交。
+private struct FeedbackForm: View {
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.openURL) private var openURL
+    @State private var feature = ""
+    @State private var problem = ""
+    @State private var expected = ""
+
+    private var canSubmit: Bool {
+        !(feature + problem + expected).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            Text("反馈问题 · 一键提交到 GitHub")
+                .font(Vibe.Fonts.ui(13.5, weight: .semibold)).foregroundStyle(Vibe.Palette.text(scheme))
+            Text("填好下面三项，点按钮会打开已预填内容的 GitHub「新建 issue」页，确认后提交即可。")
+                .font(Vibe.Fonts.ui(11.5)).foregroundStyle(Vibe.Palette.textMuted(scheme))
+                .fixedSize(horizontal: false, vertical: true)
+            field("使用的功能", "如：云端润色 / 听写插入 / 热词修正", $feature, lines: 1...2)
+            field("遇到的问题", "具体现象、什么时候出现、能否复现", $problem, lines: 2...5)
+            field("预期结果", "你期望它怎样", $expected, lines: 1...4)
+            HStack {
+                Spacer()
+                Button { submit() } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "paperplane.fill").font(.system(size: 11))
+                        Text("在 GitHub 提交（已预填）")
+                    }
+                    .font(Vibe.Fonts.ui(12.5, weight: .semibold)).foregroundStyle(.white)
+                    .padding(.horizontal, 16).frame(height: 38)
+                    .background(RoundedRectangle(cornerRadius: 10)
+                        .fill(canSubmit ? Vibe.Palette.accentA : Vibe.Palette.accentA.opacity(0.4)))
+                }
+                .buttonStyle(.plain).disabled(!canSubmit)
+            }
+        }
+        .multilineTextAlignment(.leading)
+        .padding(18)
+        .background(RoundedRectangle(cornerRadius: 16).fill(Vibe.Palette.surface2(scheme))
+            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Vibe.Palette.hairline(scheme))))
+    }
+    private func field(_ label: String, _ placeholder: String, _ text: Binding<String>, lines: ClosedRange<Int>) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(label).font(Vibe.Fonts.ui(11.5, weight: .medium)).foregroundStyle(Vibe.Palette.textMuted(scheme))
+            TextField(placeholder, text: text, axis: .vertical)
+                .textFieldStyle(.plain).font(Vibe.Fonts.ui(13)).lineLimit(lines)
+                .padding(.horizontal, 11).padding(.vertical, 9)
+                .background(RoundedRectangle(cornerRadius: 10).fill(Color.black.opacity(0.22))
+                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Vibe.Palette.hairline(scheme))))
+        }
+    }
+    private func submit() {
+        let ver = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        let os = ProcessInfo.processInfo.operatingSystemVersionString
+        let f = feature.isEmpty ? "(未填)" : feature
+        let title = "[反馈] 使用「\(f)」遇到的问题"
+        let body = """
+        ## 使用的功能 / Feature
+        \(feature)
+
+        ## 遇到的问题 / Problem
+        \(problem)
+
+        ## 预期结果 / Expected
+        \(expected)
+
+        ---
+        - Vibe XASR \(ver)
+        - \(os)
+        """
+        var comp = URLComponents(string: "https://github.com/Gilgamesh-J/X-ASR/issues/new")!
+        comp.queryItems = [URLQueryItem(name: "title", value: title), URLQueryItem(name: "body", value: body)]
+        // URLComponents 不编码 '+'(GitHub 会当空格)→ 手动补上。
+        comp.percentEncodedQuery = comp.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
+        if let url = comp.url { openURL(url) }
     }
 }
 
@@ -2351,6 +2483,7 @@ public struct SettingsView: View {
     private var tabs: [(id: String, label: String, icon: String)] {
         [("general", l10n.t("tab.general"), "⚙"),
          ("dictation", l10n.t("tab.dictation"), "🎙"),
+         ("llm", l10n.t("tab.llm"), "✨"),
          ("model", l10n.t("tab.model"), "🧠"),
          ("hotwords", l10n.t("tab.hotwords"), "📖"),
          ("snippet", l10n.t("tab.snippet"), "⚡"),
@@ -2422,6 +2555,8 @@ public struct SettingsView: View {
                                                    onSetHotkey: { tab = "dictation" })
                     case "dictation":   DictationTab(s: s, l10n: l10n,
                                                      onOpenPermissions: { tab = "permissions" })
+                    case "llm":         LLMTab(s: s, l10n: l10n,
+                                                relay: ModelManagerRelay(manager))
                     case "model":       ModelTab(s: s, l10n: l10n,
                                                  relay: ModelManagerRelay(manager))
                     case "hotwords":    HotwordsTab(s: s, l10n: l10n)

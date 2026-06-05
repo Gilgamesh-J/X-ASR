@@ -65,6 +65,23 @@ final class SettingsStore: L10nPersistence {
         static let pinyinFuzzyEnabled = "pinyinFuzzyEnabled"
         static let itnEnabled = "itnEnabled"
         static let defillerEnabled = "defillerEnabled"
+        static let refinerEnabled = "refinerEnabled"
+        // 云端大模型
+        static let cloudEnabled = "cloudEnabled"
+        static let cloudProvider = "cloudProvider"
+        static let cloudBaseURL = "cloudBaseURL"
+        static let cloudModel = "cloudModel"
+        static let cloudModNumbers = "cloudModNumbers"
+        static let cloudModFillers = "cloudModFillers"
+        static let cloudModRestate = "cloudModRestate"
+        static let cloudModHotwords = "cloudModHotwords"
+        static let cloudTemplatesJSON = "cloudTemplatesJSON"
+        static let cloudActiveTemplate = "cloudActiveTemplate"
+        static let cloudAutoOverride = "cloudAutoOverride"
+        static let cloudCustomProvidersJSON = "cloudCustomProvidersJSON"
+        static let cloudTemperature = "cloudTemperature"
+        static let cloudMaxTokens = "cloudMaxTokens"
+        static let cloudLogEnabled = "cloudLogEnabled"
         static let inputDeviceUID = "inputDeviceUID"
         static let snippetsEnabled = "snippetsEnabled"
         static let snippetsJSON = "snippetsJSON"
@@ -103,6 +120,18 @@ final class SettingsStore: L10nPersistence {
             Key.pinyinFuzzyEnabled: true,     // homophone (pinyin) correction ON by default
             Key.itnEnabled: true,             // number normalization (ITN) ON by default
             Key.defillerEnabled: true,        // filler-word removal (嗯/呃/repeats) ON by default
+            Key.refinerEnabled: false,        // AI 润色(Beta) OFF by default — zero regression until opted in
+            Key.cloudEnabled: false,          // 云端大模型 OFF by default(需用户配 Key)
+            Key.cloudProvider: "openai",
+            Key.cloudBaseURL: "https://api.openai.com/v1",
+            Key.cloudModel: "gpt-4o-mini",
+            Key.cloudModNumbers: true,
+            Key.cloudModFillers: true,
+            Key.cloudModRestate: true,
+            Key.cloudModHotwords: true,
+            Key.cloudTemplatesJSON: "",
+            Key.cloudActiveTemplate: "auto",
+            Key.cloudAutoOverride: "",
             Key.inputDeviceUID: "",           // "" = system default microphone
             Key.snippetsEnabled: true,        // voice snippets ON by default (empty list = no-op)
             Key.snippetsJSON: "[]",
@@ -287,6 +316,85 @@ final class SettingsStore: L10nPersistence {
         get { defaults.bool(forKey: Key.defillerEnabled) }
         set { defaults.set(newValue, forKey: Key.defillerEnabled); post(SettingsStore.changed) }
     }
+
+    /// AI 润色(Beta):大模型整理 FINAL 文本(去口癖 + 改口纠正)。默认 OFF。
+    /// 纯后处理,无引擎重建。模型在线按需下载(见 ModelDownloader);未下载 / 未就绪 /
+    /// 超时 / 护栏不过时,`Refiner.polish` 安全回退原文,故开关本身永不致丢字或卡顿。
+    var refinerEnabled: Bool {
+        get { defaults.bool(forKey: Key.refinerEnabled) }
+        set { defaults.set(newValue, forKey: Key.refinerEnabled); post(SettingsStore.changed) }
+    }
+
+    // MARK: 云端大模型(Cloud LLM)
+
+    var cloudEnabled: Bool {
+        get { defaults.bool(forKey: Key.cloudEnabled) }
+        set { defaults.set(newValue, forKey: Key.cloudEnabled); post(SettingsStore.changed) }
+    }
+    var cloudProvider: String {
+        get { defaults.string(forKey: Key.cloudProvider) ?? "openai" }
+        set { defaults.set(newValue, forKey: Key.cloudProvider); post(SettingsStore.changed) }
+    }
+    var cloudBaseURL: String {
+        get { defaults.string(forKey: Key.cloudBaseURL) ?? "" }
+        set { defaults.set(newValue, forKey: Key.cloudBaseURL); post(SettingsStore.changed) }
+    }
+    var cloudModel: String {
+        get { defaults.string(forKey: Key.cloudModel) ?? "" }
+        set { defaults.set(newValue, forKey: Key.cloudModel); post(SettingsStore.changed) }
+    }
+    var cloudModNumbers: Bool { get { defaults.bool(forKey: Key.cloudModNumbers) } set { defaults.set(newValue, forKey: Key.cloudModNumbers); post(SettingsStore.changed) } }
+    var cloudModFillers: Bool { get { defaults.bool(forKey: Key.cloudModFillers) } set { defaults.set(newValue, forKey: Key.cloudModFillers); post(SettingsStore.changed) } }
+    var cloudModRestate: Bool { get { defaults.bool(forKey: Key.cloudModRestate) } set { defaults.set(newValue, forKey: Key.cloudModRestate); post(SettingsStore.changed) } }
+    var cloudModHotwords: Bool { get { defaults.bool(forKey: Key.cloudModHotwords) } set { defaults.set(newValue, forKey: Key.cloudModHotwords); post(SettingsStore.changed) } }
+    /// 4 个处理项聚合,给 buildAutoPrompt。
+    var cloudMods: RefineMods {
+        RefineMods(numbers: cloudModNumbers, fillers: cloudModFillers, restate: cloudModRestate, hotwords: cloudModHotwords)
+    }
+    var cloudTemplatesJSON: String {
+        get { defaults.string(forKey: Key.cloudTemplatesJSON) ?? "" }
+        set { defaults.set(newValue, forKey: Key.cloudTemplatesJSON) }
+    }
+    var cloudActiveTemplate: String {
+        get { defaults.string(forKey: Key.cloudActiveTemplate) ?? "auto" }
+        set { defaults.set(newValue, forKey: Key.cloudActiveTemplate); post(SettingsStore.changed) }
+    }
+    var cloudAutoOverride: String {
+        get { defaults.string(forKey: Key.cloudAutoOverride) ?? "" }
+        set { defaults.set(newValue, forKey: Key.cloudAutoOverride); post(SettingsStore.changed) }
+    }
+    /// 自定义服务商列表(JSON: [{id,label,baseURL}])。仅持久,不实时 post。
+    var cloudCustomProvidersJSON: String {
+        get { defaults.string(forKey: Key.cloudCustomProvidersJSON) ?? "" }
+        set { defaults.set(newValue, forKey: Key.cloudCustomProvidersJSON) }
+    }
+    /// 采样温度(0~1)。润色默认 0.3(稳)。未设过 → 0.3。
+    var cloudTemperature: Double {
+        get { defaults.object(forKey: Key.cloudTemperature) == nil ? 0.3 : defaults.double(forKey: Key.cloudTemperature) }
+        set { defaults.set(newValue, forKey: Key.cloudTemperature); post(SettingsStore.changed) }
+    }
+    /// 最大输出 token。默认 2048。
+    var cloudMaxTokens: Int {
+        get { let v = defaults.integer(forKey: Key.cloudMaxTokens); return v > 0 ? v : 2048 }
+        set { defaults.set(newValue, forKey: Key.cloudMaxTokens); post(SettingsStore.changed) }
+    }
+    /// 是否记录「最近请求」(排查用)。默认开;未设过 → true。
+    var cloudLogEnabled: Bool {
+        get { defaults.object(forKey: Key.cloudLogEnabled) == nil ? true : defaults.bool(forKey: Key.cloudLogEnabled) }
+        set { defaults.set(newValue, forKey: Key.cloudLogEnabled); post(SettingsStore.changed) }
+    }
+    /// API Key — 加密存 Keychain,不进 UserDefaults。
+    var cloudApiKey: String {
+        get { KeychainStore.get("cloudApiKey") ?? "" }
+        set { KeychainStore.set(newValue, for: "cloudApiKey"); post(SettingsStore.changed) }
+    }
+    /// 已保存的命名配置([CloudProfile] JSON)。含各配置的 Key → 同样存 Keychain。
+    var cloudProfilesJSON: String {
+        get { KeychainStore.get("cloudProfiles") ?? "" }
+        set { KeychainStore.set(newValue, for: "cloudProfiles") }
+    }
+    /// 提交云端编辑(模板文本等只持久、不实时 post 的字段),触发引擎刷新。
+    func commitCloud() { post(SettingsStore.changed) }
 
     // MARK: Voice snippets (trigger phrase → multi-line expansion)
 

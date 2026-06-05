@@ -42,6 +42,10 @@ final class ModelDownloader: NSObject, ObservableObject, ModelManagerBridge, Mod
     @Published private(set) var active: Set<Int> = []           // tiers downloading
     @Published private(set) var failed: Set<Int> = []           // tiers that errored
 
+    /// AI 润色(Beta)GGUF 下载状态。nil = 未在下载;0...1 = 进度(粗粒度,单文件)。
+    @Published private(set) var refinerProgress: Double? = nil
+    @Published private(set) var refinerFailed = false
+
     /// Chosen download source (ModelScope default). Persisted to UserDefaults on
     /// change so the Settings picker survives relaunch. Satisfies `ModelDownloadSourcing`.
     @Published var source: ModelDownloadSource {
@@ -67,6 +71,8 @@ final class ModelDownloader: NSObject, ObservableObject, ModelManagerBridge, Mod
         }
     }
     private var jobs: [Int: Job] = [:]
+    /// AI 润色 GGUF 的下载任务(单文件,走同一个 delegate session 以获得逐字节进度)。
+    private var refinerTask: URLSessionDownloadTask?
 
     override init() {
         // Restore the persisted source; default to ModelScope when unset/invalid.
@@ -117,6 +123,11 @@ final class ModelDownloader: NSObject, ObservableObject, ModelManagerBridge, Mod
     }
     func didTierFail(_ tier: LatencyTier) -> Bool { failed.contains(tier.rawValue) }
 
+    // AI 润色(本地 Beta)GGUF —— ModelManagerBridge refiner 接口。
+    func refinerAvailable() -> Bool { _ = installsVersion; return ModelPaths.refinerAvailable() }
+    func refinerDownloadProgress() -> Double? { refinerProgress }
+    func refinerDownloadFailed() -> Bool { refinerFailed }
+
     /// Begin (or resume) downloading a tier. No-op if bundled / already present.
     func startDownload(_ tier: LatencyTier) {
         guard !tier.isBundled, !ModelPaths.tierAvailable(tier),
@@ -137,6 +148,69 @@ final class ModelDownloader: NSObject, ObservableObject, ModelManagerBridge, Mod
         jobs[tier.rawValue] = job
         log("start tier=\(tier.token)ms via \(source.label) — \(needed.count) file(s)")
         fetchNext(job)
+    }
+
+    // MARK: AI 润色(Beta)GGUF — 单文件,用 async download(不走 tier 状态机/delegate)
+
+    private static let refinerFile = "refiner-q4_k_m.gguf"
+    /// AI 润色 GGUF —— 固定从作者的部署仓库下载(上游 = MuyuanJ/Qwen3-refiner,作者把量化
+    /// GGUF 镜像到此专用仓库)。UI 只展示上游 MuyuanJ、不暴露此下载页。与 ASR 的 MS/HF 线路无关。
+    /// 下载源:huggingface.co/taocode/Qwen3-refiner-deploy 根目录的 refiner-q4_k_m.gguf(resolve 直链)。
+    private func refinerURL() -> URL {
+        URL(string: "https://huggingface.co/taocode/Qwen3-refiner-deploy/resolve/main/\(Self.refinerFile)")!
+    }
+    /// 开始下载 refiner GGUF(若未就绪且未在下载)。走 delegate session(taskDescription
+    /// "refiner")以获得逐字节进度。完成后 bump installsVersion + 广播,让 AppDelegate
+    /// 重新初始化后端。任何失败 → refinerFailed,Refiner 保持安全回退。
+    func startRefinerDownload() {
+        guard !ModelPaths.refinerAvailable(), refinerProgress == nil else { return }
+        refinerFailed = false
+        refinerProgress = 0
+        let task = session.downloadTask(with: refinerURL())
+        task.taskDescription = "refiner"
+        refinerTask = task
+        log("start refiner GGUF via \(source.label)")
+        task.resume()
+    }
+
+    /// 取消正在进行的 refiner 下载。
+    func cancelRefinerDownload() {
+        refinerTask?.cancel()
+        refinerTask = nil
+        refinerProgress = nil
+    }
+
+    /// 删除已下载的 refiner GGUF(释放 ~378 MB / 触发重新下载)。返回删除后是否确已不存在。
+    @discardableResult
+    func deleteRefiner() -> Bool {
+        cancelRefinerDownload()
+        try? FileManager.default.removeItem(at: ModelPaths.refinerDir())
+        try? FileManager.default.removeItem(at: URL(fileURLWithPath: ModelPaths.refinerModelPath()))
+        refinerProgress = nil
+        refinerFailed = false
+        installsVersion += 1
+        NotificationCenter.default.post(name: SettingsStore.changed, object: nil)
+        log("deleted refiner GGUF (available=\(ModelPaths.refinerAvailable()))")
+        return !ModelPaths.refinerAvailable()
+    }
+
+    /// 下载完成后把临时文件落到 refiner 目录,广播让后端加载。主线程调用。
+    private func finishRefiner(staged: URL) {
+        do {
+            try FileManager.default.createDirectory(at: ModelPaths.refinerDir(), withIntermediateDirectories: true)
+            let dest = URL(fileURLWithPath: ModelPaths.refinerModelPath())
+            try? FileManager.default.removeItem(at: dest)
+            try FileManager.default.moveItem(at: staged, to: dest)
+            refinerProgress = nil          // 用 refinerAvailable() 作「就绪」真相,避免停留在 100%
+            refinerTask = nil
+            installsVersion += 1
+            NotificationCenter.default.post(name: SettingsStore.changed, object: nil)
+            log("refiner GGUF ready")
+        } catch {
+            try? FileManager.default.removeItem(at: staged)
+            refinerProgress = nil; refinerFailed = true; refinerTask = nil
+            log("refiner install FAILED: \(error.localizedDescription)")
+        }
     }
 
     /// Cancel an in-flight tier download.
@@ -231,6 +305,13 @@ extension ModelDownloader: URLSessionDownloadDelegate {
                                 didWriteData bytesWritten: Int64,
                                 totalBytesWritten: Int64,
                                 totalBytesExpectedToWrite: Int64) {
+        // AI 润色 GGUF:单文件,直接按字节比例更新 refinerProgress。
+        if downloadTask.taskDescription == "refiner" {
+            guard totalBytesExpectedToWrite > 0 else { return }
+            let frac = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
+            Task { @MainActor [weak self] in self?.refinerProgress = frac }
+            return
+        }
         guard let desc = downloadTask.taskDescription,
               let tierStr = desc.split(separator: "|").first,
               let tier = Int(tierStr),
@@ -251,6 +332,19 @@ extension ModelDownloader: URLSessionDownloadDelegate {
                                 downloadTask: URLSessionDownloadTask,
                                 didFinishDownloadingTo location: URL) {
         guard let desc = downloadTask.taskDescription else { return }
+        // AI 润色 GGUF:落盘到 refiner 目录。
+        if desc == "refiner" {
+            let http = downloadTask.response as? HTTPURLResponse
+            let ok = (http?.statusCode ?? 200) < 400
+            let staged = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            if ok { try? FileManager.default.moveItem(at: location, to: staged) }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if ok { self.finishRefiner(staged: staged) }
+                else { try? FileManager.default.removeItem(at: staged); self.refinerProgress = nil; self.refinerFailed = true; self.refinerTask = nil }
+            }
+            return
+        }
         let parts = desc.split(separator: "|", maxSplits: 1).map(String.init)
         guard parts.count == 2, let tier = Int(parts[0]) else { return }
         let file = parts[1]
@@ -274,11 +368,17 @@ extension ModelDownloader: URLSessionDownloadDelegate {
 
     nonisolated func urlSession(_ session: URLSession, task: URLSessionTask,
                                 didCompleteWithError error: Error?) {
-        guard let error, let desc = task.taskDescription,
-              let tierStr = desc.split(separator: "|").first,
-              let tier = Int(tierStr) else { return }
+        guard let error, let desc = task.taskDescription else { return }
         // Ignore explicit cancels (we already cleared state).
         if (error as NSError).code == NSURLErrorCancelled { return }
+        // AI 润色 GGUF 失败。
+        if desc == "refiner" {
+            Task { @MainActor [weak self] in
+                self?.refinerProgress = nil; self?.refinerFailed = true; self?.refinerTask = nil
+            }
+            return
+        }
+        guard let tierStr = desc.split(separator: "|").first, let tier = Int(tierStr) else { return }
         Task { @MainActor [weak self] in
             self?.fail(tier: tier)
         }

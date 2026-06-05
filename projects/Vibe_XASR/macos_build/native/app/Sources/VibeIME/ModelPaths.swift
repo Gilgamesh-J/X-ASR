@@ -43,6 +43,27 @@ enum ModelPaths {
             .appendingPathComponent("chunk-\(tier)ms", isDirectory: true)
     }
 
+    // MARK: AI 润色(Beta)GGUF — 在线下载,不打进 bundle
+
+    /// Application Support/VibeXASR/models/refiner — AI 润色 GGUF 的缓存目录。
+    static func refinerDir() -> URL {
+        appSupportDir()
+            .appendingPathComponent("models", isDirectory: true)
+            .appendingPathComponent("refiner", isDirectory: true)
+    }
+    /// 量化 GGUF 的完整路径。优先用打进 bundle 的(内测内置);否则用 App Support 下载的(正式版)。
+    static func refinerModelPath() -> String {
+        if let res = resourcePath {
+            let bundled = (res as NSString).appendingPathComponent("refiner/refiner-q4_k_m.gguf")
+            if FileManager.default.fileExists(atPath: bundled) { return bundled }
+        }
+        return refinerDir().appendingPathComponent("refiner-q4_k_m.gguf").path
+    }
+    /// GGUF 是否已下载就绪。
+    static func refinerAvailable() -> Bool {
+        FileManager.default.fileExists(atPath: refinerModelPath())
+    }
+
     /// Where the user's hotword list is written for the engine to load (one
     /// phrase per line). Lives in Application Support so it survives app updates.
     static func hotwordsFilePath() -> URL {

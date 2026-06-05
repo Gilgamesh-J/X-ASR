@@ -33,7 +33,12 @@ DIST="$B/native/dist"
 APP="$DIST/Vibe XASR.app"
 
 SHERPA_LIB="$B/native/sherpa/dist/sherpa-onnx-v1.13.2-osx-universal2-shared/lib"
-ARCHS="--arch arm64 --arch x86_64"               # universal2 (Apple Silicon + Intel)
+# AI 润色(Beta)的 libllama 目前只编了 arm64,故 VIBE_LLAMA 打包时降为 arm64-only。
+if [ -n "${VIBE_LLAMA:-}" ]; then
+  ARCHS="--arch arm64"                           # arm64 only (libllama is arm64)
+else
+  ARCHS="--arch arm64 --arch x86_64"             # universal2 (Apple Silicon + Intel)
+fi
 # 960ms ASR model lives OUTSIDE the repo (xasr_workspace/vad_asr_demo). Override
 # ASR_SRC to point elsewhere, or fetch from HuggingFace GilgameshWind/X-ASR-zh-en.
 ASR_SRC="${ASR_SRC:-$B/../../vad_asr_demo/models/asr}"   # encoder/decoder/joiner-960ms + tokens
@@ -67,6 +72,15 @@ cp "$SHERPA_LIB/libsherpa-onnx-cxx-api.dylib"   "$APP/Contents/Frameworks/"
 cp "$SHERPA_LIB/libonnxruntime.1.24.4.dylib"    "$APP/Contents/Frameworks/"
 # Provide the unversioned alias too (some loaders look it up by soname).
 ln -sf "libonnxruntime.1.24.4.dylib" "$APP/Contents/Frameworks/libonnxruntime.dylib"
+
+# AI 润色(Beta):libllama + ggml(versioned .0 — exec/libllama 依赖 @rpath/lib*.0.dylib;
+# install name 全是 @rpath,配合 exec 的 @executable_path/../Frameworks 即可解析)。
+if [ -n "${VIBE_LLAMA:-}" ]; then
+  LLAMA_LIB="$B/native/llama/dist/lib"
+  for d in libllama.0 libggml.0 libggml-base.0 libggml-cpu.0 libggml-blas.0 libggml-metal.0; do
+    cp "$LLAMA_LIB/$d.dylib" "$APP/Contents/Frameworks/" && echo "   + $d.dylib"
+  done
+fi
 
 # Sparkle auto-update framework (universal). The app is NOT sandboxed, so Sparkle's
 # XPC services are unnecessary — drop them (smaller bundle, simpler signing).
@@ -108,6 +122,13 @@ SILERO_SRC="$APP_SRC/Resources/silero_vad.onnx"
 # 汉字拼音表(同音字纠正用)。缺失则该功能自动跳过。
 [ -f "$APP_SRC/Resources/pinyin.txt" ] && cp "$APP_SRC/Resources/pinyin.txt" "$APP/Contents/Resources/pinyin.txt" || \
   echo "   WARN: pinyin.txt not found (homophone correction will be unavailable)"
+# AI 润色 GGUF:不再打进安装包 —— 首次启用时由 ModelDownloader 在线下载(进度条 + 来源
+# 见「AI 功能」页),装包更小。如需回到内置内测包,设 VIBE_BUNDLE_REFINER=1。
+if [ -n "${VIBE_LLAMA:-}" ] && [ -n "${VIBE_BUNDLE_REFINER:-}" ] && [ -f "$B/native/llama/dist/refiner-q4_k_m.gguf" ]; then
+  mkdir -p "$APP/Contents/Resources/refiner"
+  cp "$B/native/llama/dist/refiner-q4_k_m.gguf" "$APP/Contents/Resources/refiner/"
+  echo "   + refiner-q4_k_m.gguf (内置, ~378M, VIBE_BUNDLE_REFINER)"
+fi
 if [ -d "$UI_SRC" ]; then
   cp -R "$UI_SRC" "$APP/Contents/Resources/ui"
 fi

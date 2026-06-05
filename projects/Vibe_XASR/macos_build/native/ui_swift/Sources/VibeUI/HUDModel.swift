@@ -21,6 +21,7 @@ public final class HUDModel: ObservableObject {
         case speaking    // audio + streaming partial text + caret "▌"
         case pause       // inter-sentence silence → flat waveform + "…"
         case finalizing  // released; bouncing in, orb ✓
+        case polishing   // 等云端/本地大模型润色返回 → 动态"润色中"，慢了给「立即插入」
         case done        // inserted at cursor → "已插入"
         case cancel      // Esc/discard → orb ✕, "已取消"
         case error       // mic/permission/clipping → glyph + reason + 去设置
@@ -66,6 +67,12 @@ public final class HUDModel: ObservableObject {
     @Published public var elapsed: String = "0:00"
     /// Populated only while `phase == .error`.
     @Published public var errorInfo: ErrorInfo?
+    /// 润色等待过久(超过阈值)→ true,HUD 显示「立即插入 ✓」按钮(用规则版立即插入)。
+    @Published public var polishSlow = false
+    /// 一次性提示(如「大模型返回较慢，可换更快的模型」)。nil = 不显示。
+    @Published public var polishHint: String?
+    /// 「立即插入」回调(host 设置:取消润色、插规则版)。HUD 按钮点它。
+    public var onInsertNow: (@MainActor () -> Void)?
 
     public init() {}
 
@@ -84,6 +91,8 @@ public final class HUDModel: ObservableObject {
         partialText = ""
         elapsed = "0:00"
         errorInfo = nil
+        polishSlow = false
+        polishHint = nil
     }
 
     /// Format a duration (seconds) into the mm:ss style the HUD expects
