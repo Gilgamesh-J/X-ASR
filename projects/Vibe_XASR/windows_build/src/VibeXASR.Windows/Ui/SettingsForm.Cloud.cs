@@ -100,7 +100,9 @@ public sealed partial class SettingsForm
         card.Controls.Add(CloudBadge(Zh ? "推荐" : "Recommended", CMarkPurpleFg, CMarkPurpleBg, pad + (Zh ? 132 : 150), y + 3));
         var enToggle = Toggle(S.CloudEnabled, on =>
         {
-            S.CloudEnabled = on; _app.ApplyCloudSettings(); RebuildCurrentTab();
+            S.CloudEnabled = on;
+            if (on && S.Mode != DictationMode.Paste) _app.SetMode(DictationMode.Paste);   // 润色仅支持「说完插入」
+            _app.ApplyCloudSettings(); RebuildCurrentTab();
         });
         enToggle.Location = new Point(W - pad - enToggle.Width, y);
         card.Controls.Add(enToggle);

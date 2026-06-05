@@ -256,10 +256,8 @@ public sealed partial class SettingsForm : Form
                 Toggle(S.ClipboardOverwrite, v => _app.SetClipboardOverwrite(v))),
             Row(L10n.T("dict.history"), L10n.T("dict.history.help"),
                 Toggle(S.HistoryEnabled, v => _app.SetHistoryEnabled(v))),
-            Row(L10n.T("dict.itn"), L10n.T("dict.itn.help"),
-                Toggle(S.ItnEnabled, v => _app.SetItn(v))),
-            Row(L10n.T("dict.defiller"), L10n.T("dict.defiller.help"),
-                Toggle(S.DefillerEnabled, v => _app.SetDefiller(v))),
+            DictByLLMRow("dict.itn", "dict.itn.help", "dict.byLLM", S.ItnEnabled, v => _app.SetItn(v)),
+            DictByLLMRow("dict.defiller", "dict.defiller.help", "dict.defiller.byLLM", S.DefillerEnabled, v => _app.SetDefiller(v)),
             Row(L10n.T("dict.cue"), L10n.T("dict.cue.help"),
                 Toggle(S.CueEnabled, v => { _app.SetCueEnabled(v); RebuildCurrentTab(); })),
         };
@@ -269,6 +267,15 @@ public sealed partial class SettingsForm : Form
             rows.Add(Row(L10n.T("dict.cueVol"), L10n.T("dict.cueVol.help"), CueVolSegmented()));
         }
         col.AddGroup(L10n.T("grp.dictation"), rows);
+    }
+
+    /// <summary>ITN / 去口水词 row: when cloud AI Polish is on, the LLM handles these → disable + grey the
+    /// toggle and show the "由大模型处理" help (mirrors macOS .disabled(s.polishOn)).</summary>
+    private Control DictByLLMRow(string titleKey, string helpKey, string byLlmKey, bool value, Action<bool> setter)
+    {
+        var tog = Toggle(value, setter);
+        if (S.CloudEnabled) tog.Enabled = false;
+        return Row(L10n.T(titleKey), L10n.T(S.CloudEnabled ? byLlmKey : helpKey), tog);
     }
 
     private Control CueThemeSelect()
@@ -310,22 +317,39 @@ public sealed partial class SettingsForm : Form
         };
         host.Controls.Add(caption);
 
+        int y = 40;
+        if (S.CloudEnabled)   // AI Polish forces "insert on finish" — show the hint + lock the other modes
+        {
+            host.Controls.Add(new Label { Text = L10n.T("dict.mode.lockedByPolish"), Font = Theme.Ui(8.5f),
+                ForeColor = Theme.Warn, AutoSize = false, Location = new Point(16, y - 4), Size = new Size(_innerWidth - 32, 18), BackColor = Color.Transparent });
+            y += 20;
+        }
+
         (DictationMode mode, string title, string desc, string? warn)[] modes =
         {
             (DictationMode.Paste, "dict.mode.paste.title", "dict.mode.paste.desc", null),
             (DictationMode.Type, "dict.mode.type.title", "dict.mode.type.desc", "dict.mode.type.warn"),
             (DictationMode.OnCall, "dict.mode.oncall.title", "dict.mode.oncall.desc", null),
         };
-        int y = 40;
         int w = _innerWidth - 32;
         var cards = new List<DictationModeRow>();
         foreach (var (mode, tk, dk, wk) in modes)
         {
             var card = new DictationModeRow(L10n.T(tk), L10n.T(dk), w, wk is null ? null : L10n.T(wk)) { Selected = S.Mode == mode };
+            if (mode == DictationMode.Paste && S.CloudEnabled) card.Badge = L10n.T("badge.recommended");
             card.Location = new Point(16, y);
             var capturedMode = mode;
             card.Clicked += () =>
             {
+                if (S.CloudEnabled && capturedMode != DictationMode.Paste)   // locked by AI Polish
+                {
+                    if (MessageBox.Show(L10n.T("dict.mode.conflict.msg"), L10n.T("dict.mode.conflict.title"),
+                            MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+                    S.CloudEnabled = false; _app.ApplyCloudSettings();   // turn polish off, then apply the mode
+                    _app.SetMode(capturedMode);
+                    RebuildCurrentTab();
+                    return;
+                }
                 _app.SetMode(capturedMode);
                 foreach (var c in cards) c.Selected = false;
                 card.Selected = true;
@@ -1361,6 +1385,7 @@ internal sealed class DictationModeRow : Control
     private readonly string? _warning;
     private bool _selected;
     public bool Selected { get => _selected; set { _selected = value; Invalidate(); } }
+    public string? Badge { get; set; }
     public event Action? Clicked;
 
     public DictationModeRow(string title, string desc, int width, string? warning = null)
@@ -1398,6 +1423,16 @@ internal sealed class DictationModeRow : Control
         var titleFont = Theme.Ui(10f, FontStyle.Bold);
         TextRenderer.DrawText(g, _title, titleFont, new Rectangle(tx, 11, Width - tx - 12, titleFont.Height),
             Theme.Text, TextFormatFlags.Left | TextFormatFlags.NoPadding);
+        if (Badge is not null)
+        {
+            int titleW = TextRenderer.MeasureText(_title, titleFont, Size.Empty, TextFormatFlags.NoPadding).Width;
+            var bf = Theme.Ui(7.5f, FontStyle.Bold);
+            int bw = TextRenderer.MeasureText(Badge, bf).Width + 12;
+            var bRect = new RectangleF(tx + titleW + 8, 12, bw, 16);
+            Draw.FillRounded(g, bRect, 8, Theme.AccentSoft);
+            TextRenderer.DrawText(g, Badge, bf, Rectangle.Round(bRect), Theme.AccentA,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+        }
         var descFont = Theme.Ui(8.5f);
         int dy = 11 + titleFont.Height + 3;
         int descW = Width - tx - 12;
