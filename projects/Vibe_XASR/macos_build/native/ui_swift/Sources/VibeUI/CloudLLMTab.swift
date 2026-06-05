@@ -155,17 +155,27 @@ struct LLMTab: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer()
+                #if arch(arm64)
                 VibeToggle(on: Binding(get: { s.refiner }, set: { on in
                     if on, cfg.enabled { cfg.enabled = false; commit() }   // 本地 ⟂ 云端:开本地 → 关云端
                     s.applyRefiner(on)
                 }))
+                #else
+                // Intel 不支持本地润色 → 灰显不可开,引导用云端。
+                Text("仅 Apple Silicon")
+                    .font(Vibe.Fonts.ui(11.5, weight: .medium)).foregroundStyle(Vibe.Palette.textMuted(scheme))
+                    .padding(.horizontal, 10).padding(.vertical, 5)
+                    .background(Capsule().fill(Color.white.opacity(0.06)))
+                #endif
             }
 
+            #if arch(arm64)
             if s.refiner {
                 Rectangle().fill(Vibe.Palette.hairline(scheme)).frame(height: 1).padding(.top, 14)
                 localStatus.padding(.top, 14)
                 refinerSourceLine.padding(.top, 12)
             }
+            #endif
         }
         .padding(20)
         .background(RoundedRectangle(cornerRadius: 16).fill(Vibe.Palette.surface2(scheme))

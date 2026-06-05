@@ -81,6 +81,9 @@ if [ -x "$SPARKLE_BIN/sign_update" ]; then
   SIG_LINE="$("$SPARKLE_BIN/sign_update" "$UPDATE_ZIP")"   # sparkle:edSignature="…" length="…"
   PUBDATE="$(date '+%a, %d %b %Y %H:%M:%S %z')"
   DL_URL="https://github.com/Gilgamesh-J/X-ASR/releases/download/vibe-v${VER}/VibeXASR-${VER}.zip"
+  # 更新说明:读 projects/docs/notes-<VER>.html(若有),作为 Sparkle 弹窗里的发行说明。
+  NOTES_FILE="$DOCS/notes-${VER}.html"
+  NOTES="$( [ -f "$NOTES_FILE" ] && cat "$NOTES_FILE" || printf 'Vibe XASR %s' "$VER" )"
   mkdir -p "$DOCS"
   cat > "$DOCS/appcast.xml" <<XML
 <?xml version="1.0" encoding="utf-8"?>
@@ -92,6 +95,9 @@ if [ -x "$SPARKLE_BIN/sign_update" ]; then
     <language>zh</language>
     <item>
       <title>Vibe XASR ${VER}</title>
+      <description><![CDATA[
+${NOTES}
+]]></description>
       <pubDate>${PUBDATE}</pubDate>
       <sparkle:version>${BUILD_NUM}</sparkle:version>
       <sparkle:shortVersionString>${VER}</sparkle:shortVersionString>

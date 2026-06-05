@@ -743,7 +743,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 return
             }
         }
-        #if VIBE_LLAMA
+        // 本地 llama 润色仅 Apple Silicon(arm64)启用;Intel(x86_64 切片)走云端,本地灰显不可开。
+        #if VIBE_LLAMA && arch(arm64)
         if store.refinerEnabled {
             Refiner.shared.timeout = 4    // 本地 llama 快,4s 足够
             Refiner.shared.systemProvider = { Refiner.systemPrompt }   // 本地用固定指令

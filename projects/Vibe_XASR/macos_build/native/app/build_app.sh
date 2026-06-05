@@ -33,12 +33,8 @@ DIST="$B/native/dist"
 APP="$DIST/Vibe XASR.app"
 
 SHERPA_LIB="$B/native/sherpa/dist/sherpa-onnx-v1.13.2-osx-universal2-shared/lib"
-# AI 润色(Beta)的 libllama 目前只编了 arm64,故 VIBE_LLAMA 打包时降为 arm64-only。
-if [ -n "${VIBE_LLAMA:-}" ]; then
-  ARCHS="--arch arm64"                           # arm64 only (libllama is arm64)
-else
-  ARCHS="--arch arm64 --arch x86_64"             # universal2 (Apple Silicon + Intel)
-fi
+# libllama 已编为 universal(arm64 + x86_64,含 Metal),故无论是否 VIBE_LLAMA 都打 universal2。
+ARCHS="--arch arm64 --arch x86_64"               # universal2 (Apple Silicon + Intel)
 # 960ms ASR model lives OUTSIDE the repo (xasr_workspace/vad_asr_demo). Override
 # ASR_SRC to point elsewhere, or fetch from HuggingFace GilgameshWind/X-ASR-zh-en.
 ASR_SRC="${ASR_SRC:-$B/../../vad_asr_demo/models/asr}"   # encoder/decoder/joiner-960ms + tokens
