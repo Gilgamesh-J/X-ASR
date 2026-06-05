@@ -204,6 +204,17 @@ public sealed class Settings
         set => SecretStore.Set("cloud_api_key", value ?? "");
     }
 
+    /// <summary>Active prompt template id: "auto" (built live from the 4 toggles) | a template id.</summary>
+    public string CloudActiveTemplate { get; set; } = "auto";
+    /// <summary>User-edited override of the "auto" prompt (empty = use the toggle-built prompt).</summary>
+    public string CloudAutoOverride { get; set; } = "";
+    /// <summary>Saved prompt templates as JSON [{id,name,content}]. Empty = the 3 seed templates.</summary>
+    public string CloudTemplatesJson { get; set; } = "";
+    /// <summary>User custom providers as JSON [{id,label,baseURL}].</summary>
+    public string CloudCustomProvidersJson { get; set; } = "";
+    /// <summary>Saved named cloud profiles as JSON (each profile's key stored separately in SecretStore).</summary>
+    public string CloudProfilesJson { get; set; } = "";
+
     // ---- persistence ----
 
     private static readonly JsonSerializerOptions JsonOpts = new()

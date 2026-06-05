@@ -26,63 +26,22 @@ internal sealed class LlmProvider
 {
     public string Key { get; init; } = "";
     public string Label { get; init; } = "";
+    public string Mark { get; init; } = "";          // 1–2 char logo glyph
+    public string Cls { get; init; } = "";            // color class: "oa" green | "custom" purple | else blue
+    public string Desc { get; init; } = "";
     public string BaseUrl { get; init; } = "";
     public string KeyHint { get; init; } = "";
+    public string ModelLabel { get; init; } = "模型";
     public string DefaultModel { get; init; } = "";
     public LlmModel[] Models { get; init; } = Array.Empty<LlmModel>();
     public string Price { get; init; } = "";
 }
 
-/// <summary>Built-in OpenAI-compatible providers. A representative subset of macOS's 23-provider catalog —
-/// the model field is free-text, so any provider/model works; this just gives sensible defaults.</summary>
+/// <summary>Built-in OpenAI-compatible provider catalog (23 providers — see <see cref="CloudCatalog"/>).
+/// The model field is free-text, so any provider/model works; the catalog supplies presets + defaults.</summary>
 internal static class LlmProviders
 {
-    public static readonly LlmProvider[] All =
-    {
-        new() { Key = "openai", Label = "OpenAI", BaseUrl = "https://api.openai.com/v1", KeyHint = "sk-…",
-                DefaultModel = "gpt-4o-mini",
-                Models = new[] { new LlmModel("gpt-4o-mini", "gpt-4o-mini", "快·便宜"), new LlmModel("gpt-4o", "gpt-4o", "均衡"), new LlmModel("gpt-4.1-mini", "gpt-4.1-mini", "快") },
-                Price = "按 token 计费 · gpt-4o-mini ≈ ¥0.001 / 千 token" },
-        new() { Key = "deepseek", Label = "DeepSeek 深度求索", BaseUrl = "https://api.deepseek.com/v1", KeyHint = "sk-…",
-                DefaultModel = "deepseek-chat",
-                Models = new[] { new LlmModel("deepseek-chat", "deepseek-chat", "通用·便宜") },
-                Price = "按 token 计费 · 极低价" },
-        new() { Key = "ark", Label = "火山方舟 / 豆包 (Ark)", BaseUrl = "https://ark.cn-beijing.volces.com/api/v3", KeyHint = "方舟 API Key",
-                DefaultModel = "doubao-1-5-lite-32k-250115",
-                Models = new[] { new LlmModel("doubao-1-5-lite-32k-250115", "doubao-1.5-lite-32k", "快·便宜") },
-                Price = "按 token 计费 · 豆包 lite 极低价" },
-        new() { Key = "qwen", Label = "通义千问 (DashScope)", BaseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1", KeyHint = "sk-…",
-                DefaultModel = "qwen-plus",
-                Models = new[] { new LlmModel("qwen-flash", "qwen-flash", "快·便宜"), new LlmModel("qwen-plus", "qwen-plus", "均衡"), new LlmModel("qwen-max", "qwen-max", "质量高") },
-                Price = "按 token 计费" },
-        new() { Key = "moonshot", Label = "月之暗面 Kimi", BaseUrl = "https://api.moonshot.cn/v1", KeyHint = "sk-…",
-                DefaultModel = "moonshot-v1-8k",
-                Models = new[] { new LlmModel("moonshot-v1-8k", "moonshot-v1-8k", "均衡") },
-                Price = "按 token 计费" },
-        new() { Key = "zhipuai", Label = "智谱 AI (GLM)", BaseUrl = "https://open.bigmodel.cn/api/paas/v4", KeyHint = "xxx.yyy",
-                DefaultModel = "glm-4-flash",
-                Models = new[] { new LlmModel("glm-4-flash", "glm-4-flash", "快·免费档"), new LlmModel("glm-4-air", "glm-4-air", "均衡") },
-                Price = "glm-4-flash 有免费额度" },
-        new() { Key = "siliconcloud", Label = "硅基流动 (SiliconFlow)", BaseUrl = "https://api.siliconflow.cn/v1", KeyHint = "sk-…",
-                DefaultModel = "Qwen/Qwen2.5-7B-Instruct",
-                Models = new[] { new LlmModel("Qwen/Qwen2.5-7B-Instruct", "Qwen2.5-7B", "快·便宜") },
-                Price = "聚合多家开源模型" },
-        new() { Key = "openrouter", Label = "OpenRouter", BaseUrl = "https://openrouter.ai/api/v1", KeyHint = "sk-or-…",
-                DefaultModel = "openai/gpt-4o-mini",
-                Models = new[] { new LlmModel("openai/gpt-4o-mini", "openai/gpt-4o-mini", "聚合") },
-                Price = "聚合多家服务商" },
-        new() { Key = "groq", Label = "Groq", BaseUrl = "https://api.groq.com/openai/v1", KeyHint = "gsk_…",
-                DefaultModel = "llama-3.1-8b-instant",
-                Models = new[] { new LlmModel("llama-3.1-8b-instant", "llama-3.1-8b-instant", "极快") },
-                Price = "推理极快 · 有免费额度" },
-        new() { Key = "minimax", Label = "MiniMax", BaseUrl = "https://api.minimaxi.com/v1", KeyHint = "API Key",
-                DefaultModel = "MiniMax-Text-01",
-                Models = new[] { new LlmModel("MiniMax-Text-01", "MiniMax-Text-01", "通用") },
-                Price = "按 token 计费" },
-        new() { Key = "custom", Label = "自定义 / 其他 (OpenAI 兼容)", BaseUrl = "", KeyHint = "API Key",
-                DefaultModel = "", Models = Array.Empty<LlmModel>(),
-                Price = "任意 OpenAI 兼容接口 —— 自己填 Base URL 与模型" },
-    };
+    public static LlmProvider[] All => CloudCatalog.Providers;
 
     public static LlmProvider Find(string key) => All.FirstOrDefault(p => p.Key == key) ?? All[0];
     public static bool IsBuiltin(string key) => All.Any(p => p.Key == key);
