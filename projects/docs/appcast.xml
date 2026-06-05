@@ -46,12 +46,12 @@
   <li>Various bug fixes and HUD polish.</li>
 </ul>
 ]]></description>
-      <pubDate>Fri, 05 Jun 2026 21:59:50 +0800</pubDate>
-      <sparkle:version>200</sparkle:version>
+      <pubDate>Sat, 06 Jun 2026 00:29:56 +0800</pubDate>
+      <sparkle:version>201</sparkle:version>
       <sparkle:shortVersionString>2.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
       <link>https://github.com/Gilgamesh-J/X-ASR/releases/tag/vibe-v2.0</link>
-      <enclosure url="https://github.com/Gilgamesh-J/X-ASR/releases/download/vibe-v2.0/VibeXASR-2.0.zip" type="application/octet-stream" sparkle:edSignature="xSr4UxF+r5NIychSY87gGNgUMQLVXLgmlaNPVAA2CKYBKskxRBjn2DMwidtLvly/Ux8bpAVcKmBpPzJTCQ5dAA==" length="584377550" />
+      <enclosure url="https://github.com/Gilgamesh-J/X-ASR/releases/download/vibe-v2.0/VibeXASR-2.0.zip" type="application/octet-stream" sparkle:edSignature="+dJ7WP2KrA97nTlu9Q06C2xwYW9yw42J4BN0whiMzwMiXIsD6bzK7rHW1hh0dJ19JXU8jLwFRo0H3Q57+yaUAQ==" length="584448027" />
     </item>
   </channel>
 </rss>
