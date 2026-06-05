@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
+using System.Windows.Forms;
 
 namespace VibeXASR.Windows.Ui;
 
@@ -160,6 +161,23 @@ public static class Theme
         }
         catch { /* dwmapi missing — ignore */ }
     }
+
+    /// <summary>Switch a control's (and all descendants') native scrollbars to the dark Explorer style,
+    /// so AutoScroll bars render dark-on-dark instead of the light system default (the macOS-vs-Windows
+    /// eyesore). Safe to call repeatedly; no-op in light mode.</summary>
+    public static void ApplyDarkScrollbars(Control root)
+    {
+        if (!IsDark) return;
+        static void Walk(Control c)
+        {
+            try { if (c.IsHandleCreated) SetWindowTheme(c.Handle, "DarkMode_Explorer", null); } catch { }
+            foreach (Control child in c.Controls) Walk(child);
+        }
+        Walk(root);
+    }
+
+    [DllImport("uxtheme.dll", CharSet = CharSet.Unicode)]
+    private static extern int SetWindowTheme(IntPtr hwnd, string? appName, string? idList);
 
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);

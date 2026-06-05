@@ -86,6 +86,12 @@ public sealed partial class SettingsForm : Form
         Theme.ApplyDarkTitleBar(Handle);
     }
 
+    protected override void OnShown(EventArgs e)
+    {
+        base.OnShown(e);
+        Theme.ApplyDarkScrollbars(this);   // dark scrollbars to match the dark theme (was light-on-dark)
+    }
+
     private void OnLanguageChanged()
     {
         if (IsDisposed) return;

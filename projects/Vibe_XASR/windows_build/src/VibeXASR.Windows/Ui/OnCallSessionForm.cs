@@ -90,6 +90,12 @@ public sealed class OnCallSessionForm : Form
         Theme.ApplyDarkTitleBar(Handle);
     }
 
+    protected override void OnShown(EventArgs e)
+    {
+        base.OnShown(e);
+        Theme.ApplyDarkScrollbars(this);   // dark scrollbars to match the dark theme
+    }
+
     /// <summary>Refresh from the session snapshot (called on open + on each new utterance).</summary>
     public void Reload()
     {

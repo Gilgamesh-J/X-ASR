@@ -257,6 +257,12 @@ public sealed class HistoryForm : Form
         base.OnHandleCreated(e);
         Theme.ApplyDarkTitleBar(Handle);
     }
+
+    protected override void OnShown(EventArgs e)
+    {
+        base.OnShown(e);
+        Theme.ApplyDarkScrollbars(this);   // dark scrollbars to match the dark theme
+    }
 }
 
 /// <summary>One history entry row: mono text + meta (timestamp · countdown · OnCall badge),
