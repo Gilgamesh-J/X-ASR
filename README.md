@@ -163,11 +163,9 @@ We welcome more experiments and real-world use cases built on top of **X-ASR**. 
 **Core features**
 
 - 🎙️ **Three dictation modes** — insert-on-finish · live streaming (types as you talk) · OnCall standby (floating window)
-- 🀄 **Chinese ⇄ English** free code-switching, inserted in real time at the cursor
 - 📋 **Built-in pad & history** — saved by date; copy / edit / export
 - 📖 **Personal dictionary** — hotwords, homophone correction, replace rules
-- 🔢 **Number normalization & filler cleanup** — “二零二六” → “2026”, drops “um / uh / 那个”
-- 🌐 **Localized UI** — 中文 / English / 日本語 / 한국어
+- ✨ **AI Polish (Beta)** — optional cloud LLM smooths wording & removes fillers (opt-in, off by default)
 - 🔒 **Privacy-first & auto-update** — fully offline; one-click upgrades inside the app
 
 <sub>🪟 A **Windows** build is also available (in [Releases](https://github.com/Gilgamesh-J/X-ASR/releases)) — an early **preview**, not yet fully tested, kept in sync with the latest macOS features. Please [report issues](https://github.com/Gilgamesh-J/X-ASR/issues) as you run into them.</sub>
