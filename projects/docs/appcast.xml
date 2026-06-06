@@ -2,7 +2,7 @@
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
   <channel>
     <title>Vibe XASR</title>
-    <link>https://raw.githubusercontent.com/Gilgamesh-J/X-ASR/main/projects/docs/appcast.xml</link>
+    <link>https://models.speech.wiki/appcast.xml</link>
     <description>Vibe XASR 自动更新源 / auto-update feed</description>
     <language>zh</language>
     <item>
@@ -51,7 +51,7 @@
       <sparkle:shortVersionString>2.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
       <link>https://github.com/Gilgamesh-J/X-ASR/releases/tag/vibe-v2.0</link>
-      <enclosure url="https://github.com/Gilgamesh-J/X-ASR/releases/download/vibe-v2.0/VibeXASR-2.0.zip" type="application/octet-stream" sparkle:edSignature="lqgA5fcYMbAb5UjDJxsh+8OXcSbej9qjQ3UuRNwQsWieq2117kKVUeeb8woU21owt+IYdTEzsSVvY+2SBUCwAw==" length="165772884" />
+      <enclosure url="https://models.speech.wiki/app/VibeXASR-2.0.zip" type="application/octet-stream" sparkle:edSignature="lqgA5fcYMbAb5UjDJxsh+8OXcSbej9qjQ3UuRNwQsWieq2117kKVUeeb8woU21owt+IYdTEzsSVvY+2SBUCwAw==" length="165772884" />
     </item>
   </channel>
 </rss>
