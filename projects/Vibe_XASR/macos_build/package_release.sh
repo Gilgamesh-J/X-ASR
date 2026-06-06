@@ -149,6 +149,9 @@ R2UP="../../scripts/r2_upload.sh"
 if [ -x "$R2UP" ]; then
   # 安装包设短缓存(600s):同名覆盖发版后,边缘最多 10 分钟内回正(zip 的自动更新另靠 ?b= 破缓存,无延迟)。
   "$R2UP" "$DMG" "app/VibeXASR-${VER}.dmg" "" "public, max-age=600" || echo "   ⚠️ dmg → R2 失败(可稍后手动 r2_upload.sh 重传)"
+  # latest 永久链接:https://models.speech.wiki/app/VibeXASR.dmg 始终指向最新 dmg(官网下载按钮用)。
+  # 每次发版覆盖,设更短缓存(300s)以尽快回正。
+  "$R2UP" "$DMG" "app/VibeXASR.dmg" "" "public, max-age=300" || echo "   ⚠️ latest dmg → R2 失败"
   ZIP_OUT="native/dist/VibeXASR-${VER}.zip"
   [ -f "$ZIP_OUT" ] && { "$R2UP" "$ZIP_OUT" "app/VibeXASR-${VER}.zip" "" "public, max-age=600" || echo "   ⚠️ zip → R2 失败"; }
   # appcast 也传 R2(SUFeedURL 切 R2 后用);短缓存(120s)确保用户及时看到新版。

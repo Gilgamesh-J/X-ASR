@@ -8,50 +8,14 @@
     <item>
       <title>Vibe XASR 2.0</title>
       <description><![CDATA[
-<h2>Vibe XASR 2.0 · 全新「AI 润色」</h2>
-<p>这是一次重大更新——说完话，让大模型把口述自动整理成干净的文字。</p>
-
-<h3>✨ AI 润色（云端）</h3>
-<ul>
-  <li><b>23 家大模型服务商</b>开箱即用：OpenAI、Claude、Google Gemini、DeepSeek、通义千问、阿里云百炼、豆包 / 火山方舟、Moonshot、智谱 AI、百度千帆、硅基流动、小米 MiMo、Groq、xAI、Mistral 等；选中即自动填好接口与模型，也可<b>自定义新增服务商</b>。</li>
-  <li><b>说完自动整理</b>：去口癖、改口纠正（只留最终说法）、口语数字规整、按「词典」热词修正同音字。</li>
-  <li><b>温度 / 最大长度</b>可调；<b>多套配置一键保存与切换</b>（OpenAI / 豆包 / 阿里云各存一套，秒切）。</li>
-  <li><b>提示词工作室</b>：处理项自动拼成提示词，也可用自定义模板；本机规则（同音字 / 替换）的改动会一并交给大模型复核纠错。</li>
-</ul>
-
-<h3>🔒 AI 润色（本地 · Beta）</h3>
-<ul>
-  <li>可选<b>完全离线</b>的本地大模型润色，隐私优先，Apple Silicon 上由 Metal 加速；模型首次启用时在线下载。</li>
-</ul>
-
-<h3>🪄 更顺手</h3>
-<ul>
-  <li>润色等待时悬浮窗有动态状态，过慢可<b>一键「立即插入」</b>并提示更换更快的服务商。</li>
-  <li><b>最近请求</b>记录「原文 → 结果 + 提示词」，便于排查；可一键复制调试记录、在「关于」页<b>引导式提交反馈</b>。</li>
-</ul>
-
-<h3>🛠 其它</h3>
-<ul>
-  <li>修复若干 bug，优化悬浮窗外观与交互细节。</li>
-</ul>
-
-<hr>
-<h2>Vibe XASR 2.0 · New “AI Polish”</h2>
-<p>A major update: speak, and a large language model tidies your dictation automatically.</p>
-<ul>
-  <li><b>Cloud AI Polish</b> with 23 built-in providers (OpenAI, Claude, Gemini, DeepSeek, Qwen, Moonshot, and more), or add your own. Removes fillers, resolves self-corrections, normalizes numbers, fixes homophones via your dictionary.</li>
-  <li>Adjustable temperature / max tokens; save & switch between multiple named configs.</li>
-  <li>Optional <b>on-device (offline) AI Polish</b> (Beta) for privacy, Metal-accelerated on Apple Silicon.</li>
-  <li>Recent-request log, one-click debug copy, and a guided feedback form.</li>
-  <li>Various bug fixes and HUD polish.</li>
-</ul>
+Vibe XASR 2.0
 ]]></description>
-      <pubDate>Sat, 06 Jun 2026 07:53:21 +0800</pubDate>
-      <sparkle:version>202</sparkle:version>
+      <pubDate>Sat, 06 Jun 2026 15:18:41 +0800</pubDate>
+      <sparkle:version>203</sparkle:version>
       <sparkle:shortVersionString>2.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
       <link>https://github.com/Gilgamesh-J/X-ASR/releases/tag/vibe-v2.0</link>
-      <enclosure url="https://models.speech.wiki/app/VibeXASR-2.0.zip" type="application/octet-stream" sparkle:edSignature="lqgA5fcYMbAb5UjDJxsh+8OXcSbej9qjQ3UuRNwQsWieq2117kKVUeeb8woU21owt+IYdTEzsSVvY+2SBUCwAw==" length="165772884" />
+      <enclosure url="https://models.speech.wiki/app/VibeXASR-2.0.zip?b=203" type="application/octet-stream" sparkle:edSignature="57dbJ51hQn8N8BzcML58R+oz+iv5lurLHYcULlua82zMbkHSZKpDwMOrj1HvsfMo1brIz/xl9HdKF6FQiuyOCw==" length="165783023" />
     </item>
   </channel>
 </rss>
