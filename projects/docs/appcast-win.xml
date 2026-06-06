@@ -12,41 +12,32 @@
     <description>Vibe XASR Windows auto-update feed</description>
     <language>zh</language>
     <item>
-      <title>Vibe XASR 2.0.0.1-beta</title>
-      <pubDate>Sat, 06 Jun 2026 20:30:00 +0800</pubDate>
+      <title>Vibe XASR 2.0.0.2-beta</title>
+      <pubDate>Sat, 06 Jun 2026 23:40:00 +0800</pubDate>
       <link>https://github.com/Gilgamesh-J/X-ASR/releases/tag/vibe-v2.0</link>
       <description><![CDATA[
-        <h3>Vibe XASR 2.0.0.1-beta (Windows)</h3>
+        <h3>Vibe XASR 2.0.0.2-beta (Windows)</h3>
         <ul>
-          <li>对齐 macOS 2.0:新增「AI 润色」—— 用云端大模型把口述整理成想表达的样子(去口水词 / 改口纠正 /
-              数字规整 / 热词修正)。内置 23 家 OpenAI 兼容服务商目录 + 自定义,API Key 仅本机加密存储、不上传;
-              支持命名配置、提示词模板、最近请求排查。开启后仅「说完插入」模式生效,本地数字规整 / 去口水词交由
-              大模型处理。(本地大模型暂未实现。)</li>
-          <li>界面优化:滚动条改为深色(不再是浅色系统滚动条)。</li>
-          <li>对齐 macOS 1.4.4:去口水词修复 —— 不再误删「额 / 額 / 诶」(金额 / 额外 / 余额 完整保留);
-              重复折叠阈值改为 ≥4 次(「三三三」「我我我」不再被折,只折真正口吃如「这这这这」)。
-              另含「共享」设置页四语言 + 复制按钮复制后短暂提示「已复制」再复位。</li>
-          <li>对齐 macOS 1.4.3:逐字模式不再回改(最终的去口水词 / 数字规整 / 口令只进历史与剪贴板,
-              不删改已上屏的文字);ITN 更稳(「一二三四五六七八九十」不再误并成数字);新增「自检 ·
-              快捷键测试」;「共享」支持一键生成各 AI 助手(OpenClaw / Claude Code / Hermes / 通用)安装指令。</li>
-          <li>对齐 macOS 1.4.1 / 1.4.2:托盘图标按状态变色(录音=红 / 持续候机=绿 / 引擎错误=橙);
-              「关于」新增反馈入口(直达 X-ASR Issues)。版本号基线对齐到 1.4.2。</li>
-          <li>「记录」聚合选项可调(与 macOS 对齐):按停顿(≤1/2/5/10 分)或按累计字数
-              (60/120/200/300 字)实时重新分段。</li>
-          <li>「记录」工作区重做(与 macOS 1.4.0 同步):日历热力图、碎句聚合 / 一键合并、
-              多选批量、标签、撤销、双击弹出编辑、导出。</li>
-          <li>新增「共享」:本机只读 HTTP API(key 鉴权,默认仅 127.0.0.1,可选局域网),
-              把语音记录 / 词典 / 口令接给你的 AI 编程助手(复制 /skill 地址即可接入)。</li>
-          <li>(含此前的数字规整 / 去口水词 / 口令 / 提示音。)</li>
+          <li>全新界面:设置 / 历史 / 托盘弹窗 / 听写悬浮条全部重写 —— 深色细滚动条、毛玻璃卡片、内容居中,更精致统一。</li>
+          <li>桌面悬浮入口:常驻一个可拖动的小药丸(显示就绪 / 听写状态),随时找到并打开;点击弹出快捷菜单
+              (含「AI 润色」开关);可一键隐藏,「通用」里可再开。</li>
+          <li>模型来源可切换:CDN 加速链接(默认)/ ModelScope / HuggingFace。官方线路提供 int8 量化模型
+              (每档约 130 MB,内置 960ms 也已量化,安装体积砍半多);「模型管理」标注每档「已量化 / 未量化」;
+              下载可随时取消。</li>
+          <li>AI 润色优化:更强的默认提示词(防注入 + 改口纠正 + 轻量规整);修复「改口」被数字守卫误拒的问题
+              (说「八点…不对,是九点」现在能正确整理成「9 点」);预置一批编程热词到词典。</li>
+          <li>修复:切换界面语言后侧边栏与当前页实时刷新;长句听写时悬浮条显示最新的词;设置保存更稳定。</li>
         </ul>
+        <p>macOS is the primary development branch; the Windows build is compiled in sync and not yet fully tested (preview). Feedback welcome.<br/>
+        macOS 为主开发分支,Windows 为同步编译,尚未充分测试(预览版)。欢迎反馈。</p>
       ]]></description>
       <enclosure
-        url="https://github.com/Gilgamesh-J/X-ASR/releases/download/vibe-v2.0/VibeXASR-2.0.0.1-windows-x64.msi"
+        url="https://github.com/Gilgamesh-J/X-ASR/releases/download/vibe-v2.0/VibeXASR-2.0.0.2-windows-x64.msi"
         sparkle:os="windows"
-        sparkle:version="2.0.0.1"
-        sparkle:shortVersionString="2.0.0.1-beta"
-        sparkle:edSignature="ukyNTnhDSnMWV4uYwXqA4B6scA7BlxxHjTu8GIV/UJ4ic/9KTrpXg0cJsxZcldlljPlYjZ+Y7M/OOEk7g/IeDg=="
-        length="628625408"
+        sparkle:version="2.0.0.2"
+        sparkle:shortVersionString="2.0.0.2-beta"
+        sparkle:edSignature="VRdNsPys2tnjVopgL/D9IvECXnxG0AnrVEiQCw5mSvDUAU8afcYPw4GaG5w3/EnNhQIbez0M6jqI27HJ22WqCw=="
+        length="211259392"
         type="application/octet-stream" />
     </item>
   </channel>
