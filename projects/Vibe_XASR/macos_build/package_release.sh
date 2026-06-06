@@ -80,7 +80,9 @@ if [ -x "$SPARKLE_BIN/sign_update" ]; then
   ditto -c -k --keepParent "$APP" "$UPDATE_ZIP"
   SIG_LINE="$("$SPARKLE_BIN/sign_update" "$UPDATE_ZIP")"   # sparkle:edSignature="…" length="…"
   PUBDATE="$(date '+%a, %d %b %Y %H:%M:%S %z')"
-  DL_URL="https://github.com/Gilgamesh-J/X-ASR/releases/download/vibe-v${VER}/VibeXASR-${VER}.zip"
+  # 默认下载源 = R2 CDN(国内快;EdDSA 签名只签字节,换 host 不影响验签)。GitHub Releases 仍留作备份镜像。
+  # ?b=<build>:同名文件覆盖后破 Cloudflare 缓存——否则 CDN 边缘可能仍返回旧字节,与新 edSignature 对不上致更新失败。
+  DL_URL="https://models.speech.wiki/app/VibeXASR-${VER}.zip?b=${BUILD_NUM}"
   # 更新说明:读 projects/docs/notes-<VER>.html(若有),作为 Sparkle 弹窗里的发行说明。
   NOTES_FILE="$DOCS/notes-${VER}.html"
   NOTES="$( [ -f "$NOTES_FILE" ] && cat "$NOTES_FILE" || printf 'Vibe XASR %s' "$VER" )"
@@ -90,7 +92,7 @@ if [ -x "$SPARKLE_BIN/sign_update" ]; then
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
   <channel>
     <title>Vibe XASR</title>
-    <link>https://raw.githubusercontent.com/Gilgamesh-J/X-ASR/main/projects/docs/appcast.xml</link>
+    <link>https://models.speech.wiki/appcast.xml</link>
     <description>Vibe XASR 自动更新源 / auto-update feed</description>
     <language>zh</language>
     <item>
@@ -110,10 +112,51 @@ ${NOTES}
 XML
   echo "✅ 写入 $DOCS/appcast.xml  (enclosure → $DL_URL)"
   echo
-  echo "发布这次更新,还差两步(都是对外操作,确认后执行):"
-  echo "  1) 把 dmg + 更新 zip 传到 Release:"
-  echo "     gh release create vibe-v${VER} \"$DMG\" \"$UPDATE_ZIP\" -R Gilgamesh-J/X-ASR -t \"Vibe XASR v${VER}\" --notes \"…\""
-  echo "  2) 提交并推送 projects/docs/appcast.xml(push 到 main 后 raw.githubusercontent.com 即刻生效,旧版 App 即可检测到新版)"
+  echo "提示:dmg/zip 会自动传到 GitHub Release + R2(见下)。剩下唯一手动步骤:"
+  echo "  提交并推送 projects/docs/appcast.xml(push 到 main 后 raw.githubusercontent.com 即刻生效,旧版 App 即可检测到新版)"
 else
   echo "   跳过:未找到 $SPARKLE_BIN/sign_update"
 fi
+
+echo "== 附:上传安装包到 GitHub Release(公证后自动传,方便分发)=="
+# 公证完成的 dmg + zip 自动传到 vibe-v<VER>;GitHub 大文件上传爱静默失败,故每个文件
+# 传完用 gh api 核实 state=uploaded、不行就重试。Release 不存在则先建。Windows MSI 不动。
+TAG="vibe-v${VER}"
+ZIP_OUT="native/dist/VibeXASR-${VER}.zip"
+if command -v gh >/dev/null 2>&1; then
+  gh release view "$TAG" -R Gilgamesh-J/X-ASR >/dev/null 2>&1 || \
+    gh release create "$TAG" -R Gilgamesh-J/X-ASR -t "Vibe XASR v${VER}" --notes "Vibe XASR ${VER}" >/dev/null 2>&1 || true
+  for f in "$DMG" "$ZIP_OUT"; do
+    [ -f "$f" ] || continue
+    name="$(basename "$f")"; ok=""
+    for try in 1 2 3; do
+      gh release upload "$TAG" "$f" -R Gilgamesh-J/X-ASR --clobber >/dev/null 2>&1 || true
+      st="$(gh api repos/Gilgamesh-J/X-ASR/releases/tags/$TAG --jq ".assets[]|select(.name==\"$name\")|.state" 2>/dev/null || true)"
+      [ "$st" = "uploaded" ] && { echo "   ✓ $name → GitHub Release $TAG"; ok=1; break; }
+      echo "   ⚠️ $name 第 $try 次未坐实,重试…"
+    done
+    [ -z "$ok" ] && echo "   ❌ $name 传 GitHub 失败 —— 手动: gh release upload $TAG \"$f\" -R Gilgamesh-J/X-ASR --clobber,再 gh api 核实"
+  done
+else
+  echo "   跳过 GitHub 上传(无 gh CLI)"
+fi
+
+echo "== 附:同步安装包到 Cloudflare R2 CDN(国内加速)=="
+# 每次公证完成的安装包都同步一份到 R2(custom domain models.speech.wiki/app/),
+# 作为 GitHub Releases 之外的国内加速下载源。凭据在 projects/scripts/.env(gitignore);
+# 没配 .env / 脚本就静默跳过(不影响发布)。
+R2UP="../../scripts/r2_upload.sh"
+if [ -x "$R2UP" ]; then
+  # 安装包设短缓存(600s):同名覆盖发版后,边缘最多 10 分钟内回正(zip 的自动更新另靠 ?b= 破缓存,无延迟)。
+  "$R2UP" "$DMG" "app/VibeXASR-${VER}.dmg" "" "public, max-age=600" || echo "   ⚠️ dmg → R2 失败(可稍后手动 r2_upload.sh 重传)"
+  ZIP_OUT="native/dist/VibeXASR-${VER}.zip"
+  [ -f "$ZIP_OUT" ] && { "$R2UP" "$ZIP_OUT" "app/VibeXASR-${VER}.zip" "" "public, max-age=600" || echo "   ⚠️ zip → R2 失败"; }
+  # appcast 也传 R2(SUFeedURL 切 R2 后用);短缓存(120s)确保用户及时看到新版。
+  [ -f "$DOCS/appcast.xml" ] && { "$R2UP" "$DOCS/appcast.xml" "appcast.xml" "application/xml" "public, max-age=120" || echo "   ⚠️ appcast → R2 失败"; }
+  echo "   CDN: https://models.speech.wiki/app/VibeXASR-${VER}.dmg  (appcast: /appcast.xml)"
+else
+  echo "   跳过 R2 同步(无 $R2UP)"
+fi
+
+# 公证 dmg 复制到桌面,方便手动分发。
+cp "$DMG" "$HOME/Desktop/" 2>/dev/null && echo "== dmg 已复制到桌面: ~/Desktop/$(basename "$DMG") =="

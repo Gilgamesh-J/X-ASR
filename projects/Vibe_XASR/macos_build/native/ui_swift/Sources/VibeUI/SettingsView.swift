@@ -120,12 +120,14 @@ public enum PermissionKind: Sendable { case microphone, accessibility, inputMoni
 /// CN); HuggingFace is the alternative. The concrete host downloader persists the
 /// choice in UserDefaults (NOT SettingsStore) and builds per-source URLs.
 public enum ModelDownloadSource: String, CaseIterable, Sendable {
-    case modelScope   // default
+    case official     // CDN 加速线路(默认);对用户只显示「CDN加速链接」,不暴露域名
+    case modelScope
     case huggingFace
 
-    /// Short label shown in the segmented picker (brand names, not localized).
+    /// Short label shown in the segmented picker.
     public var label: String {
         switch self {
+        case .official:    return "CDN加速链接"
         case .modelScope:  return "ModelScope"
         case .huggingFace: return "HuggingFace"
         }
@@ -134,6 +136,7 @@ public enum ModelDownloadSource: String, CaseIterable, Sendable {
     /// Public model page for this source (opened when the value link is tapped).
     public var repoURL: URL {
         switch self {
+        case .official:    return URL(string: "https://github.com/Gilgamesh-J/X-ASR")!
         case .modelScope:  return URL(string: "https://www.modelscope.ai/models/Gilgamesh-J/X-ASR-zh-en")!
         case .huggingFace: return URL(string: "https://huggingface.co/GilgameshWind/X-ASR-zh-en")!
         }
@@ -142,6 +145,7 @@ public enum ModelDownloadSource: String, CaseIterable, Sendable {
     /// host/owner/name shown as the tappable monospace value under the picker.
     public var repoDisplay: String {
         switch self {
+        case .official:    return ""    // 官方加速:不显示域名/IP
         case .modelScope:  return "modelscope.ai/Gilgamesh-J/X-ASR-zh-en"
         case .huggingFace: return "huggingface.co/GilgameshWind/X-ASR-zh-en"
         }
@@ -246,7 +250,7 @@ public final class ModelManagerRelay: ObservableObject {
     func startRefinerDownload() { manager?.startRefinerDownload() }
     @discardableResult func deleteRefiner() -> Bool { manager?.deleteRefiner() ?? false }
     /// 当前下载线路(refiner 与 ASR 共用同一 source);用于展示「下载来源」。
-    var refinerSource: ModelDownloadSource { (manager as? ModelDownloadSourcing)?.source ?? .modelScope }
+    var refinerSource: ModelDownloadSource { (manager as? ModelDownloadSourcing)?.source ?? .official }
 }
 
 private extension ObservableObject {
@@ -1714,11 +1718,11 @@ private struct ModelSourceLine: View {
     private var sourcing: ModelDownloadSourcing? { relay.manager as? ModelDownloadSourcing }
 
     var body: some View {
-        let current = sourcing?.source ?? .modelScope
+        let current = sourcing?.source ?? .official
         VStack(alignment: .leading, spacing: 0) {
             SettingsRow(title: l10n.t("model.source"), help: l10n.t("model.source.help")) {
                 Picker("", selection: Binding(
-                    get: { sourcing?.source ?? .modelScope },
+                    get: { sourcing?.source ?? .official },
                     set: { sourcing?.source = $0 }
                 )) {
                     ForEach(ModelDownloadSource.allCases, id: \.self) { src in
@@ -1730,20 +1734,22 @@ private struct ModelSourceLine: View {
                 .fixedSize()
                 .disabled(sourcing == nil)
             }
-            // The chosen mirror's model page (tappable).
-            HStack(spacing: 0) {
-                Link(destination: current.repoURL) {
-                    Text(current.repoDisplay)
-                        .font(Vibe.Fonts.mono(11))
-                        .foregroundStyle(Vibe.Palette.accentB)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+            // The chosen mirror's model page (tappable). 官方加速线路不展示域名(repoDisplay 为空)。
+            if !current.repoDisplay.isEmpty {
+                HStack(spacing: 0) {
+                    Link(destination: current.repoURL) {
+                        Text(current.repoDisplay)
+                            .font(Vibe.Fonts.mono(11))
+                            .foregroundStyle(Vibe.Palette.accentB)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    Spacer(minLength: 0)
                 }
-                Spacer(minLength: 0)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 10)
+                .background(Vibe.Palette.surface(scheme))
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 10)
-            .background(Vibe.Palette.surface(scheme))
         }
     }
 }
@@ -1898,6 +1904,8 @@ private struct TierModelRow: View {
         let progress = relay.downloadProgress(tier)
         let downloaded = relay.isTierDownloaded(tier)
         let failed = relay.didTierFail(tier)
+        // 内置 或 CDN 加速 = 量化模型(小);ModelScope / HuggingFace = 全精度(大)。
+        let quantized = tier.isBundled || relay.refinerSource == .official
         return HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
@@ -1911,6 +1919,15 @@ private struct TierModelRow: View {
                             .padding(.vertical, 2).padding(.horizontal, 6)
                             .background(RoundedRectangle(cornerRadius: 5)
                                 .fill(Vibe.Palette.accentSoft(scheme)))
+                    }
+                    // 内置 或 CDN 加速下载 = 量化模型 → 标「已量化」;ModelScope / HuggingFace(全精度)不显示。
+                    if quantized {
+                        Text(l10n.t("model.quantized"))
+                            .font(Vibe.Fonts.mono(10))
+                            .foregroundStyle(Vibe.Palette.success)
+                            .padding(.vertical, 2).padding(.horizontal, 6)
+                            .background(RoundedRectangle(cornerRadius: 5)
+                                .fill(Vibe.Palette.success.opacity(0.14)))
                     }
                 }
                 if let p = progress {
@@ -1926,7 +1943,7 @@ private struct TierModelRow: View {
                     }
                 } else {
                     HStack(spacing: 4) {
-                        Text(tier.approxSize + " · ")
+                        Text((quantized ? tier.approxSizeQuantized : tier.approxSize) + " · ")
                             .foregroundStyle(Vibe.Palette.textMuted(scheme))
                         if failed {
                             Text(l10n.t("model.dl.failed"))

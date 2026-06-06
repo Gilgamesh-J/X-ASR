@@ -33,6 +33,11 @@ final class ModelDownloader: NSObject, ObservableObject, ModelManagerBridge, Mod
     /// ModelScope coordinates (international `.ai` mirror; same file tree).
     private let msRepo = "Gilgamesh-J/X-ASR-zh-en"            // MS repo id (different owner casing)
     private let msHost = "https://www.modelscope.ai"
+    /// 官方加速线路:Cloudflare R2 自定义域名(UI 只显示「官方加速链接」,不向用户暴露此域名)。
+    /// R2 提供每档的 gzip 归档 `asr/chunk-<T>ms.tar.gz`(下完解压);refiner GGUF 在 `refiner/`。
+    private let r2Host = "https://models.speech.wiki"
+    /// taskDescription 里标记「这是该档的归档下载」(而非逐文件)。nonisolated:delegate 回调要用。
+    private nonisolated static let archiveMarker = "__archive__"
 
     /// UserDefaults key persisting the chosen download source.
     private static let sourceKey = "modelDownloadSource"
@@ -77,7 +82,7 @@ final class ModelDownloader: NSObject, ObservableObject, ModelManagerBridge, Mod
     override init() {
         // Restore the persisted source; default to ModelScope when unset/invalid.
         let raw = UserDefaults.standard.string(forKey: Self.sourceKey)
-        self.source = raw.flatMap(ModelDownloadSource.init(rawValue:)) ?? .modelScope
+        self.source = raw.flatMap(ModelDownloadSource.init(rawValue:)) ?? .official
         super.init()
     }
 
@@ -104,6 +109,9 @@ final class ModelDownloader: NSObject, ObservableObject, ModelManagerBridge, Mod
     private func resolveURL(tier: LatencyTier, file: String) -> URL {
         let path = relPath(tier: tier, file: file)
         switch source {
+        case .official:
+            // 官方加速走归档(见 startDownload),不逐文件;此分支理论不可达,回退 MS URL 防御。
+            return URL(string: "\(msHost)/models/\(msRepo)/resolve/master/\(path)")!
         case .modelScope:
             return URL(string: "\(msHost)/models/\(msRepo)/resolve/master/\(path)")!
         case .huggingFace:
@@ -136,7 +144,21 @@ final class ModelDownloader: NSObject, ObservableObject, ModelManagerBridge, Mod
         let dir = ModelPaths.downloadedTierDir(tier.token)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
-        // Only fetch files that are not already present (resume across launches).
+        // 官方加速:整档 gzip 归档下载,完成后 tar 解压(单文件任务)。
+        if source == .official {
+            active.insert(tier.rawValue)
+            progress[tier.rawValue] = 0
+            jobs[tier.rawValue] = Job(tier: tier, files: [Self.archiveMarker], destDir: dir)
+            let url = URL(string: "\(r2Host)/asr/chunk-\(tier.token)ms.tar.gz")!
+            let task = session.downloadTask(with: url)
+            task.taskDescription = "\(tier.rawValue)|\(Self.archiveMarker)"
+            tasks[tier.rawValue] = task
+            log("start tier=\(tier.token)ms via 官方加速 (archive)")
+            task.resume()
+            return
+        }
+
+        // ModelScope / HuggingFace:逐文件下载(可断点续传)。Only fetch missing files.
         let needed = files(for: tier).filter {
             !FileManager.default.fileExists(atPath: dir.appendingPathComponent($0).path)
         }
@@ -153,24 +175,45 @@ final class ModelDownloader: NSObject, ObservableObject, ModelManagerBridge, Mod
     // MARK: AI 润色(Beta)GGUF — 单文件,用 async download(不走 tier 状态机/delegate)
 
     private static let refinerFile = "refiner-q4_k_m.gguf"
-    /// AI 润色 GGUF —— 固定从作者的部署仓库下载(上游 = MuyuanJ/Qwen3-refiner,作者把量化
-    /// GGUF 镜像到此专用仓库)。UI 只展示上游 MuyuanJ、不暴露此下载页。与 ASR 的 MS/HF 线路无关。
-    /// 下载源:huggingface.co/taocode/Qwen3-refiner-deploy 根目录的 refiner-q4_k_m.gguf(resolve 直链)。
-    private func refinerURL() -> URL {
-        URL(string: "https://huggingface.co/taocode/Qwen3-refiner-deploy/resolve/main/\(Self.refinerFile)")!
+    private var refinerTryIndex = 0
+    /// AI 润色 GGUF 下载源,按序静默回退(UI 无任何提示):① 官方加速线路(R2)→
+    /// ② HuggingFace 作者部署仓库(taocode/Qwen3-refiner-deploy,上游 = MuyuanJ/Qwen3-refiner)。
+    private func refinerCandidates() -> [URL] {
+        [URL(string: "\(r2Host)/refiner/\(Self.refinerFile)")!,
+         URL(string: "https://huggingface.co/taocode/Qwen3-refiner-deploy/resolve/main/\(Self.refinerFile)")!]
     }
     /// 开始下载 refiner GGUF(若未就绪且未在下载)。走 delegate session(taskDescription
     /// "refiner")以获得逐字节进度。完成后 bump installsVersion + 广播,让 AppDelegate
-    /// 重新初始化后端。任何失败 → refinerFailed,Refiner 保持安全回退。
+    /// 重新初始化后端。各源都失败才 refinerFailed,Refiner 保持安全回退。
     func startRefinerDownload() {
         guard !ModelPaths.refinerAvailable(), refinerProgress == nil else { return }
         refinerFailed = false
         refinerProgress = 0
-        let task = session.downloadTask(with: refinerURL())
+        refinerTryIndex = 0
+        startRefinerAttempt()
+    }
+    /// 用当前候选源发起一次下载尝试。
+    private func startRefinerAttempt() {
+        let urls = refinerCandidates()
+        guard refinerTryIndex < urls.count else {
+            refinerProgress = nil; refinerFailed = true; refinerTask = nil; return
+        }
+        let task = session.downloadTask(with: urls[refinerTryIndex])
         task.taskDescription = "refiner"
         refinerTask = task
-        log("start refiner GGUF via \(source.label)")
+        log("start refiner GGUF attempt \(refinerTryIndex + 1)/\(urls.count) — \(urls[refinerTryIndex].host ?? "")")
         task.resume()
+    }
+    /// 某次尝试失败 → 静默换下一个源;全部失败才置 refinerFailed(界面无提示)。
+    private func refinerAttemptFailed() {
+        refinerTryIndex += 1
+        if refinerTryIndex < refinerCandidates().count {
+            log("refiner fallback → next source")
+            refinerProgress = 0
+            startRefinerAttempt()
+        } else {
+            refinerProgress = nil; refinerFailed = true; refinerTask = nil
+        }
     }
 
     /// 取消正在进行的 refiner 下载。
@@ -291,6 +334,16 @@ final class ModelDownloader: NSObject, ObservableObject, ModelManagerBridge, Mod
         log("tier=\(tier) FAILED")
     }
 
+    /// 官方加速归档解压成功后翻状态(主线程)。
+    private func archiveExtracted(tier: Int) {
+        active.remove(tier)
+        progress[tier] = 1
+        jobs[tier] = nil
+        tasks[tier] = nil
+        installsVersion += 1
+        log("tier=\(tier)ms archive extracted")
+    }
+
     private func log(_ msg: String) {
         FileHandle.standardError.write("[ModelDownloader] \(msg)\n".data(using: .utf8)!)
     }
@@ -312,16 +365,17 @@ extension ModelDownloader: URLSessionDownloadDelegate {
             Task { @MainActor [weak self] in self?.refinerProgress = frac }
             return
         }
-        guard let desc = downloadTask.taskDescription,
-              let tierStr = desc.split(separator: "|").first,
-              let tier = Int(tierStr),
+        let parts = (downloadTask.taskDescription ?? "").split(separator: "|", maxSplits: 1).map(String.init)
+        guard parts.count == 2, let tier = Int(parts[0]),
               let t = LatencyTier(rawValue: tier),
               totalBytesExpectedToWrite > 0 else { return }
-        // Approximate whole-tier progress: completed files + the current one's
-        // fraction, averaged over the 4 files of a tier.
         let perFile = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
+        let isArchive = parts[1] == Self.archiveMarker
         Task { @MainActor [weak self] in
-            guard let self, let job = self.jobs[tier] else { return }
+            guard let self else { return }
+            if isArchive { self.progress[tier] = perFile; return }   // 官方加速:单归档,直接按字节比例
+            // Approximate whole-tier progress: completed files + current fraction, over the tier's files.
+            guard let job = self.jobs[tier] else { return }
             let all = self.files(for: t).count
             let doneFiles = all - job.remaining.count
             self.progress[tier] = (Double(doneFiles) + perFile) / Double(all)
@@ -341,7 +395,7 @@ extension ModelDownloader: URLSessionDownloadDelegate {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 if ok { self.finishRefiner(staged: staged) }
-                else { try? FileManager.default.removeItem(at: staged); self.refinerProgress = nil; self.refinerFailed = true; self.refinerTask = nil }
+                else { try? FileManager.default.removeItem(at: staged); self.refinerAttemptFailed() }   // 静默换源
             }
             return
         }
@@ -350,6 +404,25 @@ extension ModelDownloader: URLSessionDownloadDelegate {
         let file = parts[1]
         let http = downloadTask.response as? HTTPURLResponse
         let ok = (http?.statusCode ?? 200) < 400
+
+        // 官方加速:下载到的是 gzip 归档 → 在此(delegate 后台队列)tar 解压到该档目录,再回主线程翻状态。
+        if file == Self.archiveMarker {
+            var success = false
+            if ok {
+                let dir = ModelPaths.downloadedTierDir(String(tier))
+                try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                let p = Process()
+                p.executableURL = URL(fileURLWithPath: "/usr/bin/tar")
+                p.arguments = ["-xzf", location.path, "-C", dir.path]
+                do { try p.run(); p.waitUntilExit(); success = (p.terminationStatus == 0) } catch { success = false }
+            }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if success { self.archiveExtracted(tier: tier) } else { self.fail(tier: tier) }
+            }
+            return
+        }
+
         // Move the temp file synchronously here (it's deleted when this returns).
         // Copy to a stable temp path, then hand off to the main actor.
         let staged = FileManager.default.temporaryDirectory
@@ -373,9 +446,7 @@ extension ModelDownloader: URLSessionDownloadDelegate {
         if (error as NSError).code == NSURLErrorCancelled { return }
         // AI 润色 GGUF 失败。
         if desc == "refiner" {
-            Task { @MainActor [weak self] in
-                self?.refinerProgress = nil; self?.refinerFailed = true; self?.refinerTask = nil
-            }
+            Task { @MainActor [weak self] in self?.refinerAttemptFailed() }   // 静默换源(R2→HF)
             return
         }
         guard let tierStr = desc.split(separator: "|").first, let tier = Int(tierStr) else { return }

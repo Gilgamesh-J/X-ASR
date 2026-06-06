@@ -17,7 +17,7 @@
 	<key>CFBundleShortVersionString</key>
 	<string>2.0</string>
 	<key>CFBundleVersion</key>
-	<string>202</string>
+	<string>203</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>15.0</string>
 	<key>LSUIElement</key>
@@ -29,7 +29,7 @@
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
 	<key>SUFeedURL</key>
-	<string>https://raw.githubusercontent.com/Gilgamesh-J/X-ASR/main/projects/docs/appcast.xml</string>
+	<string>https://models.speech.wiki/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>gMtrgRPFykG1o9cT1l4/NGoxB5nV5zb+h3dYB6pweSc=</string>
 	<key>SUScheduledCheckInterval</key>
