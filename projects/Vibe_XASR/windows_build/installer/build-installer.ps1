@@ -49,11 +49,16 @@ New-Item -ItemType Directory -Force $frm | Out-Null
 $frsrc = Join-Path (Split-Path $repo -Parent) "macos_build\models\firered"
 foreach ($f in 'firered_vad.onnx','cmvn_means.bin','cmvn_istd.bin') { Copy-Item (Join-Path $frsrc $f) $frm -Force }
 
-# Default tier from HuggingFace (only the files not already staged). ~615 MB.
-$base = "https://huggingface.co/GilgameshWind/X-ASR-zh-en/resolve/main/deployment/models/chunk-960ms-model"
-foreach ($f in 'encoder-960ms.onnx','decoder-960ms.onnx','joiner-960ms.onnx','tokens.txt') {
-    $d = Join-Path $tier $f
-    if (-not (Test-Path $d)) { Write-Host "  downloading $f ..."; Invoke-WebRequest "$base/$f" -OutFile $d -UseBasicParsing }
+# Default 960 ms tier — int8-quantized archive from the official CDN (R2), matching macOS build 202
+# (~130 MB vs ~615 MB full precision). Extract, then strip macOS AppleDouble junk (._*, .DS_Store).
+$needTier = -not (Test-Path (Join-Path $tier 'encoder-960ms.onnx'))
+if ($needTier) {
+    Write-Host "  downloading quantized chunk-960ms.tar.gz (CDN) ..."
+    $arc = Join-Path $payload "chunk-960ms.tar.gz"
+    Invoke-WebRequest "https://models.speech.wiki/asr/chunk-960ms.tar.gz" -OutFile $arc -UseBasicParsing
+    tar -xzf $arc -C $tier
+    Get-ChildItem $tier -Recurse -Force | Where-Object { $_.Name -like '._*' -or $_.Name -eq '.DS_Store' } | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
+    Remove-Item $arc -Force -ErrorAction SilentlyContinue
 }
 # v4 silero VAD - the version sherpa-onnx 1.10.x supports (v5 errors "Unsupported silero vad model").
 $sv = Join-Path $payload "models\silero_vad.onnx"
@@ -72,4 +77,22 @@ Write-Host "Building MSI v$Version ..." -ForegroundColor Cyan
 Push-Location $here
 try { & $wix build Product.wxs -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext -d "Version=$Version" -o "VibeXASR-Setup.msi" }
 finally { Pop-Location }
-Write-Host "Done: $here\VibeXASR-Setup.msi" -ForegroundColor Green
+$msiOut = Join-Path $here "VibeXASR-Setup.msi"
+Write-Host "Done: $msiOut" -ForegroundColor Green
+
+# --- 4. mirror the MSI to Cloudflare R2 (CN-fast download), matching macOS package_release.sh ---
+# Versioned name + a stable "latest" alias, like macOS app/VibeXASR-<VER>.dmg + app/VibeXASR.dmg.
+# Skipped silently if the (gitignored) uploader / creds aren't present on this machine.
+$disp   = ($Version -split '\.')[0..1] -join '.'                       # 2.0.0.1 -> 2.0
+$scripts = Join-Path (Split-Path (Split-Path $repo -Parent) -Parent) "scripts"   # projects/scripts
+$r2py   = Join-Path $scripts "r2_upload.py"
+$r2env  = Join-Path $scripts ".env"
+if ((Test-Path $r2py) -and (Test-Path $r2env)) {
+    Write-Host "Uploading MSI to Cloudflare R2 ..." -ForegroundColor Cyan
+    try {
+        & python $r2py $msiOut "app/VibeXASR-$disp.msi" "application/x-msi" "public, max-age=600"
+        & python $r2py $msiOut "app/VibeXASR.msi"       "application/x-msi" "public, max-age=300"
+    } catch { Write-Host "  R2 upload failed (non-fatal): $_" -ForegroundColor Yellow }
+} else {
+    Write-Host "R2 upload skipped (projects/scripts/.env not present)" -ForegroundColor DarkGray
+}

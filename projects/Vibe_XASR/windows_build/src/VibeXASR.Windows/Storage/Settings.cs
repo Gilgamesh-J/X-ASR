@@ -46,6 +46,9 @@ public sealed class Settings
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public ModelTier Tier { get; set; } = ModelTier.Ms960; // 960ms default, matches macOS.
 
+    /// <summary>Model download source: "official" (CDN 加速线路, default) | "modelscope" | "huggingface". macOS parity (build 203).</summary>
+    public string ModelSource { get; set; } = "official";
+
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public VadKind Vad { get; set; } = VadKind.FireRed; // FireRedVAD default, matches macOS
 
@@ -76,6 +79,12 @@ public sealed class Settings
 
     /// <summary>Start Vibe XASR with Windows sign-in (HKCU Run key).</summary>
     public bool LaunchAtLogin { get; set; } = false;
+
+    /// <summary>Desktop floating launcher pill (so users can always find/open the app). Default on; closable.</summary>
+    public bool LauncherEnabled { get; set; } = true;
+    /// <summary>Persisted launcher position (screen DIPs). null = auto (bottom-right above the tray).</summary>
+    public double? LauncherX { get; set; }
+    public double? LauncherY { get; set; }
 
     /// <summary>Show the notification-area (tray) icon. Always on for now (the menu lives there).</summary>
     public bool ShowTrayIcon { get; set; } = true;
@@ -136,7 +145,7 @@ public sealed class Settings
 
     /// <summary>Newline-separated hotword phrases (names / jargon to bias the ASR toward). Seeded
     /// with examples so the 词典 page demonstrates the feature.</summary>
-    public string HotwordsText { get; set; } = "贾扬清\n沈向洋\nPyTorch\nOpenAI\ntransformer\n向量数据库";
+    public string HotwordsText { get; set; } = "贾扬清\n沈向洋\nPyTorch\nOpenAI\ntransformer\n向量数据库\nvibe coding\nCursor\nClaude Code\nGitHub Copilot\nChatGPT\nCodex\nAgent\nMCP\nVS Code\nprompt";
 
     /// <summary>Hotword boost: 3 (low) / 5 (mid) / 7 (high) for CJK; English auto-capped ≤2.5.</summary>
     public double HotwordsScore { get; set; } = 5.0;
@@ -221,6 +230,9 @@ public sealed class Settings
     {
         WriteIndented = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.Never,
+        // Never let a NaN/Infinity double (e.g. an unset position) make Save() throw and silently
+        // drop ALL settings — write/read them as named literals instead.
+        NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals,
     };
 
     public static string FilePath =>

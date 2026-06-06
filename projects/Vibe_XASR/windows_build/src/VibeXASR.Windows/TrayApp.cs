@@ -42,13 +42,16 @@ public sealed class TrayApp : IDisposable, IAppController
     private GlobalHotkey? _hotkey;
     private MicCapture? _mic;
     private DictationEngine? _engine;
-    private OverlayForm? _overlay;
-    private TrayPopupForm? _popup;
-    private SettingsForm? _settingsForm;
-    private HistoryForm? _historyForm;
+    private Ui.Wpf.OverlayWindow? _overlay;
+    private Ui.Wpf.TrayPopupWindow? _popup;
+    private Ui.Wpf.LauncherWindow? _launcher;
+    private Ui.Wpf.SettingsWindow? _settingsWpf;
+    private Ui.Wpf.HistoryWindow? _historyWpf;
     private OnCallSessionForm? _onCallSessionForm;
     private OnboardingForm? _onboarding;
-    private DownloadForm? _dl;
+    private Ui.Wpf.DownloadWindow? _dl;
+    private CancellationTokenSource? _engineDlCts;   // cancels an in-flight tier download
+    private ModelTier _tierBeforeSwap;               // revert target if the user cancels the download
 
     // Ephemeral transcript of the CURRENT OnCall session (cleared when a session starts) —
     // distinct from the persistent _history store; this is what the overlay "View" button shows
@@ -68,6 +71,7 @@ public sealed class TrayApp : IDisposable, IAppController
     public TrayApp()
     {
         _settings = Settings.Load();
+        _tierBeforeSwap = _settings.Tier;
         _models = new ModelManager(_settings);
         L10n.Current = L10n.FromCode(_settings.Language);
         Theme.IsDark = true; // dark-first like macOS; respect system below
@@ -78,7 +82,7 @@ public sealed class TrayApp : IDisposable, IAppController
     {
         _ui = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
 
-        _overlay = new OverlayForm();
+        _overlay = new Ui.Wpf.OverlayWindow();
         _overlay.CopyRequested += (_, _) => CopyOverlayText();
         _overlay.StopRequested += (_, _) => SetMode(DictationMode.Paste); // leave OnCall
         _overlay.ViewRequested += (_, _) => OpenOnCallSession();
@@ -86,7 +90,7 @@ public sealed class TrayApp : IDisposable, IAppController
         // Realize the overlay handle so cross-thread BeginInvoke works immediately.
         _ = _overlay.Handle;
 
-        _popup = new TrayPopupForm(this);
+        _popup = new Ui.Wpf.TrayPopupWindow(this);
 
         BuildTray();
         RefreshCorrections();   // 词典: load homophone table + replacement rules
@@ -119,6 +123,9 @@ public sealed class TrayApp : IDisposable, IAppController
         // preparing. The guide shows a live "preparing → ready" status.
         if (string.IsNullOrEmpty(open) && !_settings.Welcomed)
             ShowOnboarding();
+        // Desktop floating launcher (so users can always find the app). Normal launch only.
+        if (string.IsNullOrEmpty(open) && _settings.LauncherEnabled)
+            ShowLauncher();
         switch (open)
         {
             case "settings": OpenSettings(openArg); break;
@@ -165,7 +172,7 @@ public sealed class TrayApp : IDisposable, IAppController
         {
             if (e.Button == MouseButtons.Left)
             {
-                if (_popup is { Visible: true }) _popup.Hide();
+                if (_popup is { IsVisible: true }) _popup.Hide();
                 else _popup?.ShowNear();
             }
         };
@@ -224,15 +231,18 @@ public sealed class TrayApp : IDisposable, IAppController
                      $"asr={paths.AsrModelPresent()} vadPresent={paths.VadPresent(vad)}");
             if (!paths.AsrModelPresent() || !paths.VadPresent(vad))
             {
+                _engineDlCts?.Dispose();
+                _engineDlCts = new CancellationTokenSource();
+                var token = _engineDlCts.Token;
                 ShowDownloadDialog();
-                var dl = new ModelDownloader();
+                var dl = new ModelDownloader(ModelSourceX.From(_settings.ModelSource));
                 var prog = new Progress<DownloadProgress>(p =>
                     _dl?.Report(p.Fraction ?? 0,
                         $"{p.FileName}  ({p.FileIndex + 1}/{p.FileCount})"));
-                await dl.EnsureTierAsync(paths, prog);
+                await dl.EnsureTierAsync(paths, prog, token);
                 // Silero downloads on demand; FireRed ships bundled (ResolveVad already degraded to
                 // Silero if FireRed was absent), so only Silero can need a fetch here.
-                if (vad == VadKind.Silero) await dl.EnsureVadAsync(paths.VadFileFor(vad), prog);
+                if (vad == VadKind.Silero) await dl.EnsureVadAsync(paths.VadFileFor(vad), prog, token);
                 CloseDownloadDialog();
             }
             // Build the engine (565 MB model) OFF the UI thread so the app + hotkey stay
@@ -250,6 +260,19 @@ public sealed class TrayApp : IDisposable, IAppController
                 UpdateTrayStatus();
                 AnnounceReady();
             });
+        }
+        catch (OperationCanceledException)
+        {
+            CloseDownloadDialog();
+            Diag.Log("engine download cancelled by user → revert tier to " + (int)_tierBeforeSwap);
+            // revert to the previously-working tier so we don't keep retrying the cancelled one,
+            // then rebuild on it (it's already present, so no download).
+            if (_settings.Tier != _tierBeforeSwap)
+            {
+                _settings.Tier = _tierBeforeSwap; _settings.Save();
+                _ = EnsureEngineAsync(swapping: true);
+            }
+            else { RunOnUi(UpdateTrayStatus); }
         }
         catch (Exception ex)
         {
@@ -482,7 +505,16 @@ public sealed class TrayApp : IDisposable, IAppController
     });
 
     private void ShowDownloadDialog()
-        => RunOnUi(() => { _dl ??= new DownloadForm(); if (!_dl.Visible) _dl.Show(); });
+        => RunOnUi(() =>
+        {
+            if (_dl is null)
+            {
+                _dl = new Ui.Wpf.DownloadWindow();
+                _dl.CancelRequested += () => _engineDlCts?.Cancel();
+            }
+            if (!_dl.IsVisible) _dl.Show();
+            _dl.Activate();
+        });
 
     private void CloseDownloadDialog()
         => RunOnUi(() => { _dl?.Hide(); });
@@ -556,7 +588,7 @@ public sealed class TrayApp : IDisposable, IAppController
                 _overlay?.SetText(e.Text);
                 break;
         }
-        if (_popup is { Visible: true }) RunOnUi(() => _popup?.Invalidate());
+        if (_popup is { IsVisible: true }) RunOnUi(() => _popup?.Invalidate());
     }
 
     private void OnFinal(object? sender, FinalEventArgs e)
@@ -578,7 +610,10 @@ public sealed class TrayApp : IDisposable, IAppController
         // live; OnCall is a session log). Async + HUD; any failure/timeout falls back to `text`.
         if (Refiner.Active && _settings.Mode == DictationMode.Paste)
         {
-            _ = RefineAndInsertAsync(e.Text, text);
+            // Feed the cloud the text WITHOUT local 数字规整/去口水 (cloud handles them) so its 改口
+            // edits aren't rejected by the digit guardrail. Pinyin/replacements/口令 still apply.
+            var cloudIn = ApplyCorrections(e.Text, isFinal: true, forCloud: true);
+            _ = RefineAndInsertAsync(e.Text, cloudIn);
             return;
         }
 
@@ -665,7 +700,7 @@ public sealed class TrayApp : IDisposable, IAppController
     /// pinyin homophone correction → text replacements → 去口水词 → 数字规整 (ITN) → 口令 expansion.
     /// Each step no-ops unless enabled + populated. Runs on FINAL text only (not streaming partials,
     /// where ITN digits would jump as you speak).</summary>
-    private string ApplyCorrections(string textIn, bool isFinal = true)
+    private string ApplyCorrections(string textIn, bool isFinal = true, bool forCloud = false)
     {
         var text = textIn;
         if (_settings.PinyinFuzzyEnabled && _pinyin.IsActive) text = _pinyin.Normalize(text);
@@ -674,8 +709,12 @@ public sealed class TrayApp : IDisposable, IAppController
         // on the final would delete + retype the on-screen tail (jarring). They still run for the
         // recorded history + clipboard text. (Mirrors macOS's corrected(isFinal:) split.)
         if (!isFinal) return text;
-        if (_settings.DefillerEnabled) text = Defiller.Clean(text);                 // 去口水词: strip fillers first
-        if (_settings.ItnEnabled) text = ChineseITN.Normalize(text);                // 数字规整: then normalize numbers
+        // When the text is bound for cloud 润色, SKIP local 去口水/数字规整 — the cloud does both
+        // ("已由 AI 润色接管"). Running them first injects digits/edits that the cloud's 改口 then
+        // removes, which trips the digit/shrink guardrail → the polish is rejected and the raw text
+        // is inserted instead (the 「八点…不对九点 → 8:00 没被改口」 bug).
+        if (!forCloud && _settings.DefillerEnabled) text = Defiller.Clean(text);     // 去口水词: strip fillers first
+        if (!forCloud && _settings.ItnEnabled) text = ChineseITN.Normalize(text);    // 数字规整: then normalize numbers
         if (_settings.SnippetsEnabled && _snippetRules.Count > 0) text = Replacements.Expand(text, _snippetRules); // 口令: expand last
         return text;
     }
@@ -836,9 +875,16 @@ public sealed class TrayApp : IDisposable, IAppController
         _ = EnsureEngineAsync(swapping: true);
     }
 
+    public void SetModelSource(string code)
+    {
+        _settings.ModelSource = code; _settings.Save();
+        Diag.Log("model source → " + code);
+    }
+
     public void SelectTier(ModelTier tier)
     {
         if (_settings.Tier == tier && _engineReady) return;
+        _tierBeforeSwap = _settings.Tier;   // remember so a cancelled download can revert
         _settings.Tier = tier; _settings.Save();
         _ = EnsureEngineAsync(swapping: true);
     }
@@ -1006,29 +1052,56 @@ public sealed class TrayApp : IDisposable, IAppController
     {
         RunOnUi(() =>
         {
-            if (_settingsForm is { IsDisposed: false })
+            // Redesigned WPF Settings window (drop-in for the old WinForms SettingsForm),
+            // shown modeless on the WinForms UI thread — WPF hooks the existing message pump.
+            if (_settingsWpf is not null)
             {
-                _settingsForm.Activate();
-                if (tab is not null) _settingsForm.ShowTab(tab);
+                if (tab is not null) _settingsWpf.ShowTab(tab);
+                _settingsWpf.Activate();
                 return;
             }
-            _settingsForm = new SettingsForm(this) { Icon = Branding.AppIcon };
-            if (tab is not null) _settingsForm.ShowTab(tab);
-            _settingsForm.Show();
-            _settingsForm.Activate();
-            _settingsForm.BringToFront();
+            var w = new Ui.Wpf.SettingsWindow(this);
+            w.Closed += (_, _) => _settingsWpf = null;
+            _settingsWpf = w;
+            if (tab is not null) w.ShowTab(tab);
+            w.Show();
+            w.Activate();
         });
     }
+
+    // ----- desktop floating launcher -----
+    private void ShowLauncher() => RunOnUi(() =>
+    {
+        if (_launcher is not null) { _launcher.Show(); return; }
+        _launcher = new Ui.Wpf.LauncherWindow(this);
+        _launcher.Closed += (_, _) => _launcher = null;
+        _launcher.Show();
+    });
+
+    public void SetLauncherEnabled(bool on)
+    {
+        _settings.LauncherEnabled = on; _settings.Save();
+        if (on) ShowLauncher();
+        else RunOnUi(() => { _launcher?.Close(); _launcher = null; });
+    }
+
+    /// <summary>Launcher click → show the tray quick-menu near the given screen point.</summary>
+    public void ShowQuickMenu(double screenX, double screenY) => RunOnUi(() =>
+    {
+        _popup ??= new Ui.Wpf.TrayPopupWindow(this);
+        _popup.ShowAt(screenX, screenY);
+    });
 
     public void OpenHistory()
     {
         RunOnUi(() =>
         {
-            if (_historyForm is { IsDisposed: false }) { _historyForm.Activate(); _historyForm.BringToFront(); return; }
-            _historyForm = new HistoryForm(_history) { Icon = Branding.AppIcon };
-            _historyForm.Show();
-            _historyForm.Activate();
-            _historyForm.BringToFront();
+            if (_historyWpf is not null) { _historyWpf.Activate(); return; }
+            var w = new Ui.Wpf.HistoryWindow(_history);
+            w.Closed += (_, _) => _historyWpf = null;
+            _historyWpf = w;
+            w.Show();
+            w.Activate();
         });
     }
 
@@ -1090,7 +1163,7 @@ public sealed class TrayApp : IDisposable, IAppController
 
     private void RefreshOpenWindows()
     {
-        if (_popup is { Visible: true }) RunOnUi(() => _popup?.Invalidate());
+        if (_popup is { IsVisible: true }) RunOnUi(() => _popup?.Invalidate());
     }
 
     private void NotifyExternallyChanged()
@@ -1131,8 +1204,9 @@ public sealed class TrayApp : IDisposable, IAppController
         _hotkey?.Dispose(); _hotkey = null;
         StopEngine();
         _overlay?.Dispose(); _overlay = null;
-        _popup?.Dispose(); _popup = null;
-        _dl?.Dispose(); _dl = null;
+        _popup?.Close(); _popup = null;
+        _dl?.Close(); _dl = null; _engineDlCts?.Dispose();
+        _launcher?.Close(); _launcher = null;
         if (_tray is not null) { _tray.Visible = false; _tray.Dispose(); _tray = null; }
     }
 }

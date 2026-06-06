@@ -46,7 +46,7 @@ public sealed class ModelManager
             try
             {
                 var paths = ModelPaths.ForTier(tier);
-                var dl = new ModelDownloader();
+                var dl = new ModelDownloader(ModelSourceX.From(_settings.ModelSource));
                 var progress = new Progress<DownloadProgress>(p =>
                 {
                     if (p.Fraction is { } f) { _progress[key] = f; Changed?.Invoke(); }

@@ -22,11 +22,16 @@ public interface IAppController
     void SetMode(DictationMode mode);
     void SetVad(VadKind vad);
     void SelectTier(ModelTier tier);
+    void SetModelSource(string code);   // "official" | "modelscope" | "huggingface" — download mirror
     void SetHotkey(int vk);
     void SetLanguage(Lang lang);
     void SetClipboardOverwrite(bool on);
     void SetHistoryEnabled(bool on);
     void SetLaunchAtLogin(bool on);
+
+    // ----- desktop floating launcher (find/open the app) -----
+    void SetLauncherEnabled(bool on);                       // 通用 toggle: show/hide the launcher pill
+    void ShowQuickMenu(double screenX, double screenY);     // launcher click → tray popup near that point
 
     // ----- 词典 (dictionary): hotword bias + pinyin homophone correction + replacements -----
     void SetHotwords(bool enabled, string text, double score);
