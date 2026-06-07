@@ -8,14 +8,60 @@
     <item>
       <title>Vibe XASR 2.0</title>
       <description><![CDATA[
-Vibe XASR 2.0
+<h2>Vibe XASR 2.0 · 本次更新</h2>
+
+<h3>✨ 提示词模板工作室</h3>
+<ul>
+  <li>可在<b>独立窗口</b>打开,方便创作与分享;<b>一键复制</b>任意模板内容。</li>
+  <li>给不同模板<b>绑定不同快捷键</b>(单键或组合),按住即用该模板润色;否则用默认键 + 当前模板。</li>
+</ul>
+
+<h3>⌨️ 快捷键 & 触发方式</h3>
+<ul>
+  <li>主键与模板键全面支持<b>单键 / 组合键(如 ⌥ 1)/ 修饰键组合(如 Right ⌘ + ⌥)</b>。</li>
+  <li><b>智能触发</b>:按住说话、松开插入;或<b>轻点一下开始、再轻点停止</b>——两种用法同一个键无缝共存。</li>
+</ul>
+
+<h3>🌐 中文 & 多语言</h3>
+<ul>
+  <li>界面新增<b>繁体中文</b>(与简体并列,可跟随系统)。</li>
+  <li>新增<b>「输出转繁体」</b>开关:所有处理完成后,最终结果以繁体插入(默认关)。</li>
+  <li>内置默认提示词随界面语言本地化(简 / 繁 / EN / 日 / 한)。</li>
+</ul>
+
+<h3>🪄 悬浮条 & 更顺手</h3>
+<ul>
+  <li><b>悬浮条停留时长可调</b>(立刻 / 0.5 / 1 / 2 / 4 秒);鼠标移上去可保持,移开再消失。</li>
+  <li>落字后可<b>一键撤销</b>,或<b>换个模板重新润色</b>。</li>
+  <li><b>菜单栏快捷开关</b>:AI 润色开 / 关、当前模板切换、临时静音麦克风。</li>
+  <li><b>词典 / 替换 / 口令</b>支持一键导入导出(换机、备份、分享)。</li>
+  <li>粘贴插入后自动还原整块剪贴板(图片 / 文件 / 富文本)。</li>
+  <li>设置页整理、若干打磨与修复。</li>
+</ul>
+
+<hr>
+<h2>Vibe XASR 2.0 · What's new</h2>
+<ul>
+  <li><b>Prompt Template Studio</b>: open in a standalone window, one-click copy, and bind a hotkey to each template.</li>
+  <li><b>Hotkeys</b>: single key / combo (e.g. ⌥ 1) / modifier-combo (e.g. Right ⌘ + ⌥). <b>Smart trigger</b> — hold to talk, or tap to start and tap again to stop.</li>
+  <li><b>Traditional Chinese</b> UI, plus an <b>"output in Traditional"</b> toggle; default prompts localized per UI language.</li>
+  <li>Adjustable <b>overlay stay duration</b> (instant / 0.5 / 1 / 2 / 4 s) with hover-to-keep.</li>
+  <li><b>Undo</b> or <b>re-polish with another template</b> right after insertion.</li>
+  <li><b>Menu-bar quick toggles</b> (AI Polish / active template / mute mic); import-export for dictionary / replacements / snippets; full-clipboard restore.</li>
+  <li>Settings cleanup, polish and fixes.</li>
+</ul>
+
+<hr>
+<p>macOS is the primary development branch; the Windows build is compiled in sync and not yet fully tested (preview). Feedback welcome.<br>
+macOS 为主开发分支,Windows 为同步编译,尚未充分测试(预览版)。欢迎反馈。</p>
 ]]></description>
-      <pubDate>Sat, 06 Jun 2026 15:18:41 +0800</pubDate>
-      <sparkle:version>203</sparkle:version>
+      <sparkle:releaseNotesLink>https://models.speech.wiki/app/notes-204.html</sparkle:releaseNotesLink>
+      <pubDate>Sun, 07 Jun 2026 12:00:34 +0800</pubDate>
+      <sparkle:version>204</sparkle:version>
       <sparkle:shortVersionString>2.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
       <link>https://github.com/Gilgamesh-J/X-ASR/releases/tag/vibe-v2.0</link>
-      <enclosure url="https://models.speech.wiki/app/VibeXASR-2.0.zip?b=203" type="application/octet-stream" sparkle:edSignature="57dbJ51hQn8N8BzcML58R+oz+iv5lurLHYcULlua82zMbkHSZKpDwMOrj1HvsfMo1brIz/xl9HdKF6FQiuyOCw==" length="165783023" />
+      <enclosure url="https://models.speech.wiki/app/VibeXASR-2.0.zip?b=204" type="application/octet-stream" sparkle:edSignature="qUUJvSuqXE+cSptCXzBI9wHP20FtB1uPb2l5fokt4yO3+qGkD0HVGf1q2i4vfdyrLYv2MEmliw0G3C3eZC3qAA==" length="166040194" />
     </item>
   </channel>
 </rss>
