@@ -1626,7 +1626,7 @@ private struct HotwordRuleRow: View {
         HStack(spacing: 8) {
             ZStack(alignment: .leading) {
                 if row.word.isEmpty {
-                    Text("e.g. 贾扬清 / PyTorch")
+                    Text(L10n.shared.t("hw.eg"))
                         .font(Vibe.Fonts.mono(12))
                         .foregroundStyle(Vibe.Palette.textMuted(scheme))
                         .padding(.horizontal, 10)
@@ -1670,12 +1670,12 @@ private struct ReplaceRuleRow: View {
     var onDelete: () -> Void
     var body: some View {
         HStack(spacing: 8) {
-            field($row.from, placeholder: "识别出的")
+            field($row.from, placeholder: L10n.shared.t("rep.ph.from"))
             Image(systemName: "arrow.right")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(Vibe.Palette.textMuted(scheme))
                 .frame(width: 22)
-            field($row.to, placeholder: "替换为")
+            field($row.to, placeholder: L10n.shared.t("rep.ph.to"))
             Button(action: onDelete) {
                 Image(systemName: "minus.circle.fill")
                     .font(.system(size: 17))
@@ -1813,7 +1813,7 @@ private struct ModelSourceLine: View {
                     set: { sourcing?.source = $0 }
                 )) {
                     ForEach(ModelDownloadSource.allCases, id: \.self) { src in
-                        Text(src.label).tag(src)
+                        Text(src == .official ? l10n.t("model.src.cdn") : src.label).tag(src)
                     }
                 }
                 .labelsHidden()
@@ -2405,6 +2405,7 @@ private struct AboutTab: View {
 /// 引导式提交 issue 的表单:填「使用的功能 / 遇到的问题 / 预期结果」三项,点按钮直接打开
 /// 一个已预填标题+正文的 GitHub「新建 issue」页,用户确认即可提交。
 private struct FeedbackForm: View {
+    @ObservedObject var l10n: L10n = .shared
     @Environment(\.colorScheme) private var scheme
     @Environment(\.openURL) private var openURL
     @State private var feature = ""
@@ -2416,20 +2417,20 @@ private struct FeedbackForm: View {
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 11) {
-            Text("反馈问题 · 一键提交到 GitHub")
+            Text(l10n.t("about.fb.title"))
                 .font(Vibe.Fonts.ui(13.5, weight: .semibold)).foregroundStyle(Vibe.Palette.text(scheme))
-            Text("填好下面三项，点按钮会打开已预填内容的 GitHub「新建 issue」页，确认后提交即可。")
+            Text(l10n.t("about.fb.desc"))
                 .font(Vibe.Fonts.ui(11.5)).foregroundStyle(Vibe.Palette.textMuted(scheme))
                 .fixedSize(horizontal: false, vertical: true)
-            field("使用的功能", "如：云端润色 / 听写插入 / 热词修正", $feature, lines: 1...2)
-            field("遇到的问题", "具体现象、什么时候出现、能否复现", $problem, lines: 2...5)
-            field("预期结果", "你期望它怎样", $expected, lines: 1...4)
+            field(l10n.t("about.fb.feature"), l10n.t("about.fb.feature.ph"), $feature, lines: 1...2)
+            field(l10n.t("about.fb.problem"), l10n.t("about.fb.problem.ph"), $problem, lines: 2...5)
+            field(l10n.t("about.fb.expected"), l10n.t("about.fb.expected.ph"), $expected, lines: 1...4)
             HStack {
                 Spacer()
                 Button { submit() } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "paperplane.fill").font(.system(size: 11))
-                        Text("在 GitHub 提交（已预填）")
+                        Text(l10n.t("about.fb.submit"))
                     }
                     .font(Vibe.Fonts.ui(12.5, weight: .semibold)).foregroundStyle(.white)
                     .padding(.horizontal, 16).frame(height: 38)
@@ -2457,8 +2458,8 @@ private struct FeedbackForm: View {
     private func submit() {
         let ver = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         let os = ProcessInfo.processInfo.operatingSystemVersionString
-        let f = feature.isEmpty ? "(未填)" : feature
-        let title = "[反馈] 使用「\(f)」遇到的问题"
+        let f = feature.isEmpty ? l10n.t("about.fb.unfilled") : feature
+        let title = l10n.t("about.fb.issueTitle", f)
         let body = """
         ## 使用的功能 / Feature
         \(feature)

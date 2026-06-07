@@ -46,7 +46,7 @@ struct PromptTemplateStudioView: View {
             // 模板 chips
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    chipT(l10n.t("llm.tpl.auto"), active: cfg.activeTemplate == "auto") { cfg.activeTemplate = "auto"; commit() }
+                    chipT(l10n.t("llm.tpl.auto"), active: cfg.activeTemplate == "auto") { cfg.activeTemplate = "auto"; hotkeyConflict = false; commit() }
                     ForEach(templates) { t in
                         templateChip(t)
                     }
@@ -162,9 +162,10 @@ struct PromptTemplateStudioView: View {
         commit()
     }
     private func clearHotkey(_ id: String) { hotkeys[id] = nil; hotkeyConflict = false; commit() }
-    /// 与主听写键(非修饰单键时)或其它模板撞键。
+    /// 与主听写键或其它模板撞键。模板键恒为「普通键(+可选修饰)」,主键若是纯修饰键
+    /// (modifierOnly)则不可能与模板键精确相同 → 不算冲突;否则按 keyCode + 修饰位完全比对。
     private func conflicts(id: String, code: Int, mods: HotkeyMods) -> Bool {
-        if !s.hotkeyModifierOnly, s.hotkeyKeyCode == code, mods.isEmpty { return true }
+        if !s.hotkeyModifierOnly, s.hotkeyKeyCode == code, HotkeyMods(rawValue: s.hotkeyMods) == mods { return true }
         for (tid, h) in hotkeys where tid != id {
             if h.keyCode == code && h.mods == mods.rawValue { return true }
         }
@@ -247,7 +248,7 @@ struct PromptTemplateStudioView: View {
         .padding(.horizontal, 13).frame(height: 34)
         .background(RoundedRectangle(cornerRadius: 9).fill(active ? Color(red: 0.45, green: 0.42, blue: 0.85).opacity(0.28) : Color.black.opacity(0.2))
             .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(active ? Color(red: 0.55, green: 0.48, blue: 0.94).opacity(0.55) : Vibe.Palette.hairline(scheme))))
-        .onTapGesture { cfg.activeTemplate = t.id; commit() }
+        .onTapGesture { cfg.activeTemplate = t.id; hotkeyConflict = false; commit() }
         .onTapGesture(count: 2) { if !locked { editingId = t.id } }
     }
 
@@ -257,7 +258,7 @@ struct PromptTemplateStudioView: View {
         var n = templates.count + 1, name = "\(base)\(n)"
         while templates.contains(where: { $0.name == name }) { n += 1; name = "\(base)\(n)" }
         templates.append(CloudTemplate(id: id, name: name, content: LocalizedPrompts.newStarterUI()))
-        cfg.activeTemplate = id; editingId = id; commit()
+        cfg.activeTemplate = id; editingId = id; hotkeyConflict = false; commit()
     }
     private func delTemplate(_ id: String) {
         guard !isLockedTemplate(id) else { return }

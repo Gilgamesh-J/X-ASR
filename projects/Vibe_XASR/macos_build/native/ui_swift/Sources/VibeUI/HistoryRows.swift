@@ -9,23 +9,23 @@ import AppKit
 
 // MARK: - Time / day formatting
 
-func histTimeString(_ d: Date) -> String {
+@MainActor func histTimeString(_ d: Date) -> String {
     let c = Calendar.current.dateComponents([.hour, .minute], from: d)
     var h = c.hour ?? 0
-    let ap = h < 12 ? "上午" : "下午"
+    let ap = (h < 12) ? L10n.shared.t("hist.am") : L10n.shared.t("hist.pm")
     if h == 0 { h = 12 } else if h > 12 { h -= 12 }
     return "\(ap)\(h):" + String(format: "%02d", c.minute ?? 0)
 }
-func histFullTimeString(_ d: Date) -> String {
+@MainActor func histFullTimeString(_ d: Date) -> String {
     let c = Calendar.current.dateComponents([.year, .month, .day], from: d)
-    return "\(c.year ?? 0)年\(c.month ?? 0)月\(c.day ?? 0)日 " + histTimeString(d)
+    return L10n.shared.t("hist.date.full", c.year ?? 0, c.month ?? 0, c.day ?? 0) + histTimeString(d)
 }
-func histDayLabel(_ key: String, _ d: Date, todayKey: String, yestKey: String) -> String {
-    if key == todayKey { return "今天" }
-    if key == yestKey { return "昨天" }
+@MainActor func histDayLabel(_ key: String, _ d: Date, todayKey: String, yestKey: String) -> String {
+    if key == todayKey { return L10n.shared.t("hist.today") }
+    if key == yestKey { return L10n.shared.t("hist.yesterday") }
     let c = Calendar.current.dateComponents([.month, .day, .weekday], from: d)
-    let wd = ["日", "一", "二", "三", "四", "五", "六"][((c.weekday ?? 1) - 1) % 7]
-    return "\(c.month ?? 0)月\(c.day ?? 0)日 · 周\(wd)"
+    let wd = L10n.shared.weekdayShort((c.weekday ?? 1) - 1)
+    return L10n.shared.t("hist.date.md", c.month ?? 0, c.day ?? 0, wd)
 }
 
 // MARK: - Tag color
@@ -143,6 +143,7 @@ struct TagChip: View {
 
 struct FragRow: View {
     @ObservedObject var model: HistoryWorkspaceModel
+    @ObservedObject var l10n: L10n = .shared
     let entry: HistoryItem
     let flatIndex: Int
     let flatIds: [UUID]
@@ -184,7 +185,7 @@ struct FragRow: View {
                             Text(histFullTimeString(entry.date))
                                 .font(Vibe.Fonts.mono(11)).foregroundStyle(Vibe.Palette.textFaint(scheme))
                             if historyCharCount(entry.text) <= 6 {
-                                Text("碎句").font(Vibe.Fonts.ui(10))
+                                Text(l10n.t("hist.frag")).font(Vibe.Fonts.ui(10))
                                     .foregroundStyle(Vibe.Palette.textFaint(scheme))
                                     .padding(.horizontal, 6).padding(.vertical, 1)
                                     .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Vibe.Palette.hairline(scheme), lineWidth: 1))
@@ -251,18 +252,18 @@ struct FragRow: View {
     private var actionsOverlay: some View {
         VStack(alignment: .trailing, spacing: 3) {
             HStack(spacing: 2) {
-                HIconButton(symbol: "tag", size: 28, help: "打标签") { tagPop = true }
+                HIconButton(symbol: "tag", size: 28, help: l10n.t("hist.tagmenu.tag")) { tagPop = true }
                     .popover(isPresented: $tagPop, arrowEdge: .bottom) {
                         TagMenu(ids: [entry.id], allTags: allTagNames) { model.applyTag([entry.id], $0); tagPop = false }
                     }
-                HIconButton(symbol: "doc.on.doc", size: 28, help: "复制") { model.copy([entry.id], from: model.bridge.historyItems) }
-                HIconButton(symbol: "pencil", size: 28, help: "编辑") { model.startEdit(entry) }
-                HIconButton(symbol: "trash", danger: true, size: 28, help: "删除") { model.requestDelete([entry.id]) }
+                HIconButton(symbol: "doc.on.doc", size: 28, help: l10n.t("copy")) { model.copy([entry.id], from: model.bridge.historyItems) }
+                HIconButton(symbol: "pencil", size: 28, help: l10n.t("hist.act.edit")) { model.startEdit(entry) }
+                HIconButton(symbol: "trash", danger: true, size: 28, help: l10n.t("delete")) { model.requestDelete([entry.id]) }
             }
             if canMergeUp || canMergeDown {
                 HStack(spacing: 2) {
-                    if canMergeUp { HIconButton(symbol: "arrow.up.to.line", size: 28, help: "并入上一条") { model.mergeUp(entry.id, flatIds: flatIds) } }
-                    if canMergeDown { HIconButton(symbol: "arrow.down.to.line", size: 28, help: "并入下一条") { model.mergeDown(entry.id, flatIds: flatIds) } }
+                    if canMergeUp { HIconButton(symbol: "arrow.up.to.line", size: 28, help: l10n.t("hist.act.mergeUp")) { model.mergeUp(entry.id, flatIds: flatIds) } }
+                    if canMergeDown { HIconButton(symbol: "arrow.down.to.line", size: 28, help: l10n.t("hist.act.mergeDown")) { model.mergeDown(entry.id, flatIds: flatIds) } }
                 }
             }
         }
@@ -282,11 +283,12 @@ struct FragRow: View {
 /// `.sheet`, so its scrolling never fights the list behind it.
 struct HistoryEditSheet: View {
     @ObservedObject var model: HistoryWorkspaceModel
+    @ObservedObject var l10n: L10n = .shared
     let allTagNames: [String]
     @Environment(\.colorScheme) private var scheme
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("编辑记录").font(Vibe.Fonts.ui(16, weight: .bold)).foregroundStyle(Vibe.Palette.text(scheme))
+            Text(l10n.t("hist.edit.title")).font(Vibe.Fonts.ui(16, weight: .bold)).foregroundStyle(Vibe.Palette.text(scheme))
             TextEditor(text: $model.draftText)
                 .font(Vibe.Fonts.mono(14)).scrollContentBackground(.hidden)
                 .frame(maxWidth: .infinity, minHeight: 200, maxHeight: .infinity, alignment: .topLeading)
@@ -299,10 +301,10 @@ struct HistoryEditSheet: View {
                 TagAddField { model.addDraftTag($0) }
             }
             HStack(spacing: 8) {
-                Text("⌘↵ 保存 · Esc 取消").font(Vibe.Fonts.ui(11)).foregroundStyle(Vibe.Palette.textFaint(scheme))
+                Text(l10n.t("hist.edit.hint")).font(Vibe.Fonts.ui(11)).foregroundStyle(Vibe.Palette.textFaint(scheme))
                 Spacer()
-                HBtn(title: "取消") { model.cancelEdit() }.keyboardShortcut(.cancelAction)
-                HBtn(title: "保存", system: "checkmark", kind: .accent) { model.commitEdit() }
+                HBtn(title: l10n.t("cancel")) { model.cancelEdit() }.keyboardShortcut(.cancelAction)
+                HBtn(title: l10n.t("hist.save"), system: "checkmark", kind: .accent) { model.commitEdit() }
                     .keyboardShortcut(.return, modifiers: .command)
             }
         }
@@ -317,7 +319,7 @@ private struct TagAddField: View {
     @State private var text = ""
     @Environment(\.colorScheme) private var scheme
     var body: some View {
-        TextField("加标签…", text: $text)
+        TextField(L10n.shared.t("hist.tag.add.ph"), text: $text)
             .textFieldStyle(.plain).font(Vibe.Fonts.ui(12))
             .frame(width: 90).padding(.horizontal, 10).frame(height: 24)
             .background(RoundedRectangle(cornerRadius: 12).fill(Vibe.Palette.surface(scheme)))
@@ -331,6 +333,7 @@ private struct TagAddField: View {
 
 struct ClusterWrap<Content: View>: View {
     @ObservedObject var model: HistoryWorkspaceModel
+    @ObservedObject var l10n: L10n = .shared
     let entries: [HistoryItem]      // ascending
     @ViewBuilder var content: () -> Content
     @Environment(\.colorScheme) private var scheme
@@ -341,12 +344,12 @@ struct ClusterWrap<Content: View>: View {
                 HStack(spacing: 9) {
                     RoundedRectangle(cornerRadius: 2).strokeBorder(Vibe.Palette.accentA.opacity(0.5), lineWidth: 2)
                         .frame(width: 8, height: 8)
-                    Text("连续 \(entries.count) 句 · \(total) 字")
+                    Text(l10n.t("hist.cluster.count", entries.count, total))
                         .font(Vibe.Fonts.ui(11.5, weight: .semibold)).foregroundStyle(Vibe.Palette.textMuted(scheme))
-                    Text("停顿内聚合").font(Vibe.Fonts.ui(10.5)).foregroundStyle(Vibe.Palette.textFaint(scheme))
+                    Text(l10n.t("hist.cluster.note")).font(Vibe.Fonts.ui(10.5)).foregroundStyle(Vibe.Palette.textFaint(scheme))
                 }
                 Spacer()
-                HBtn(title: "合并为一条", system: "arrow.triangle.merge") {
+                HBtn(title: l10n.t("hist.cluster.merge"), system: "arrow.triangle.merge") {
                     model.merge(entries.map(\.id), asNote: false)
                 }
             }
@@ -364,6 +367,7 @@ struct ClusterWrap<Content: View>: View {
 
 struct OnCallBlock<Content: View>: View {
     @ObservedObject var model: HistoryWorkspaceModel
+    @ObservedObject var l10n: L10n = .shared
     let nodeId: String
     let entries: [HistoryItem]      // ascending
     @ViewBuilder var children: () -> Content
@@ -379,13 +383,13 @@ struct OnCallBlock<Content: View>: View {
                 Text("OnCall").font(Vibe.Fonts.ui(9.5, weight: .bold)).foregroundStyle(Vibe.Palette.accentA)
                     .padding(.horizontal, 7).padding(.vertical, 1.5)
                     .background(Capsule().fill(Vibe.Palette.accentSoft(scheme)))
-                Text("\(entries.count) 段 · \(total) 字 · 连续识别")
+                Text(l10n.t("hist.oncall.count", entries.count, total))
                     .font(Vibe.Fonts.ui(12)).foregroundStyle(Vibe.Palette.textMuted(scheme))
                 Spacer()
                 if entries.count > 1 {
-                    HBtn(title: "合并", system: "arrow.triangle.merge") { model.merge(entries.map(\.id), asNote: false) }
+                    HBtn(title: l10n.t("hist.merge"), system: "arrow.triangle.merge") { model.merge(entries.map(\.id), asNote: false) }
                 }
-                HIconButton(symbol: "trash", danger: true, size: 28, help: "删除这段") { model.requestDelete(entries.map(\.id)) }
+                HIconButton(symbol: "trash", danger: true, size: 28, help: l10n.t("hist.oncall.del")) { model.requestDelete(entries.map(\.id)) }
             }
             .padding(.horizontal, 12).padding(.vertical, 9)
             .contentShape(Rectangle())
@@ -396,7 +400,7 @@ struct OnCallBlock<Content: View>: View {
                     .padding(.horizontal, 10).padding(.bottom, 6)
                     .overlay(alignment: .top) { Rectangle().fill(Vibe.Palette.hairline(scheme)).frame(height: 1) }
             } else {
-                Text((entries.first.map { String($0.text.prefix(54)) } ?? "") + "… 点击展开")
+                Text((entries.first.map { String($0.text.prefix(54)) } ?? "") + l10n.t("hist.oncall.expand"))
                     .font(Vibe.Fonts.mono(13)).foregroundStyle(Vibe.Palette.textMuted(scheme))
                     .lineLimit(1).padding(.horizontal, 34).padding(.bottom, 11)
             }
@@ -411,23 +415,24 @@ struct OnCallBlock<Content: View>: View {
 
 struct AggPopover: View {
     @ObservedObject var model: HistoryWorkspaceModel
+    @ObservedObject var l10n: L10n = .shared
     @Environment(\.colorScheme) private var scheme
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            label("聚合方式")
+            label(l10n.t("hist.agg.mode"))
             Picker("", selection: $model.aggMode) {
-                Text("按停顿间隔").tag(AggMode.pause)
-                Text("按累计字数").tag(AggMode.chars)
+                Text(l10n.t("hist.agg.byPause")).tag(AggMode.pause)
+                Text(l10n.t("hist.agg.byChars")).tag(AggMode.chars)
             }.pickerStyle(.segmented).labelsHidden()
             if model.aggMode == .pause {
-                label("停顿阈值 · 间隔超过即断段")
+                label(l10n.t("hist.agg.pauseHint"))
                 Picker("", selection: $model.gapMin) {
-                    ForEach([1, 2, 5, 10], id: \.self) { Text("≤\($0)分").tag($0) }
+                    ForEach([1, 2, 5, 10], id: \.self) { Text(l10n.t("hist.agg.minLabel", $0)).tag($0) }
                 }.pickerStyle(.segmented).labelsHidden()
             } else {
-                label("目标段落字数 · 凑够即成一段")
+                label(l10n.t("hist.agg.charsHint"))
                 Picker("", selection: $model.targetChars) {
-                    ForEach([60, 120, 200, 300], id: \.self) { Text("\($0)字").tag($0) }
+                    ForEach([60, 120, 200, 300], id: \.self) { Text(l10n.t("hist.agg.charLabel", $0)).tag($0) }
                 }.pickerStyle(.segmented).labelsHidden()
             }
         }
@@ -445,14 +450,15 @@ struct TagMenu: View {
     let allTags: [String]
     let onApply: (String) -> Void
     @State private var val = ""
+    @ObservedObject var l10n: L10n = .shared
     @Environment(\.colorScheme) private var scheme
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("打标签 · \(ids.count) 条").font(Vibe.Fonts.ui(11.5, weight: .bold))
+            Text(l10n.t("hist.tagmenu.title", ids.count)).font(Vibe.Fonts.ui(11.5, weight: .bold))
                 .foregroundStyle(Vibe.Palette.textMuted(scheme))
             HStack(spacing: 7) {
                 Image(systemName: "tag").font(.system(size: 12)).foregroundStyle(Vibe.Palette.textFaint(scheme))
-                TextField("新建或搜索标签…", text: $val).textFieldStyle(.plain).font(Vibe.Fonts.ui(13))
+                TextField(l10n.t("hist.tagmenu.ph"), text: $val).textFieldStyle(.plain).font(Vibe.Fonts.ui(13))
                     .onSubmit { if !val.trimmingCharacters(in: .whitespaces).isEmpty { onApply(val); val = "" } }
             }
             .padding(.horizontal, 9).frame(height: 32)
@@ -460,7 +466,7 @@ struct TagMenu: View {
             .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Vibe.Palette.hairline(scheme), lineWidth: 1))
             let matches = allTags.filter { val.isEmpty || $0.localizedCaseInsensitiveContains(val) }
             if matches.isEmpty && allTags.isEmpty {
-                Text("还没有标签，输入即可创建").font(Vibe.Fonts.ui(12)).foregroundStyle(Vibe.Palette.textFaint(scheme))
+                Text(l10n.t("hist.tagmenu.empty")).font(Vibe.Fonts.ui(12)).foregroundStyle(Vibe.Palette.textFaint(scheme))
             } else {
                 VStack(spacing: 2) {
                     ForEach(matches, id: \.self) { t in
@@ -483,6 +489,7 @@ struct TagMenu: View {
 
 struct BulkBar: View {
     @ObservedObject var model: HistoryWorkspaceModel
+    @ObservedObject var l10n: L10n = .shared
     let entries: [HistoryItem]
     let allTagNames: [String]
     @Environment(\.colorScheme) private var scheme
@@ -493,19 +500,19 @@ struct BulkBar: View {
             HStack(spacing: 8) {
                 Text("\(model.selection.count)").font(Vibe.Fonts.ui(12, weight: .bold)).foregroundStyle(.white)
                     .frame(minWidth: 22, minHeight: 22).background(Circle().fill(Vibe.Palette.accentA))
-                Text("已选").font(Vibe.Fonts.ui(13, weight: .bold)).foregroundStyle(Vibe.Palette.text(scheme))
+                Text(l10n.t("hist.selected")).font(Vibe.Fonts.ui(13, weight: .bold)).foregroundStyle(Vibe.Palette.text(scheme))
             }.padding(.leading, 4)
             divider
-            HBtn(title: "合并", system: "arrow.triangle.merge", disabled: model.selection.count < 2) { model.merge(ids, asNote: false) }
-            HBtn(title: "打标签", system: "tag") { tagPop = true }
+            HBtn(title: l10n.t("hist.merge"), system: "arrow.triangle.merge", disabled: model.selection.count < 2) { model.merge(ids, asNote: false) }
+            HBtn(title: l10n.t("hist.tagmenu.tag"), system: "tag") { tagPop = true }
                 .popover(isPresented: $tagPop, arrowEdge: .top) {
                     TagMenu(ids: ids, allTags: allTagNames) { model.applyTag(ids, $0); tagPop = false }
                 }
-            HBtn(title: "复制", system: "doc.on.doc") { model.copy(ids, from: entries) }
-            HBtn(title: "导出", system: "square.and.arrow.up") { model.exportItems(entries.filter { model.selection.contains($0.id) }) }
+            HBtn(title: l10n.t("copy"), system: "doc.on.doc") { model.copy(ids, from: entries) }
+            HBtn(title: l10n.t("hist.export"), system: "square.and.arrow.up") { model.exportItems(entries.filter { model.selection.contains($0.id) }) }
             divider
-            HBtn(title: "删除", system: "trash", kind: .danger) { model.requestDelete(ids) }
-            HIconButton(symbol: "xmark", size: 28, help: "取消选择") { model.clearSelection() }
+            HBtn(title: l10n.t("delete"), system: "trash", kind: .danger) { model.requestDelete(ids) }
+            HIconButton(symbol: "xmark", size: 28, help: l10n.t("hist.bulk.clear")) { model.clearSelection() }
         }
         .padding(.horizontal, 10).padding(.vertical, 8)
         .background(RoundedRectangle(cornerRadius: 12).fill(Vibe.Palette.surface2(scheme)))

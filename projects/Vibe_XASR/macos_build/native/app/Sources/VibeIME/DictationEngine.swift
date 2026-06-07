@@ -30,6 +30,12 @@ final class DictationEngine {
     private var buffer: [Float] = []
     private var preroll: [[Float]] = []
     private var active = false
+    /// 串行化引擎 + sherpa stream 的访问:feed/decode 跑在麦克风采集队列,而
+    /// startSession/endSession 由主线程(begin/endDictation)调用。两者并发会在
+    /// 解码进行中重置识别 stream → 野指针崩溃(EXC_BAD_ACCESS in beam-search Decode)。
+    /// 锁住三个入口即可保证同一时刻只有一个线程在动引擎/stream。回调都是 async 派发,
+    /// 不会在持锁期间重入,故无死锁风险。
+    private let lock = NSLock()
     /// Push-to-talk: the whole hold is ONE utterance. When true, mid-hold VAD
     /// pauses do NOT finalize (which would chop the utterance into fragments,
     /// each getting its own spurious trailing punctuation). false = hands-free
@@ -47,6 +53,7 @@ final class DictationEngine {
 
     /// Push-to-talk key down.
     func startSession() {
+        lock.lock(); defer { lock.unlock() }
         active = false
         buffer.removeAll()
         preroll.removeAll()
@@ -56,6 +63,7 @@ final class DictationEngine {
 
     /// Feed 16 kHz float samples (called repeatedly while the key is held).
     func feed(_ samples: [Float]) {
+        lock.lock(); defer { lock.unlock() }
         buffer.append(contentsOf: samples)
         while buffer.count >= windowSize {
             let w = Array(buffer.prefix(windowSize))
@@ -66,6 +74,7 @@ final class DictationEngine {
 
     /// Push-to-talk key up: finalize any in-flight sentence.
     func endSession() {
+        lock.lock(); defer { lock.unlock() }
         // Flush the trailing partial window (< windowSize samples) that never got
         // processed — otherwise the last few ms (a soft final syllable) are dropped.
         if active && !buffer.isEmpty { asr.accept(buffer) }

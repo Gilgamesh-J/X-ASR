@@ -104,7 +104,7 @@ final class HistoryWorkspaceModel: ObservableObject {
         }
         selection = []
         if let anchor { flashMerged([anchor]) }
-        showToast(asNote ? "已整理为笔记" : "已合并 \(ids.count) 条")
+        showToast(asNote ? L10n.shared.t("hist.toast.note") : L10n.shared.t("hist.toast.merged", ids.count))
     }
     /// Merge every cluster's fragments in one shot (`全部合并`).
     func mergeAll(_ clusters: [[UUID]]) {
@@ -120,7 +120,7 @@ final class HistoryWorkspaceModel: ObservableObject {
         }
         selection = []
         flashMerged(anchors)
-        showToast("已合并 \(clusters.count) 段 · \(frags) 句 → \(clusters.count) 条")
+        showToast(L10n.shared.t("hist.toast.mergedAll", clusters.count, frags, clusters.count))
     }
     /// Top-most (newest) id among `ids` — the entry a merge collapses into.
     private func topMost(_ ids: [UUID]) -> UUID? {
@@ -141,14 +141,14 @@ final class HistoryWorkspaceModel: ObservableObject {
         pushUndo()
         bridge.applyTag(ids: ids, tag: t)
         selection = []
-        showToast("已为 \(ids.count) 条加上标签「\(t)」")
+        showToast(L10n.shared.t("hist.toast.tagged", ids.count, t))
     }
     func delete(_ ids: [UUID]) {
         guard !ids.isEmpty else { return }
         pushUndo()
         for id in ids { bridge.delete(id: id) }
         selection = []
-        showToast("已删除 \(ids.count) 条")
+        showToast(L10n.shared.t("hist.toast.deleted", ids.count))
     }
     /// Ask for confirmation before deleting (prevents mis-taps). The view shows a
     /// dialog bound to `pendingDelete`; confirm → `confirmDelete()`. Even after
@@ -159,14 +159,14 @@ final class HistoryWorkspaceModel: ObservableObject {
         pushUndo()
         bridge.clearAll()
         confirmClear = false
-        showToast("已清空全部记录")
+        showToast(L10n.shared.t("hist.toast.cleared"))
     }
     func copy(_ ids: [UUID], from entries: [HistoryItem]) {
         let set = Set(ids)
         let txt = entries.filter { set.contains($0.id) }.sorted { $0.date < $1.date }
             .map(\.text).joined(separator: "\n")
         let pb = NSPasteboard.general; pb.clearContents(); pb.setString(txt, forType: .string)
-        showToast("已复制 \(ids.count) 条")
+        showToast(L10n.shared.t("hist.toast.copied", ids.count))
     }
     func addEntry() {
         pushUndo()
@@ -285,6 +285,6 @@ final class HistoryWorkspaceModel: ObservableObject {
             data = Data(sorted.map { "\(f.string(from: $0.date))\n\($0.text)" }.joined(separator: "\n\n").utf8)
         }
         try? data.write(to: url, options: .atomic)
-        showToast("已导出 \(items.count) 条")
+        showToast(L10n.shared.t("hist.toast.exported", items.count))
     }
 }

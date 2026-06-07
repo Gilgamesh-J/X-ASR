@@ -212,8 +212,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         // When a download finishes, if the just-completed tier is the one the
         // user selected, swap the engine onto it.
         nc.addObserver(forName: SettingsStore.changed, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.refreshCorrections() }
+            MainActor.assumeIsolated { self?.refreshCorrections(); self?.relocalizeChrome() }
         }
+    }
+
+    /// 语言切换后,刷新「命令式」AppKit 文案:状态栏菜单标题 + 各窗口标题。
+    /// (SwiftUI 内容自己 observe L10n 会变;NSMenu / NSWindow.title 是一次性设的,需手动重设。)
+    private func relocalizeChrome() {
+        relocalizeMenu()
+        settingsWindow?.title = L10n.shared.t("settings.window.title")
+        historyWindow?.title = L10n.shared.t("history.title")
+        padWindow?.title = L10n.shared.t("pad.title")
+        promptStudioWindow?.title = L10n.shared.t("studio.window.title")
     }
 
     /// Apply the current Dock-icon preference live + keep the menu toggle synced.
@@ -1239,10 +1249,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         hudModel.elapsed = "0:00"
         sessionStart = Date()
         startElapsedTimer()
-        // 逐字 (streaming) mode types straight into the focused app — no overlay (the
-        // 60fps HUD competed for the main thread and could drop keystrokes). The
-        // one-shot "paste" mode still shows the HUD so you can preview before release.
-        if store.insertMethod != "type" { showHUD() }
+        // 悬浮条对所有模式都显示——逐字模式也需要它做「在听 / 已锁定」的反馈(否则轻点/单击
+        // 切换没有任何提示)。插入走 StreamingInserter 自己的串行队列、与主线程 60fps 无关,
+        // 不再像早期那样掉键。
+        showHUD()
         setStatusIcon("🔴")
 
         engine.startSession()

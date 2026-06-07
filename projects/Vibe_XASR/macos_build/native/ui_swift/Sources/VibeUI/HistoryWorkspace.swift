@@ -67,19 +67,19 @@ public struct HistoryWorkspace<Store: HistoryBridge & ObservableObject>: View {
             .animation(.easeOut(duration: 0.15), value: model.toast)
         }
         .frame(minWidth: 720, minHeight: 420)
-        .confirmationDialog("确定清空全部记录?", isPresented: $model.confirmClear, titleVisibility: .visible) {
-            Button("清空(不可恢复)", role: .destructive) { model.clearAll(count: entries.count) }
-            Button("取消", role: .cancel) {}
+        .confirmationDialog(l10n.t("hist.clear.confirm"), isPresented: $model.confirmClear, titleVisibility: .visible) {
+            Button(l10n.t("hist.clear.do"), role: .destructive) { model.clearAll(count: entries.count) }
+            Button(l10n.t("cancel"), role: .cancel) {}
         } message: {
-            Text("将永久删除全部 \(entries.count) 条本地记录,可撤销一次。")
+            Text(l10n.t("hist.clear.msg", entries.count))
         }
-        .confirmationDialog("删除选中的记录?", isPresented: Binding(
+        .confirmationDialog(l10n.t("hist.del.confirm"), isPresented: Binding(
             get: { model.pendingDelete != nil },
             set: { if !$0 { model.pendingDelete = nil } }), titleVisibility: .visible) {
-            Button("删除 \(model.pendingDelete?.count ?? 0) 条", role: .destructive) { model.confirmDelete() }
-            Button("取消", role: .cancel) { model.pendingDelete = nil }
+            Button(l10n.t("hist.del.do", model.pendingDelete?.count ?? 0), role: .destructive) { model.confirmDelete() }
+            Button(l10n.t("cancel"), role: .cancel) { model.pendingDelete = nil }
         } message: {
-            Text("删除后可用顶部「撤销」恢复。")
+            Text(l10n.t("hist.del.msg"))
         }
         .sheet(isPresented: Binding(
             get: { model.editingID != nil },
@@ -97,16 +97,16 @@ public struct HistoryWorkspace<Store: HistoryBridge & ObservableObject>: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Vibe.accentGradient)
                 .frame(width: 30, height: 30)
                 .overlay(LogoBars(heights: [6, 12, 8], barW: 2.5, gap: 2.5))
-            Text("历史").font(Vibe.Fonts.ui(20, weight: .bold)).foregroundStyle(Vibe.Palette.text(scheme))
-            Text("\(entries.count) 条").font(Vibe.Fonts.ui(13, weight: .medium)).foregroundStyle(Vibe.Palette.textMuted(scheme))
-            (Text(" · 累计 ") + Text(verbatim: String(chars)).font(Vibe.Fonts.mono(13)).bold() + Text(" 字 · 省 ") + Text(verbatim: String(mins)).font(Vibe.Fonts.mono(13)).bold() + Text(" 分"))
+            Text(l10n.t("hist.title")).font(Vibe.Fonts.ui(20, weight: .bold)).foregroundStyle(Vibe.Palette.text(scheme))
+            Text(l10n.t("hist.count", entries.count)).font(Vibe.Fonts.ui(13, weight: .medium)).foregroundStyle(Vibe.Palette.textMuted(scheme))
+            (Text(l10n.t("hist.stats.total", String(chars))) + Text(l10n.t("hist.stats.saved", String(mins))))
                 .font(Vibe.Fonts.ui(13)).foregroundStyle(Vibe.Palette.textMuted(scheme))
             onCallCheck
             Spacer()
             undoButton
             privacyPill
-            HBtn(title: "导出", system: "square.and.arrow.up") { model.exportItems(entries) }
-            HBtn(title: "全部清空", kind: .danger) { model.confirmClear = true }
+            HBtn(title: l10n.t("hist.export"), system: "square.and.arrow.up") { model.exportItems(entries) }
+            HBtn(title: l10n.t("clear.all"), kind: .danger) { model.confirmClear = true }
         }
         .padding(.horizontal, 20).padding(.vertical, 13)
         .background(Vibe.Palette.surface2(scheme))
@@ -119,7 +119,7 @@ public struct HistoryWorkspace<Store: HistoryBridge & ObservableObject>: View {
                     .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(model.showOnCall ? Vibe.Palette.accentA : Vibe.Palette.hairlineStrong(scheme), lineWidth: 1.5))
                     .overlay(model.showOnCall ? Image(systemName: "checkmark").font(.system(size: 8, weight: .bold)).foregroundStyle(.white) : nil)
                     .frame(width: 16, height: 16)
-                Text("显示 OnCall 内容").font(Vibe.Fonts.ui(12))
+                Text(l10n.t("hist.showOnCall")).font(Vibe.Fonts.ui(12))
                     .foregroundStyle(model.showOnCall ? Vibe.Palette.text(scheme) : Vibe.Palette.textMuted(scheme))
             }
         }.buttonStyle(.plain).padding(.leading, 4)
@@ -128,12 +128,12 @@ public struct HistoryWorkspace<Store: HistoryBridge & ObservableObject>: View {
     private var privacyPill: some View {
         HStack(spacing: 6) {
             Image(systemName: "lock.fill").font(.system(size: 11))
-            Text("本地").font(Vibe.Fonts.ui(12.5, weight: .semibold))
+            Text(l10n.t("hist.local")).font(Vibe.Fonts.ui(12.5, weight: .semibold))
         }
         .foregroundStyle(Vibe.Palette.success)
         .padding(.horizontal, 11).frame(height: 30)
         .background(RoundedRectangle(cornerRadius: 8).fill(Vibe.Palette.success.opacity(0.12)))
-        .help("您的数据永远保存在本地,绝不上云 · Your data stays on this device — never uploaded.")
+        .help(l10n.t("hist.privacy.help"))
     }
 
     /// Fixed, prominent undo (top header). Always present; dim + disabled when the
@@ -143,7 +143,7 @@ public struct HistoryWorkspace<Store: HistoryBridge & ObservableObject>: View {
         Button { model.doUndo() } label: {
             HStack(spacing: 6) {
                 Image(systemName: "arrow.uturn.backward").font(.system(size: 13, weight: .semibold))
-                Text("撤销").font(Vibe.Fonts.ui(13, weight: .semibold))
+                Text(l10n.t("hist.undo")).font(Vibe.Fonts.ui(13, weight: .semibold))
             }
             .foregroundStyle(model.canUndo ? Vibe.Palette.accentA : Vibe.Palette.textFaint(scheme))
             .padding(.horizontal, 14).frame(height: 32)
@@ -153,7 +153,7 @@ public struct HistoryWorkspace<Store: HistoryBridge & ObservableObject>: View {
                 .strokeBorder(model.canUndo ? Vibe.Palette.accentA.opacity(0.45) : .clear, lineWidth: 1))
         }
         .buttonStyle(.plain).disabled(!model.canUndo)
-        .help("撤销上一步操作")
+        .help(l10n.t("hist.undo.help"))
     }
 
     // MARK: toolbar
@@ -162,19 +162,19 @@ public struct HistoryWorkspace<Store: HistoryBridge & ObservableObject>: View {
         HStack(spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").font(.system(size: 13)).foregroundStyle(Vibe.Palette.textFaint(scheme))
-                TextField("搜索记录…", text: $model.query).textFieldStyle(.plain).font(Vibe.Fonts.ui(13))
+                TextField(l10n.t("hist.search.ph"), text: $model.query).textFieldStyle(.plain).font(Vibe.Fonts.ui(13))
             }
             .padding(.horizontal, 11).frame(height: 32).frame(maxWidth: 340)
             .background(RoundedRectangle(cornerRadius: 8).fill(Vibe.Palette.surface2(scheme)))
             .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Vibe.Palette.hairline(scheme), lineWidth: 1))
 
-            HBtn(title: "新建", system: "plus") { model.addEntry() }
+            HBtn(title: l10n.t("hist.new"), system: "plus") { model.addEntry() }
             Spacer()
-            chip(label: "自动聚合", system: "arrow.triangle.merge", on: model.aggregate) { model.aggregate.toggle() }
+            chip(label: l10n.t("hist.agg"), system: "arrow.triangle.merge", on: model.aggregate) { model.aggregate.toggle() }
             if model.aggregate {
                 Button { model.aggOpen.toggle() } label: {
                     HStack(spacing: 6) {
-                        Text(model.aggMode == .pause ? "停顿 ≤\(model.gapMin)分" : "每 \(model.targetChars) 字").font(Vibe.Fonts.ui(12, weight: .semibold))
+                        Text(model.aggMode == .pause ? l10n.t("hist.agg.pause", model.gapMin) : l10n.t("hist.agg.chars", model.targetChars)).font(Vibe.Fonts.ui(12, weight: .semibold))
                         Image(systemName: "slider.horizontal.3").font(.system(size: 11))
                     }
                     .foregroundStyle(Vibe.Palette.textMuted(scheme))
@@ -185,8 +185,8 @@ public struct HistoryWorkspace<Store: HistoryBridge & ObservableObject>: View {
                 .popover(isPresented: $model.aggOpen, arrowEdge: .bottom) { AggPopover(model: model) }
             }
             Picker("", selection: $model.pane) {
-                Text("列表").tag(WorkspacePane.list)
-                Text("日历").tag(WorkspacePane.calendar)
+                Text(l10n.t("hist.pane.list")).tag(WorkspacePane.list)
+                Text(l10n.t("hist.calendar")).tag(WorkspacePane.calendar)
             }.pickerStyle(.segmented).labelsHidden().frame(width: 130)
         }
         .padding(.horizontal, 20).padding(.vertical, 11)
@@ -211,7 +211,7 @@ public struct HistoryWorkspace<Store: HistoryBridge & ObservableObject>: View {
             HStack(spacing: 8) {
                 Image(systemName: "tag").font(.system(size: 12)).foregroundStyle(Vibe.Palette.textFaint(scheme))
                 Button { model.tagFilter = nil } label: {
-                    Text("全部").font(Vibe.Fonts.ui(12, weight: .semibold))
+                    Text(l10n.t("hist.tag.all")).font(Vibe.Fonts.ui(12, weight: .semibold))
                         .foregroundStyle(model.tagFilter == nil ? Vibe.Palette.surface(scheme) : Vibe.Palette.textMuted(scheme))
                         .padding(.horizontal, 11).frame(height: 24)
                         .background(Capsule().fill(model.tagFilter == nil ? Vibe.Palette.text(scheme) : Vibe.Palette.surface2(scheme)))
@@ -231,10 +231,10 @@ public struct HistoryWorkspace<Store: HistoryBridge & ObservableObject>: View {
         let d = entries.first { historyDayKey($0.date) == sd }?.date ?? Date()
         return HStack(spacing: 10) {
             Image(systemName: "calendar").font(.system(size: 13)).foregroundStyle(Vibe.Palette.accentA)
-            Text("正在查看 ").font(Vibe.Fonts.ui(13)).foregroundStyle(Vibe.Palette.text(scheme))
+            Text(l10n.t("hist.viewing")).font(Vibe.Fonts.ui(13)).foregroundStyle(Vibe.Palette.text(scheme))
             + Text(histDayLabel(sd, d, todayKey: today, yestKey: yest)).font(Vibe.Fonts.ui(13, weight: .bold)).foregroundStyle(Vibe.Palette.text(scheme))
             Spacer()
-            HBtn(title: "查看全部") { model.selectedDay = nil }
+            HBtn(title: l10n.t("hist.viewAll")) { model.selectedDay = nil }
         }
         .padding(.horizontal, 20).padding(.vertical, 10)
         .background(Vibe.Palette.accentSoft(scheme))
@@ -264,7 +264,7 @@ public struct HistoryWorkspace<Store: HistoryBridge & ObservableObject>: View {
                         if groups.isEmpty {
                             VStack(spacing: 10) {
                                 Image(systemName: "magnifyingglass").font(.system(size: 26)).foregroundStyle(Vibe.Palette.textFaint(scheme))
-                                Text(model.query.isEmpty && model.tagFilter == nil ? "暂无记录" : "没有匹配的记录")
+                                Text(model.query.isEmpty && model.tagFilter == nil ? l10n.t("hist.empty") : l10n.t("hist.empty.search"))
                                     .font(Vibe.Fonts.ui(13)).foregroundStyle(Vibe.Palette.textMuted(scheme))
                             }.frame(maxWidth: .infinity).padding(.top, 80)
                         }
@@ -308,11 +308,11 @@ public struct HistoryWorkspace<Store: HistoryBridge & ObservableObject>: View {
         let frags = clusterLists.reduce(0) { $0 + $1.count }
         return HStack(spacing: 10) {
             Image(systemName: "arrow.triangle.merge").font(.system(size: 14)).foregroundStyle(Vibe.Palette.accentA)
-            (Text(model.aggMode == .pause ? "按 ≤\(model.gapMin) 分钟 停顿聚合" : "按 每 \(model.targetChars) 字 聚合")
-             + Text(" · 发现 ") + Text("\(clusterLists.count)").bold() + Text(" 段连续碎句（共 \(frags) 句）"))
+            (Text(model.aggMode == .pause ? l10n.t("hist.aggbar.pause", model.gapMin) : l10n.t("hist.aggbar.chars", model.targetChars))
+             + Text(l10n.t("hist.aggbar.found")) + Text("\(clusterLists.count)").bold() + Text(l10n.t("hist.aggbar.frags", frags)))
                 .font(Vibe.Fonts.ui(13)).foregroundStyle(Vibe.Palette.text(scheme))
             Spacer()
-            HBtn(title: "全部合并 → \(clusterLists.count) 条", system: "arrow.triangle.merge", kind: .accent) {
+            HBtn(title: l10n.t("hist.aggbar.mergeall", clusterLists.count), system: "arrow.triangle.merge", kind: .accent) {
                 model.mergeAll(clusterLists)
             }
         }
@@ -326,10 +326,10 @@ public struct HistoryWorkspace<Store: HistoryBridge & ObservableObject>: View {
         HStack(spacing: 10) {
             Text(histDayLabel(g.key, g.date, todayKey: today, yestKey: yest))
                 .font(Vibe.Fonts.ui(12.5, weight: .bold)).foregroundStyle(Vibe.Palette.textMuted(scheme))
-            Text("\(g.count) 条").font(Vibe.Fonts.ui(11)).foregroundStyle(Vibe.Palette.textFaint(scheme))
+            Text(l10n.t("hist.count", g.count)).font(Vibe.Fonts.ui(11)).foregroundStyle(Vibe.Palette.textFaint(scheme))
                 .padding(.horizontal, 8).padding(.vertical, 2).background(Capsule().fill(Vibe.Palette.surface2(scheme)))
             Rectangle().fill(Vibe.Palette.hairline(scheme)).frame(height: 1)
-            HIconButton(symbol: "checkmark.circle", size: 26, help: "全选当天") {
+            HIconButton(symbol: "checkmark.circle", size: 26, help: l10n.t("hist.selectDay")) {
                 let ids = entries.filter { historyDayKey($0.date) == g.key }.map(\.id)
                 model.selectDay(ids)
             }
@@ -374,12 +374,12 @@ public struct HistoryWorkspace<Store: HistoryBridge & ObservableObject>: View {
         return VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 7) {
                 Image(systemName: "calendar").font(.system(size: 13)).foregroundStyle(Vibe.Palette.textMuted(scheme))
-                Text("日历").font(Vibe.Fonts.ui(12, weight: .bold)).foregroundStyle(Vibe.Palette.textMuted(scheme)).tracking(0.5)
+                Text(l10n.t("hist.calendar")).font(Vibe.Fonts.ui(12, weight: .bold)).foregroundStyle(Vibe.Palette.textMuted(scheme)).tracking(0.5)
             }.padding(.bottom, 12)
             MiniCalendar(counts: counts, selected: model.selectedDay, todayKey: today) { model.selectedDay = $0 }
             VStack(spacing: 9) {
-                railStat("本月记录", "\(monthCount) 条")
-                railStat("活跃天数", "\(counts.keys.count) 天")
+                railStat(l10n.t("hist.rail.month"), l10n.t("hist.count", monthCount))
+                railStat(l10n.t("hist.rail.active"), l10n.t("hist.rail.days", counts.keys.count))
             }
             .padding(.top, 14).overlay(alignment: .top) { Rectangle().fill(Vibe.Palette.hairline(scheme)).frame(height: 1) }
             .padding(.top, 4)
@@ -402,10 +402,10 @@ public struct HistoryWorkspace<Store: HistoryBridge & ObservableObject>: View {
 
     private var shortcutsBar: some View {
         HStack(spacing: 14) {
-            kb(["J", "K"], "移动"); kb(["X"], "选择"); kb(["E"], "编辑")
-            kb(["D"], "删除"); kb(["M"], "合并所选"); kb(["A"], "全选"); kb(["Esc"], "取消")
+            kb(["J", "K"], l10n.t("hist.kb.move")); kb(["X"], l10n.t("hist.kb.select")); kb(["E"], l10n.t("hist.kb.edit"))
+            kb(["D"], l10n.t("hist.kb.delete")); kb(["M"], l10n.t("hist.kb.merge")); kb(["A"], l10n.t("hist.kb.all")); kb(["Esc"], l10n.t("cancel"))
             Spacer()
-            Text("Shift+点击 选范围").font(Vibe.Fonts.ui(11)).foregroundStyle(Vibe.Palette.textFaint(scheme))
+            Text(l10n.t("hist.kb.range")).font(Vibe.Fonts.ui(11)).foregroundStyle(Vibe.Palette.textFaint(scheme))
         }
         .padding(.horizontal, 20).padding(.vertical, 7)
         .background(Vibe.Palette.surface2(scheme))

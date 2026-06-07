@@ -5,12 +5,17 @@
 
 import SwiftUI
 
-private let kWeekdays = ["一", "二", "三", "四", "五", "六", "日"]
+/// Monday-first short weekday names, localized. Cocoa weekday 1=Sun … 7=Sat;
+/// `weekdayShort` takes 0=Sun … 6=Sat, so Monday-first order is [1,2,3,4,5,6,0].
+@MainActor private var kWeekdays: [String] {
+    [1, 2, 3, 4, 5, 6, 0].map { L10n.shared.weekdayShort($0) }
+}
 private let kCalCols = Array(repeating: GridItem(.flexible(), spacing: 2), count: 7)
 
 /// Month title + prev / 今天 / next navigation, shared by mini + heatmap.
 struct MonthHeaderView: View {
     @Binding var cursor: Date
+    @ObservedObject var l10n: L10n = .shared
     @Environment(\.colorScheme) private var scheme
     private let cal = Calendar.current
 
@@ -20,14 +25,14 @@ struct MonthHeaderView: View {
     var body: some View {
         let c = cal.dateComponents([.year, .month], from: cursor)
         HStack {
-            Text("\(String(c.year ?? 0)) 年 \(c.month ?? 0) 月")
+            Text(l10n.t("hist.cal.month", String(c.year ?? 0), c.month ?? 0))
                 .font(Vibe.Fonts.ui(13.5, weight: .bold))
                 .foregroundStyle(Vibe.Palette.text(scheme))
             Spacer()
             HStack(spacing: 2) {
                 navBtn("chevron.left") { shift(-1) }
                 Button { cursor = Date() } label: {
-                    Text("今天").font(Vibe.Fonts.ui(11))
+                    Text(l10n.t("hist.today")).font(Vibe.Fonts.ui(11))
                         .foregroundStyle(Vibe.Palette.textMuted(scheme))
                         .padding(.horizontal, 8).frame(height: 24)
                 }.buttonStyle(.plain)
@@ -46,6 +51,7 @@ struct MonthHeaderView: View {
 }
 
 private struct WeekdayRow: View {
+    @ObservedObject var l10n: L10n = .shared
     @Environment(\.colorScheme) private var scheme
     var big = false
     var body: some View {
@@ -193,11 +199,11 @@ struct MonthHeatmap: View {
     private var legend: some View {
         HStack(spacing: 5) {
             Spacer()
-            Text("少").font(Vibe.Fonts.ui(11)).foregroundStyle(Vibe.Palette.textFaint(scheme))
+            Text(L10n.shared.t("hist.heat.less")).font(Vibe.Fonts.ui(11)).foregroundStyle(Vibe.Palette.textFaint(scheme))
             ForEach(0..<5, id: \.self) { l in
                 RoundedRectangle(cornerRadius: 4).fill(bg(l)).frame(width: 14, height: 14)
             }
-            Text("多").font(Vibe.Fonts.ui(11)).foregroundStyle(Vibe.Palette.textFaint(scheme))
+            Text(L10n.shared.t("hist.heat.more")).font(Vibe.Fonts.ui(11)).foregroundStyle(Vibe.Palette.textFaint(scheme))
         }
         .padding(.top, 14)
     }
