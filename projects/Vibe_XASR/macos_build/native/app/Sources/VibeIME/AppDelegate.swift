@@ -17,7 +17,7 @@ import os
 ///   * Live engine swap when the VAD kind or latency tier changes (off the audio
 ///     path, on the main actor), with a brief "切换中…" state in Settings.
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuDelegate {
 
     // MARK: UI
     private var statusItem: NSStatusItem!
@@ -34,14 +34,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var finalizeFallbackWork: DispatchWorkItem?   // 空点一下的兜底收尾
     /// 本次润色前,本地规则(同音字/替换)所做改动的描述,注入 {{changes}} 供大模型复核。
     private var currentRuleChanges = "(无)"
+    /// 本次听写要套用的模板(模板快捷键触发时设;主快捷键为 nil → 用当前选中模板/自动)。
+    private var currentSessionTemplateId: String?
     /// 是否有就绪的润色后端(云端或本地)。判定走异步润色路径,而非看本地开关(云端开关是 cloudEnabled)。
     private var refinerActive: Bool { Refiner.shared.backend?.isReady == true }
+    /// 单击切换模式下,当前是否正在听写(用于把第二次按键解读为「停止」)。
+    private var toggleDictating = false
+    /// 智能模式(按住说话 / 轻点锁定)的运行状态。
+    private var hybridPressAt: Date?       // 本次按下时刻;判定轻点(短按)还是长按
+    private var hybridLatched = false      // 轻点已锁定(免持,等下一次轻点停止)
+    private var hybridIgnoreUp = false     // 「再点停止」那一下的松开要忽略
+    private let tapThreshold: TimeInterval = 0.35   // ≤ 此值算「轻点」→ 锁定;否则算「长按」→ 松开即停
+    /// 临时静音麦克风(菜单栏快捷开关);开启时 beginDictation 直接 no-op。运行时态,不持久化。
+    private var micMuted = false
+    /// 落字后「撤销 / 重润色」用:本次原始 ASR + 实际插入的文本(仅 paste 模式 + 润色过)。
+    private var lastRawASR: String?
+    private var lastInserted: String?
+    /// HUD 出现那一刻鼠标是否已停在其上(用于区分「一直停在那」与「事后移过来」)。
+    private var hudCursorParked = false
     private var settingsWindow: NSWindow?
     private var onboardingWindow: NSWindow?
     private var padWindow: NSWindow?
     private var historyWindow: NSWindow?
+    private var promptStudioWindow: NSWindow?
     private var statusMenuItem: NSMenuItem!
     private var dockToggleItem: NSMenuItem!
+    private var aiPolishItem: NSMenuItem!       // 快捷:AI 润色 开/关(暂停)
+    private var templateItem: NSMenuItem!       // 快捷:当前生效模板(子菜单)
+    private var micMuteItem: NSMenuItem!        // 快捷:临时静音麦克风
     // Held so the menu can be re-localized live when the UI language changes.
     private var settingsItem: NSMenuItem!
     private var padItem: NSMenuItem!
@@ -80,8 +100,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     override init() {
         let s = SettingsStore.shared
-        self.hotkey = Hotkey(keycode: CGKeyCode(s.hotkeyKeyCode),
-                             modifierOnly: s.hotkeyModifierOnly)
+        // 仅默认主键;模板快捷键在 applicationDidFinishLaunching 的 rebuildHotkeys() 里补上。
+        self.hotkey = Hotkey(bindings: [Hotkey.Binding(id: nil, keycode: CGKeyCode(s.hotkeyKeyCode),
+                                                       mods: HotkeyMods(rawValue: s.hotkeyMods),
+                                                       modifierOnly: s.hotkeyModifierOnly)])
         super.init()
     }
 
@@ -109,8 +131,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         setupStatusItem()
         setupHUDPanel()
         loadEngine()
-        wireHotkey()
-        _ = hotkey.start()
+        wireMic()
+        rebuildHotkeys()          // 主键 + 模板快捷键(组合),并 start
         keepAliveInBackground()   // keep the global hotkey responsive with no window open
 
         installEditMenu()      // so ⌘C/⌘V/⌘X/⌘A/⌘Z work in Settings text fields
@@ -164,7 +186,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let nc = NotificationCenter.default
         nc.addObserver(forName: SettingsStore.hotkeyChanged, object: nil, queue: .main) {
             [weak self] _ in
-            MainActor.assumeIsolated { self?.restartHotkey() }
+            MainActor.assumeIsolated { self?.rebuildHotkeys() }
+        }
+        // 设置页「在新窗口打开」提示词工作室(VibeUI 经通知解耦)。
+        nc.addObserver(forName: .vibeOpenPromptStudio, object: nil, queue: .main) {
+            [weak self] _ in
+            MainActor.assumeIsolated { self?.openPromptStudio() }
         }
         nc.addObserver(forName: SettingsStore.dockIconChanged, object: nil, queue: .main) {
             [weak self] _ in
@@ -200,13 +227,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
-    /// Tear down + recreate the global key listener for a new keycode (live).
-    private func restartHotkey() {
+    /// 拆掉旧 tap,按当前设置(主键 + 模板快捷键)重建并启动。主键/模板键变更时调用。
+    private func rebuildHotkeys() {
         hotkey.stop()
-        hotkey = Hotkey(keycode: CGKeyCode(store.hotkeyKeyCode),
-                        modifierOnly: store.hotkeyModifierOnly)
-        wireHotkey()
+        toggleDictating = false   // 重建(含模式切换)时清掉切换态,避免卡在「已开始」
+        hybridLatched = false; hybridPressAt = nil; hybridIgnoreUp = false
+        hotkey = Hotkey(bindings: makeHotkeyBindings())
+        wireHotkeys()
         _ = hotkey.start()
+    }
+    /// 组装绑定:默认主键 + 每个仍存在的模板的快捷键(去掉孤儿、去重)。
+    private func makeHotkeyBindings() -> [Hotkey.Binding] {
+        var out: [Hotkey.Binding] = [
+            Hotkey.Binding(id: nil, keycode: CGKeyCode(store.hotkeyKeyCode),
+                           mods: HotkeyMods(rawValue: store.hotkeyMods), modifierOnly: store.hotkeyModifierOnly)
+        ]
+        let ids = AppDelegate.decodeTemplateIds(store.cloudTemplatesJSON)
+        for (tid, h) in CloudTemplateHotkeys.decode(store.cloudTemplateHotkeysJSON) {
+            guard ids.contains(tid) else { continue }   // 模板已删 → 跳过
+            let b = Hotkey.Binding(id: tid, keycode: CGKeyCode(h.keyCode),
+                                   mods: HotkeyMods(rawValue: h.mods), modifierOnly: h.modifierOnly)
+            // 与已有绑定撞键 → 跳过(主键优先,先到先得)。
+            if out.contains(where: { $0.keycode == b.keycode && $0.mods == b.mods && $0.modifierOnly == b.modifierOnly }) { continue }
+            out.append(b)
+        }
+        return out
+    }
+    static func decodeTemplateIds(_ json: String) -> Set<String> {
+        guard let d = json.data(using: .utf8),
+              let a = try? JSONDecoder().decode([PromptTemplate].self, from: d) else { return [] }
+        return Set(a.map { $0.id })
     }
 
     /// (Re)start or stop the local share API (共享) to match current settings.
@@ -285,6 +335,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         menu.addItem(statusMenuItem)
         menu.addItem(.separator())
 
+        // ===== 快捷开关(即点即生效)=====
+        aiPolishItem = NSMenuItem(title: L10n.shared.t("menu.aiPolish"),
+                                  action: #selector(toggleAIPolish), keyEquivalent: "")
+        aiPolishItem.target = self
+        menu.addItem(aiPolishItem)
+
+        templateItem = NSMenuItem(title: L10n.shared.t("menu.template"), action: nil, keyEquivalent: "")
+        templateItem.submenu = NSMenu()
+        menu.addItem(templateItem)
+
+        micMuteItem = NSMenuItem(title: L10n.shared.t("menu.micMute"),
+                                 action: #selector(toggleMicMute), keyEquivalent: "")
+        micMuteItem.target = self
+        menu.addItem(micMuteItem)
+        menu.addItem(.separator())
+
         dockToggleItem = NSMenuItem(title: L10n.shared.t("menu.showDock"),
                                     action: #selector(toggleDockIcon), keyEquivalent: "")
         dockToggleItem.target = self
@@ -324,12 +390,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         quitItem.target = self
         menu.addItem(quitItem)
 
+        menu.delegate = self   // 打开前刷新动态状态(勾选 / 模板子菜单)
         statusItem.menu = menu
+    }
+
+    /// 重建「当前生效模板」子菜单:⚡自动 + 内置「口语转书面」+ 自定义模板,勾选当前项。
+    private func rebuildTemplateSubmenu() {
+        guard let submenu = templateItem?.submenu else { return }
+        submenu.removeAllItems()
+        let active = store.cloudActiveTemplate
+        func add(_ id: String, _ name: String) {
+            let it = NSMenuItem(title: name, action: #selector(setActiveTemplate(_:)), keyEquivalent: "")
+            it.target = self
+            it.representedObject = id
+            it.state = (active == id) ? .on : .off
+            submenu.addItem(it)
+        }
+        add("auto", L10n.shared.t("llm.tpl.auto"))
+        let lang = L10n.resolve(stored: store.storedLang)
+        for t in AppDelegate.decodeTemplates(store.cloudTemplatesJSON) {
+            // 内置锁定 t1 随 UI 语言显示名;自定义模板用其存储名。
+            let name = (t.id == LocalizedPrompts.seedTemplateId) ? LocalizedPrompts.seed(lang: lang).name : t.name
+            add(t.id, name)
+        }
+    }
+    static func decodeTemplates(_ json: String) -> [PromptTemplate] {
+        guard let d = json.data(using: .utf8),
+              let a = try? JSONDecoder().decode([PromptTemplate].self, from: d) else { return [] }
+        return a
+    }
+
+    @objc private func toggleAIPolish() {
+        store.polishPaused.toggle()
+        refreshRefiner()
+        aiPolishItem?.state = (!store.polishPaused && refinerActive) ? .on : .off
+    }
+    @objc private func setActiveTemplate(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        store.cloudActiveTemplate = id
+        rebuildTemplateSubmenu()
+    }
+    @objc private func toggleMicMute() {
+        micMuted.toggle()
+        if micMuted, toggleDictating { endDictation() }   // 静音时若正在听写,立即收掉
+        micMuteItem?.state = micMuted ? .on : .off
     }
 
     /// Re-apply localized titles to the native menu when the UI language changes
     /// (the AppKit NSMenu isn't a SwiftUI view, so it can't observe L10n itself).
     private func relocalizeMenu() {
+        aiPolishItem?.title = L10n.shared.t("menu.aiPolish")
+        templateItem?.title = L10n.shared.t("menu.template")
+        micMuteItem?.title = L10n.shared.t("menu.micMute")
         dockToggleItem?.title = L10n.shared.t("menu.showDock")
         settingsItem?.title = L10n.shared.t("menu.settings")
         padItem?.title = L10n.shared.t("menu.pad")
@@ -344,6 +456,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     @objc private func toggleDockIcon() {
         store.showDockIcon.toggle()   // posts dockIconChanged → applyDockPolicy()
+    }
+
+    /// 菜单打开前刷新动态状态:AI 润色 / 静音勾选 + 重建模板子菜单(勾当前项)。
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        guard menu === statusItem.menu else { return }   // 只刷顶层(子菜单单独重建)
+        aiPolishItem?.state = (!store.polishPaused && refinerActive) ? .on : .off
+        micMuteItem?.state = micMuted ? .on : .off
+        rebuildTemplateSubmenu()
     }
 
     /// Set the menu-bar glyph. Callers still pass the legacy emoji string for the
@@ -473,6 +593,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    /// 在独立窗口打开「提示词模板工作室」(与设置页共用同一份模板数据,经同一 bridge → SettingsStore)。
+    @objc private func openPromptStudio() {
+        if let w = promptStudioWindow {
+            w.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        let hosting = NSHostingController(rootView: PromptStudioWindowView(bridge: self))
+        let window = NSWindow(contentViewController: hosting)
+        window.title = L10n.shared.t("studio.window.title")
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        window.setContentSize(NSSize(width: 720, height: 600))
+        window.contentMinSize = NSSize(width: 520, height: 420)
+        window.isReleasedWhenClosed = false
+        window.center()
+        window.delegate = self
+        promptStudioWindow = window
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     // ============================================================
     // Onboarding wizard
     // ============================================================
@@ -535,6 +676,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         hudPanel = panel
         hudModel.onInsertNow = { [weak self] in self?.insertNowFromHUD() }
+        hudModel.onUndo = { [weak self] in self?.undoLastInsertion() }
+        hudModel.onRepolish = { [weak self] id in self?.repolishLast(templateId: id) }
+        hudModel.onHoverChange = { [weak self] hovering in self?.hudHover(hovering) }
         positionHUD()
     }
 
@@ -565,6 +709,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         hideWorkItem = work
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
+    }
+
+    /// 「已插入」结果的停留时长 = 用户设置,但有个 0.6s 渲染地板:
+    /// 太短(尤其「立刻」=0)会在 SwiftUI 画出最终/润色文本前就 orderOut,导致「字没显示全就消失」。
+    private func doneStaySeconds() -> TimeInterval { max(store.hudStaySeconds, 0.6) }
+
+    /// HUD 出现时鼠标是否已落在其矩形内(屏幕坐标)。
+    private func hudPanelContainsCursor() -> Bool {
+        guard let p = hudPanel else { return false }
+        return p.frame.contains(NSEvent.mouseLocation)
+    }
+
+    /// 悬浮逻辑(只在可交互态 .done/.polishing 收到事件,其余状态面板忽略鼠标):
+    ///   * 进上去 + 一开始不在那(用户事后移过来)→ 暂停自动消失;
+    ///   * 进上去 + 一开始就停在那(parked)→ 不挽留,照常按计时器消失;
+    ///   * 离开 → 之后再进就算「移过来」;并很快(0.4s)收起。
+    private func hudHover(_ hovering: Bool) {
+        if hovering {
+            if hudCursorParked { return }       // 一直停在那 → 不保持
+            hideWorkItem?.cancel()              // 事后移过来 → 暂停消失
+        } else {
+            hudCursorParked = false
+            if hudModel.phase == .done || hudModel.phase == .polishing { hideHUD(after: 0.4) }
+        }
     }
 
     // ============================================================
@@ -695,14 +863,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     // Hotkey + mic + engine callbacks
     // ============================================================
 
-    private func wireHotkey() {
-        hotkey.onDown = { [weak self] in
-            DispatchQueue.main.async { self?.beginDictation() }
+    /// 绑定快捷键回调到当前 hotkey 实例(主键 id==nil;模板键 id==templateId → 设会话模板)。
+    private func wireHotkeys() {
+        hotkey.onFire = { [weak self] id, isDown in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if self.store.hotkeyToggleMode {
+                    // 纯单击切换:只在按下动作,忽略松开。第一次按→开始,第二次按→停止。
+                    guard isDown else { return }
+                    if self.toggleDictating { self.toggleDictating = false; self.endDictation() }
+                    else { self.toggleDictating = true; self.currentSessionTemplateId = id; self.beginDictation() }
+                } else {
+                    // 智能模式(默认):长按=按住说话(松开即停);轻点=锁定(再轻点停止)。
+                    self.handleHybrid(id: id, isDown: isDown)
+                }
+            }
         }
-        hotkey.onUp = { [weak self] in
-            DispatchQueue.main.async { self?.endDictation() }
-        }
+    }
 
+    /// 智能模式分发:按下开始;松开时按「按下时长」决定——短按(轻点)锁定免持,长按则停止。
+    /// 已锁定时,下一次按下即停止(忽略其后的松开)。
+    private func handleHybrid(id: String?, isDown: Bool) {
+        if isDown {
+            if hybridLatched {                       // 锁定中再按 → 停止
+                hybridLatched = false
+                hybridIgnoreUp = true                // 这一下的松开要忽略
+                endDictation()
+            } else {                                  // 开始一段(先按住,松开时再判定轻点/长按)
+                hybridPressAt = Date()
+                currentSessionTemplateId = id
+                beginDictation()
+            }
+        } else {
+            if hybridIgnoreUp { hybridIgnoreUp = false; return }
+            guard let downAt = hybridPressAt else { return }
+            hybridPressAt = nil
+            if Date().timeIntervalSince(downAt) < tapThreshold {
+                hybridLatched = true                  // 轻点 → 锁定,继续听写
+            } else {
+                endDictation()                        // 长按 → 松开即停
+            }
+        }
+    }
+
+    private func wireMic() {
         mic.onSamples = { [weak self] samples in
             guard let self else { return }
             self.engine?.feed(samples)
@@ -731,6 +935,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// 开启但模型缺失时触发在线下载。每次启动 + 设置变化(经 refreshCorrections)时调用。
     private func refreshRefiner() {
         CloudRequestLog.shared.enabled = store.cloudLogEnabled   // 同步「记录请求」开关
+        // 菜单栏快捷开关「暂停 AI 润色」:总开关,置 true 时直接 no-op(保留云端/本地配置不动)。
+        if store.polishPaused { Refiner.shared.backend = nil; return }
         // 云端优先(开 + Key/URL/模型就绪);否则本地;都不行 → nil(安全 no-op)。
         if store.cloudEnabled {
             let cloud = CloudRefiner(baseURL: store.cloudBaseURL, model: store.cloudModel, apiKey: store.cloudApiKey,
@@ -739,7 +945,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if cloud.isReady {
                 Refiner.shared.backend = cloud
                 Refiner.shared.timeout = 25   // 云端比本地慢得多(网络+生成);本地 0.5s,云端常 3~8s,4s 会误超时回退
-                Refiner.shared.systemProvider = { [weak self] in self?.buildCloudSystem() ?? "" }
+                Refiner.shared.systemProvider = { [weak self] in self?.buildCloudSystem(overrideTemplateId: self?.currentSessionTemplateId) ?? "" }
                 return
             }
         }
@@ -768,19 +974,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     /// 云端 system:取当前模板(自动/自定义)→ 替换 {{hotwords}}(词典)、{{date}}(今天),保留
     /// {{transcript}}(由 CloudRefiner 在 refine 时替换为转写)。
-    private func buildCloudSystem() -> String {
+    private func buildCloudSystem(overrideTemplateId: String? = nil) -> String {
+        let lang = L10n.resolve(stored: store.storedLang)   // 内置默认提示词随 UI 语言
         let tpl: String
-        if store.cloudActiveTemplate == "auto" {
+        if let ov = overrideTemplateId, let c = templateContent(id: ov, lang: lang) {
+            tpl = c   // 模板快捷键:套用该模板,覆盖当前选中
+        } else if store.cloudActiveTemplate == "auto" {
             let ovr = store.cloudAutoOverride
-            tpl = ovr.isEmpty ? buildAutoPrompt(store.cloudMods) : ovr
-        } else if let c = AppDelegate.cloudTemplate(store.cloudTemplatesJSON, id: store.cloudActiveTemplate) {
+            tpl = ovr.isEmpty ? buildAutoPrompt(store.cloudMods, lang: lang) : ovr
+        } else if let c = templateContent(id: store.cloudActiveTemplate, lang: lang) {
             tpl = c
         } else {
-            tpl = buildAutoPrompt(store.cloudMods)
+            tpl = buildAutoPrompt(store.cloudMods, lang: lang)
         }
         let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd"
         return PromptFill.staticTokens(tpl, hotwords: store.hotwordsText, date: df.string(from: Date()),
                                        changes: currentRuleChanges)
+    }
+    /// 解析模板内容:锁定内置「口语转书面」(t1)随 UI 语言实时生成;自定义模板读用户存储原文。
+    private func templateContent(id: String, lang: Lang) -> String? {
+        if id == LocalizedPrompts.seedTemplateId { return LocalizedPrompts.seed(lang: lang).content }
+        return AppDelegate.cloudTemplate(store.cloudTemplatesJSON, id: id)
     }
     static func cloudTemplate(_ json: String, id: String) -> String? {
         guard let data = json.data(using: .utf8),
@@ -840,7 +1054,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     /// 完成一段 final:记录 + 屏显 + 插入。抽出以便"同步路径"与"refiner 异步路径"共用。
     /// refiner 关时,行为与改造前的 onFinal 完全等价(零回归)。
-    private func finishFinal(rawText: String, final: String) {
+    private func finishFinal(rawText: String, final rawFinal: String) {
+        // 「输出转繁体」:所有处理完成后,最终结果以繁体字形输出。
+        let final = store.outputTraditional ? Hant.s2t(rawFinal) : rawFinal
         recordFinal(final)
         hudModel.partialText = final
         if store.insertMethod == "type" {
@@ -849,7 +1065,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if refinerActive {
                 inserter.update(final)
             } else {
-                inserter.update(corrected(rawText, isFinal: false))
+                let s = corrected(rawText, isFinal: false)
+                inserter.update(store.outputTraditional ? Hant.s2t(s) : s)
             }
             if store.clipboardOverwrite { Paste.setClipboard(final) }
         } else {
@@ -862,6 +1079,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func finalizePolish(final: String) {
         guard let raw = pendingPolishRaw else { return }
         pendingPolishRaw = nil; pendingPolishRule = nil
+        currentSessionTemplateId = nil   // 本次模板覆盖用完即清(systemProvider 已在 polish 时读过)
         polishTask?.cancel(); polishTask = nil
         finalizeFallbackWork?.cancel(); finalizeFallbackWork = nil
         cancelPolishSlow()
@@ -869,10 +1087,72 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         hudPanel?.ignoresMouseEvents = true
         finishFinal(rawText: raw, final: final)
         if store.insertMethod != "type" {
-            hudModel.phase = .done
-            hideHUD(after: 0.8)
+            // 经过 AI 润色(refinerActive)→ 落字后给「撤销 / 换模板重润色」窗口(可点、多停留几秒)。
+            if refinerActive {
+                lastRawASR = raw
+                lastInserted = store.outputTraditional ? Hant.s2t(final) : final   // 与实际插入一致(撤销按字数回删)
+                hudModel.reviseTemplates = makeReviseTemplates()
+                hudModel.canRevise = true
+                hudModel.phase = .done
+                hudPanel?.ignoresMouseEvents = false   // 可点(撤销/重润色)
+                hudCursorParked = hudPanelContainsCursor()
+                // 按用户设置消失;但结果至少显示 doneFloor 秒,保证润色结果能渲染出来 / 看得见。
+                hideHUD(after: doneStaySeconds())
+            } else {
+                hudModel.canRevise = false
+                hudModel.phase = .done
+                hideHUD(after: store.hudStaySeconds)
+            }
         }
         setStatusIcon(engineReady ? "🎙" : "⏳")
+    }
+
+    /// 重润色可选模板:⚡自动 + 自定义(内置 t1 随 UI 语言显示名)。
+    private func makeReviseTemplates() -> [HUDModel.ReviseTemplate] {
+        var out: [HUDModel.ReviseTemplate] = [.init(id: "auto", name: L10n.shared.t("llm.tpl.auto"))]
+        let lang = L10n.resolve(stored: store.storedLang)
+        for t in AppDelegate.decodeTemplates(store.cloudTemplatesJSON) {
+            let name = (t.id == LocalizedPrompts.seedTemplateId) ? LocalizedPrompts.seed(lang: lang).name : t.name
+            out.append(.init(id: t.id, name: name))
+        }
+        return out
+    }
+
+    /// HUD「撤销」:回删刚插入的文本(假设光标仍在插入处之后),收 HUD。
+    private func undoLastInsertion() {
+        guard let inserted = lastInserted, !inserted.isEmpty else { return }
+        Paste.backspace(inserted.count)
+        lastInserted = nil; lastRawASR = nil
+        hudModel.canRevise = false
+        hudModel.phase = .cancel
+        hideHUD(after: 0.8)
+    }
+
+    /// HUD「换模板重润色」:回删旧文本 → 用指定模板对原始 ASR 重跑润色 → 插入新文本。
+    private func repolishLast(templateId: String) {
+        guard let raw = lastRawASR, let old = lastInserted else { return }
+        Paste.backspace(old.count)
+        hudModel.canRevise = false
+        hudModel.phase = .polishing
+        hudPanel?.ignoresMouseEvents = false
+        currentSessionTemplateId = templateId
+        polishTask?.cancel()
+        polishTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            let polished = await self.correctedFinalAsync(raw)
+            if Task.isCancelled { return }
+            self.currentSessionTemplateId = nil
+            let final = self.store.outputTraditional ? Hant.s2t(polished) : polished
+            Paste.insert(final, restore: !self.store.clipboardOverwrite)
+            self.lastInserted = final
+            self.hudModel.partialText = final
+            self.hudModel.reviseTemplates = self.makeReviseTemplates()
+            self.hudModel.canRevise = true
+            self.hudModel.phase = .done
+            self.hudPanel?.ignoresMouseEvents = false
+            self.hudCursorParked = self.hudPanelContainsCursor()
+            self.hideHUD(after: self.doneStaySeconds())
+        }
     }
 
     /// HUD「立即插入 ✓」:不再等大模型,用已备好的规则版立即插入。
@@ -897,7 +1177,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func beginDictation() {
         guard !onboardingActive, !inTry, !onCallActive else { return }
+        guard !micMuted else { toggleDictating = false; return }   // 临时静音:忽略本次触发
         guard engineReady, let engine else { return }
+        lastRawASR = nil; lastInserted = nil   // 新一段开始 → 作废上一段的「撤销 / 重润色」
         // 上一段润色还没返回就又开始 → 先把上一段用规则版立即插入,避免丢字 / HUD 错乱。
         if pendingPolishRaw != nil, let rule = pendingPolishRule { finalizePolish(final: rule) }
         finalizeFallbackWork?.cancel(); finalizeFallbackWork = nil
@@ -978,6 +1260,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func endDictation() {
+        toggleDictating = false   // 任何结束路径都复位切换态
+        hybridLatched = false; hybridPressAt = nil   // 复位智能模式锁定态
         guard !onboardingActive, !inTry, !onCallActive else { return }
         guard engineReady else { return }
         mic.stop()
@@ -1013,7 +1297,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
         } else {
             hudModel.phase = .done
-            hideHUD(after: 0.8)
+            hideHUD(after: doneStaySeconds())
         }
         setStatusIcon(engineReady ? "🎙" : "⏳")
     }
@@ -1329,6 +1613,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if w === settingsWindow { settingsWindow = nil }
         if w === padWindow { padWindow = nil }
         if w === historyWindow { historyWindow = nil }
+        if w === promptStudioWindow { promptStudioWindow = nil }
     }
 
     // MARK: launch at login
@@ -1361,8 +1646,13 @@ extension AppDelegate: SettingsBridge {
     }
     var hotkeyKeyCode: Int { store.hotkeyKeyCode }
     var hotkeyModifierOnly: Bool { store.hotkeyModifierOnly }
-    func setHotkey(keyCode: Int, modifierOnly: Bool) {
-        store.setHotkey(keyCode: keyCode, modifierOnly: modifierOnly)
+    var hotkeyMods: Int { store.hotkeyMods }
+    var hotkeyToggleMode: Bool {
+        get { store.hotkeyToggleMode }
+        set { store.hotkeyToggleMode = newValue }   // setter posts hotkeyChanged → rebuildHotkeys
+    }
+    func setHotkey(keyCode: Int, modifierOnly: Bool, mods: Int) {
+        store.setHotkey(keyCode: keyCode, modifierOnly: modifierOnly, mods: mods)
     }
 
     // Engine config
@@ -1389,6 +1679,14 @@ extension AppDelegate: SettingsBridge {
     var clipboardOverwrite: Bool {
         get { store.clipboardOverwrite }
         set { store.clipboardOverwrite = newValue }
+    }
+    var outputTraditional: Bool {
+        get { store.outputTraditional }
+        set { store.outputTraditional = newValue }
+    }
+    var hudStaySeconds: Double {
+        get { store.hudStaySeconds }
+        set { store.hudStaySeconds = newValue }
     }
     var padWriteEnabled: Bool {
         get { store.padWriteEnabled }
@@ -1492,7 +1790,8 @@ extension AppDelegate: SettingsBridge {
                            activeTemplate: store.cloudActiveTemplate, autoOverride: store.cloudAutoOverride,
                            customProvidersJSON: store.cloudCustomProvidersJSON,
                            temperature: store.cloudTemperature, maxTokens: store.cloudMaxTokens,
-                           logEnabled: store.cloudLogEnabled, profilesJSON: store.cloudProfilesJSON)
+                           logEnabled: store.cloudLogEnabled, profilesJSON: store.cloudProfilesJSON,
+                           templateHotkeysJSON: store.cloudTemplateHotkeysJSON)
         }
         set {
             store.cloudProvider = newValue.provider; store.cloudBaseURL = newValue.baseURL
@@ -1505,6 +1804,7 @@ extension AppDelegate: SettingsBridge {
             store.cloudTemperature = newValue.temperature; store.cloudMaxTokens = newValue.maxTokens
             store.cloudLogEnabled = newValue.logEnabled
             store.cloudProfilesJSON = newValue.profilesJSON
+            store.cloudTemplateHotkeysJSON = newValue.templateHotkeysJSON   // 改动 post hotkeyChanged → 重建快捷键
             store.cloudEnabled = newValue.enabled   // 最后置 enabled,触发一次 refreshRefiner
         }
     }
@@ -1629,5 +1929,10 @@ extension AppDelegate: OnboardingBridge {
     func finishOnboarding() {
         store.didCompleteOnboarding = true
         closeOnboarding()
+    }
+
+    /// OnboardingBridge 只设主键(单键/修饰),不涉及组合 → mods 恒为 0。
+    func setHotkey(keyCode: Int, modifierOnly: Bool) {
+        setHotkey(keyCode: keyCode, modifierOnly: modifierOnly, mods: 0)
     }
 }

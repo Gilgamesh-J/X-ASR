@@ -4,7 +4,7 @@ namespace VibeXASR.Windows.Lexicon;
 
 /// <summary>
 /// Remove Chinese filler words from FINAL dictation — the touch that makes speech read like
-/// writing (Typeless / Willow / WisprFlow all do this). Conservative: deletes pure interjections
+/// writing. Conservative: deletes pure interjections
 /// (嗯/呃/唉…) and collapses ≥4× repeats, so genuine reduplications (看看 / 想想 / 好好) and short
 /// counting (三三三) stay, and a single meaningful 那个 / 就是 is left intact — only stutter-style
 /// repeats fold. NOTE: 額/额/诶 are NOT interjections — they occur in real words (金额 / 额外 / 余额).

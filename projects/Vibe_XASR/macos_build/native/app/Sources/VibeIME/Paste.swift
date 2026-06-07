@@ -1,24 +1,55 @@
 import AppKit
 import CoreGraphics
 
+/// 简体 → 繁体(字形级,走系统 ICU transform;非台湾词汇级)。供「输出转繁体」开关使用。
+enum Hant {
+    static func s2t(_ s: String) -> String {
+        guard !s.isEmpty else { return s }
+        let m = NSMutableString(string: s)
+        CFStringTransform(m, nil, "Simplified-Traditional" as CFString, false)
+        return m as String
+    }
+}
+
 /// Inserts text into the focused app via clipboard + ⌘V (reliable for CJK),
 /// restoring the previous clipboard. Requires Accessibility permission.
 enum Paste {
     static func insert(_ text: String, restore: Bool = true, restoreDelay: TimeInterval = 0.5) {
         guard !text.isEmpty else { return }
         let pb = NSPasteboard.general
-        let previous = pb.string(forType: .string)
+        // Snapshot the WHOLE pasteboard (every item + every type: images, files, RTF,
+        // not just plain text) so dictation never clobbers what the user had copied.
+        let saved = restore ? snapshotPasteboard() : []
         pb.clearContents()
         pb.setString(text, forType: .string)
         usleep(20_000)            // let the target app observe the new pasteboard
         sendCmdV()
-        if restore, let previous {
+        if restore {
             DispatchQueue.global().asyncAfter(deadline: .now() + restoreDelay) {
-                let p = NSPasteboard.general
-                p.clearContents()
-                p.setString(previous, forType: .string)
+                restorePasteboard(saved)
             }
         }
+    }
+
+    /// Deep-copy the current pasteboard's items (so they can be re-written later).
+    /// NSPasteboardItem read back from the board can't be re-added, so we clone each.
+    private static func snapshotPasteboard() -> [NSPasteboardItem] {
+        guard let items = NSPasteboard.general.pasteboardItems else { return [] }
+        return items.map { item in
+            let copy = NSPasteboardItem()
+            for type in item.types {
+                if let data = item.data(forType: type) { copy.setData(data, forType: type) }
+            }
+            return copy
+        }
+    }
+
+    /// Restore a previously captured snapshot. Empty snapshot → leave the board
+    /// cleared (the user's clipboard was empty before; don't keep the dictation text).
+    private static func restorePasteboard(_ items: [NSPasteboardItem]) {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        if !items.isEmpty { pb.writeObjects(items) }
     }
 
     /// Overwrite the clipboard with `text` and leave it there (for the "overwrite

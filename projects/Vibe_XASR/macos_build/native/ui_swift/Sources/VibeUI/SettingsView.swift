@@ -26,7 +26,9 @@ public protocol SettingsBridge: AnyObject {
     var showDockIcon: Bool { get set }            // setter applies activation policy live
     var hotkeyKeyCode: Int { get }
     var hotkeyModifierOnly: Bool { get }
-    func setHotkey(keyCode: Int, modifierOnly: Bool)
+    var hotkeyMods: Int { get }
+    var hotkeyToggleMode: Bool { get set }   // false = 按住说话, true = 单击切换
+    func setHotkey(keyCode: Int, modifierOnly: Bool, mods: Int)
 
     // ----- Engine config: VAD + latency tier (rebuilds the engine live) -----
     var vadKind: String { get set }               // "fire" | "silero"
@@ -41,7 +43,11 @@ public protocol SettingsBridge: AnyObject {
     var launchAtLogin: Bool { get set }
     /// Leave each dictation result on the clipboard (issue #12). Default OFF.
     var clipboardOverwrite: Bool { get set }
-    /// Typeless-style cue sound on dictation start/stop. Default ON. Setting
+    /// Convert the final output to Traditional Chinese (character-level). Default OFF.
+    var outputTraditional: Bool { get set }
+    /// Seconds the HUD stays after each utterance (default 1 — "disappear ASAP").
+    var hudStaySeconds: Double { get set }
+    /// Subtle cue sound on dictation start/stop. Default ON. Setting
     /// `cueTheme` (or toggling on) previews the sound.
     var cueEnabled: Bool { get set }
     var cueTheme: String { get set }            // "tick" | "chime" | "soft" | "drop" | "marimba"
@@ -171,6 +177,10 @@ public extension SettingsBridge {
     var historyEnabled: Bool { get { true } set {} }
     var launchAtLogin: Bool { get { false } set {} }
     var clipboardOverwrite: Bool { get { false } set {} }
+    var outputTraditional: Bool { get { false } set {} }
+    var hudStaySeconds: Double { get { 0.5 } set {} }
+    var hotkeyMods: Int { 0 }
+    var hotkeyToggleMode: Bool { get { false } set {} }
     var cueEnabled: Bool { get { true } set {} }
     var cueTheme: String { get { "chime" } set {} }
     var cueVolume: String { get { "low" } set {} }
@@ -271,6 +281,8 @@ public final class SettingsState: ObservableObject {
     @Published public var combo = "Right ⌘"
     @Published public var hotkeyKeyCode = 54
     @Published public var hotkeyModifierOnly = true
+    @Published public var hotkeyMods = 0   // HotkeyMods.rawValue;0 = 纯修饰/单键,非 0 = 组合(⌥1)
+    @Published public var hotkeyToggle = false   // false = 按住说话, true = 单击切换
 
     // Preview-only fallbacks (used when bridge == nil).
     @Published public var showDockIcon = true
@@ -281,6 +293,8 @@ public final class SettingsState: ObservableObject {
     @Published public var history = true
     @Published public var launchAtLogin = false
     @Published public var clipOverwrite = false
+    @Published public var toTraditional = false   // 输出转繁体
+    @Published public var hudStay: Double = 0.5    // 说完后悬浮条停留秒数
     @Published public var cueEnabled = true
     @Published public var cueTheme = "chime"
     @Published public var cueVolume = "low"
@@ -312,7 +326,11 @@ public final class SettingsState: ObservableObject {
         self.showDockIcon = bridge.showDockIcon
         self.hotkeyKeyCode = bridge.hotkeyKeyCode
         self.hotkeyModifierOnly = bridge.hotkeyModifierOnly
-        self.combo = VibeKeycodes.name(bridge.hotkeyKeyCode)
+        self.hotkeyMods = bridge.hotkeyMods
+        self.hotkeyToggle = bridge.hotkeyToggleMode
+        self.combo = VibeKeycodes.displayName(keyCode: bridge.hotkeyKeyCode,
+                                              modifierOnly: bridge.hotkeyModifierOnly,
+                                              mods: HotkeyMods(rawValue: bridge.hotkeyMods))
         self.vad = bridge.vadKind
         self.latency = bridge.latencyTier
         self.insert = bridge.insertMethod
@@ -320,6 +338,8 @@ public final class SettingsState: ObservableObject {
         self.history = bridge.historyEnabled
         self.launchAtLogin = bridge.launchAtLogin
         self.clipOverwrite = bridge.clipboardOverwrite
+        self.toTraditional = bridge.outputTraditional
+        self.hudStay = bridge.hudStaySeconds
         self.cueEnabled = bridge.cueEnabled
         self.cueTheme = bridge.cueTheme
         self.cueVolume = bridge.cueVolume
@@ -353,11 +373,16 @@ public final class SettingsState: ObservableObject {
         showDockIcon = on
         bridge?.showDockIcon = on
     }
-    public func applyHotkey(keyCode: Int, modifierOnly: Bool) {
+    public func applyHotkeyToggle(_ on: Bool) {
+        hotkeyToggle = on
+        bridge?.hotkeyToggleMode = on
+    }
+    public func applyHotkey(keyCode: Int, modifierOnly: Bool, mods: HotkeyMods = []) {
         hotkeyKeyCode = keyCode
         hotkeyModifierOnly = modifierOnly
-        combo = VibeKeycodes.name(keyCode)
-        bridge?.setHotkey(keyCode: keyCode, modifierOnly: modifierOnly)
+        hotkeyMods = mods.rawValue
+        combo = VibeKeycodes.displayName(keyCode: keyCode, modifierOnly: modifierOnly, mods: mods)
+        bridge?.setHotkey(keyCode: keyCode, modifierOnly: modifierOnly, mods: mods.rawValue)
     }
     public func applyVad(_ kind: String) {
         vad = kind
@@ -382,6 +407,14 @@ public final class SettingsState: ObservableObject {
     public func applyClipOverwrite(_ on: Bool) {
         clipOverwrite = on
         bridge?.clipboardOverwrite = on
+    }
+    public func applyToTraditional(_ on: Bool) {
+        toTraditional = on
+        bridge?.outputTraditional = on
+    }
+    public func applyHudStay(_ sec: Double) {
+        hudStay = sec
+        bridge?.hudStaySeconds = sec
     }
     public func applyCueEnabled(_ on: Bool) {
         cueEnabled = on
@@ -430,6 +463,9 @@ public final class SettingsState: ObservableObject {
         bridge?.cloudConfig = c
         if c.enabled { forcePasteForPolish() }   // 云端润色开启 → 听写只支持「说完插入」
     }
+    /// 最新云端配置(直读 bridge → SettingsStore)。两个窗口各持一个 SettingsState 时,
+    /// 提交前以此为基准合并、各自只覆盖自己负责的字段,避免跨窗口互相覆盖。preview 下为 nil。
+    public var liveCloud: CloudConfigDTO? { bridge?.cloudConfig }
 
     /// AI 润色(云端或本地任一)是否开启。开启时听写只支持「说完插入」(paste),
     /// 逐字插入 / 持续候机 与逐句润色冲突,故置灰、需先关润色才能切换。
@@ -709,8 +745,6 @@ private struct GeneralTab: View {
     @Environment(\.colorScheme) private var scheme
     /// Switches the host's settings tab to the Permissions tab.
     var onOpenPermissions: () -> Void
-    /// Jump to the Dictation tab (where the hotkey is configured).
-    var onSetHotkey: () -> Void
 
     var body: some View {
         VStack(spacing: 18) {
@@ -734,8 +768,28 @@ private struct GeneralTab: View {
                 }
             }
 
+            // 触发键 + 触发方式 + 听写模式(从「听写」页移来,属高频核心交互)。
+            SettingsGroup(label: l10n.t("grp.trigger")) {
+                SettingsRow(title: l10n.t("dict.hotkey"), help: l10n.t("dict.hotkey.help")) {
+                    GlobalHotkeyRecorder(
+                        keyCode: Binding(get: { s.hotkeyKeyCode }, set: { s.hotkeyKeyCode = $0 }),
+                        modifierOnly: Binding(get: { s.hotkeyModifierOnly }, set: { s.hotkeyModifierOnly = $0 }),
+                        mods: Binding(get: { s.hotkeyMods }, set: { s.hotkeyMods = $0 })
+                    ) { code, mod, m in
+                        s.applyHotkey(keyCode: code, modifierOnly: mod, mods: m)
+                    }
+                }
+                SettingsRow(title: l10n.t("dict.trigger"), help: l10n.t("dict.trigger.help")) {
+                    Picker("", selection: Binding(get: { s.hotkeyToggle }, set: { s.applyHotkeyToggle($0) })) {
+                        Text(l10n.t("dict.trigger.hold")).tag(false)
+                        Text(l10n.t("dict.trigger.toggle")).tag(true)
+                    }.pickerStyle(.segmented).labelsHidden().frame(width: 200)
+                }
+                DictationModeList(s: s, l10n: l10n)
+            }
+
             // Self-check · helps users who hit permission problems.
-            SelfCheckView(s: s, l10n: l10n, onOpenPermissions: onOpenPermissions, onSetHotkey: onSetHotkey)
+            SelfCheckView(s: s, l10n: l10n, onOpenPermissions: onOpenPermissions)
         }
     }
 }
@@ -982,19 +1036,28 @@ private struct DictationTab: View {
     var body: some View {
         VStack(spacing: 18) {
         SettingsGroup(label: l10n.t("grp.dictation")) {
-            SettingsRow(title: l10n.t("dict.hotkey"), help: l10n.t("dict.hotkey.help")) {
-                HotkeyRecorder(
-                    keyCode: Binding(get: { s.hotkeyKeyCode }, set: { s.hotkeyKeyCode = $0 }),
-                    isModifier: Binding(get: { s.hotkeyModifierOnly }, set: { s.hotkeyModifierOnly = $0 })
-                ) { code, mod in
-                    s.applyHotkey(keyCode: code, modifierOnly: mod)
-                }
-            }
-            // (听写模式 / Dictation mode) A radio-style vertical list — each option
-            // carries a long description, so a tiny segmented control won't fit.
-            DictationModeList(s: s, l10n: l10n)
             SettingsRow(title: l10n.t("dict.clipOverwrite"), help: l10n.t("dict.clipOverwrite.help")) {
                 VibeToggle(on: Binding(get: { s.clipOverwrite }, set: { s.applyClipOverwrite($0) }))
+            }
+            SettingsRow(title: l10n.t("dict.toTraditional"), help: l10n.t("dict.toTraditional.help")) {
+                VibeToggle(on: Binding(get: { s.toTraditional }, set: { s.applyToTraditional($0) }))
+            }
+            SettingsRow(title: l10n.t("dict.hudStay"), help: l10n.t("dict.hudStay.help")) {
+                VibeSegmented(value: Binding(
+                    get: {
+                        let v = s.hudStay
+                        if v <= 0.25 { return "0" }
+                        if v <= 0.75 { return "0.5" }
+                        if v <= 1.5 { return "1" }
+                        if v <= 3 { return "2" }
+                        return "4"
+                    },
+                    set: { s.applyHudStay(Double($0) ?? 1.0) }),
+                    options: [("0", l10n.t("dict.hudStay.s0")),
+                              ("0.5", l10n.t("dict.hudStay.s05")),
+                              ("1", l10n.t("dict.hudStay.s1")),
+                              ("2", l10n.t("dict.hudStay.s2")),
+                              ("4", l10n.t("dict.hudStay.s4"))])
             }
             SettingsRow(title: l10n.t("dict.history"), help: l10n.t("dict.history.help")) {
                 VibeToggle(on: Binding(get: { s.history }, set: { s.applyHistory($0) }))
@@ -1012,7 +1075,7 @@ private struct DictationTab: View {
             }
             .disabled(s.polishOn)
             .opacity(s.polishOn ? 0.5 : 1)
-            // Typeless-style cue sound on dictation start/stop (default on) + timbre.
+            // Subtle cue sound on dictation start/stop (default on) + timbre.
             SettingsRow(title: l10n.t("dict.cue"), help: l10n.t("dict.cue.help")) {
                 VibeToggle(on: Binding(get: { s.cueEnabled }, set: { s.applyCueEnabled($0) }))
             }
@@ -1037,9 +1100,6 @@ private struct DictationTab: View {
                 }
             }
         }
-        // Same self-check as General, surfaced here next to the hotkey/mode
-        // controls so users can verify the path right where they configured it.
-        SelfCheckView(s: s, l10n: l10n, onOpenPermissions: onOpenPermissions)
         }
     }
 }
@@ -1232,6 +1292,15 @@ private struct HotwordsTab: View {
                     .font(Vibe.Fonts.ui(12, weight: .medium))
                     .foregroundStyle(Vibe.Palette.success)
             }
+            MButton(title: l10n.t("io.export"), kind: .ghost) {
+                LexiconIO.export(Self.serializeHWRows(hwRows), suggestedName: "vibe-hotwords.txt")
+            }
+            MButton(title: l10n.t("io.import"), kind: .ghost) {
+                if let t = LexiconIO.importText() {
+                    hwRows = Self.parseHWRows(t)
+                    s.applyHotwords(text: Self.serializeHWRows(hwRows), score: Self.score(for: scoreTier))
+                }
+            }
             MButton(title: l10n.t("hw.save"), kind: .solid) {
                 s.applyHotwords(text: Self.serializeHWRows(hwRows), score: Self.score(for: scoreTier))
                 withAnimation { savedFlash = true }
@@ -1345,6 +1414,15 @@ private struct HotwordsTab: View {
                 Text(l10n.t("hw.saved"))
                     .font(Vibe.Fonts.ui(12, weight: .medium))
                     .foregroundStyle(Vibe.Palette.success)
+            }
+            MButton(title: l10n.t("io.export"), kind: .ghost) {
+                LexiconIO.export(Self.serializeRows(rRules), suggestedName: "vibe-replacements.txt")
+            }
+            MButton(title: l10n.t("io.import"), kind: .ghost) {
+                if let t = LexiconIO.importText() {
+                    rRules = Self.parseRows(t)
+                    s.applyReplacements(text: Self.serializeRows(rRules))
+                }
             }
             MButton(title: l10n.t("hw.save"), kind: .solid) {
                 s.applyReplacements(text: Self.serializeRows(rRules))
@@ -1461,6 +1539,15 @@ private struct SnippetTab: View {
                 Text(l10n.t("hw.saved"))
                     .font(Vibe.Fonts.ui(12, weight: .medium))
                     .foregroundStyle(Vibe.Palette.success)
+            }
+            MButton(title: l10n.t("io.export"), kind: .ghost) {
+                LexiconIO.export(SnippetTab.serialize(rows), suggestedName: "vibe-snippets.json", json: true)
+            }
+            MButton(title: l10n.t("io.import"), kind: .ghost) {
+                if let t = LexiconIO.importText(json: true) {
+                    rows = SnippetTab.parse(t)
+                    s.applySnippets(json: SnippetTab.serialize(rows))
+                }
             }
             MButton(title: l10n.t("hw.save"), kind: .solid) {
                 s.applySnippets(json: SnippetTab.serialize(rows))
@@ -2625,8 +2712,7 @@ public struct SettingsView: View {
                 Group {
                     switch tab {
                     case "general":     GeneralTab(s: s, l10n: l10n,
-                                                   onOpenPermissions: { tab = "permissions" },
-                                                   onSetHotkey: { tab = "dictation" })
+                                                   onOpenPermissions: { tab = "permissions" })
                     case "dictation":   DictationTab(s: s, l10n: l10n,
                                                      onOpenPermissions: { tab = "permissions" })
                     case "llm":         LLMTab(s: s, l10n: l10n,

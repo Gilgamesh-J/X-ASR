@@ -86,6 +86,11 @@ if [ -x "$SPARKLE_BIN/sign_update" ]; then
   # 更新说明:读 projects/docs/notes-<VER>.html(若有),作为 Sparkle 弹窗里的发行说明。
   NOTES_FILE="$DOCS/notes-${VER}.html"
   NOTES="$( [ -f "$NOTES_FILE" ] && cat "$NOTES_FILE" || printf 'Vibe XASR %s' "$VER" )"
+  # notes 也按 build 号发到 R2(不可变 URL,免缓存),appcast 用 releaseNotesLink 实时拉取;
+  # 同时保留内嵌 description 作离线/弱网兜底。Sparkle 有 link 优先用 link。
+  NOTES_URL="https://models.speech.wiki/app/notes-${BUILD_NUM}.html"
+  NOTES_OUT="native/dist/notes-${BUILD_NUM}.html"
+  printf '%s\n' "$NOTES" > "$NOTES_OUT"
   mkdir -p "$DOCS"
   cat > "$DOCS/appcast.xml" <<XML
 <?xml version="1.0" encoding="utf-8"?>
@@ -100,6 +105,7 @@ if [ -x "$SPARKLE_BIN/sign_update" ]; then
       <description><![CDATA[
 ${NOTES}
 ]]></description>
+      <sparkle:releaseNotesLink>${NOTES_URL}</sparkle:releaseNotesLink>
       <pubDate>${PUBDATE}</pubDate>
       <sparkle:version>${BUILD_NUM}</sparkle:version>
       <sparkle:shortVersionString>${VER}</sparkle:shortVersionString>
@@ -156,6 +162,8 @@ if [ -x "$R2UP" ]; then
   [ -f "$ZIP_OUT" ] && { "$R2UP" "$ZIP_OUT" "app/VibeXASR-${VER}.zip" "" "public, max-age=600" || echo "   ⚠️ zip → R2 失败"; }
   # appcast 也传 R2(SUFeedURL 切 R2 后用);短缓存(120s)确保用户及时看到新版。
   [ -f "$DOCS/appcast.xml" ] && { "$R2UP" "$DOCS/appcast.xml" "appcast.xml" "application/xml" "public, max-age=120" || echo "   ⚠️ appcast → R2 失败"; }
+  # 发行说明 notes-<build>.html → R2(按 build 命名,不可变,免缓存);appcast 的 releaseNotesLink 指向它。
+  [ -f "${NOTES_OUT:-}" ] && { "$R2UP" "$NOTES_OUT" "app/notes-${BUILD_NUM}.html" "text/html; charset=utf-8" "public, max-age=600" || echo "   ⚠️ notes → R2 失败"; }
   echo "   CDN: https://models.speech.wiki/app/VibeXASR-${VER}.dmg  (appcast: /appcast.xml)"
 else
   echo "   跳过 R2 同步(无 $R2UP)"

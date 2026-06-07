@@ -126,7 +126,7 @@ public sealed class Settings
         return sb.ToString();
     }
 
-    // ---- Cue sound (Typeless-style chime on dictation start/stop) ----
+    // ---- Cue sound (subtle chime on dictation start/stop) ----
 
     /// <summary>Play a soft cue when dictation starts and ends. On by default.</summary>
     public bool CueEnabled { get; set; } = true;

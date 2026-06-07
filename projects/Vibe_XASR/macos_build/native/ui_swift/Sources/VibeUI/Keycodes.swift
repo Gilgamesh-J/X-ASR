@@ -10,7 +10,56 @@
 
 import Foundation
 
+/// 修饰键集合(纯 Foundation;与 NSEvent.ModifierFlags / CGEventFlags 的互转放在各自目标里)。
+/// 用于「组合键」模板快捷键(如 ⌥1、⌘⇧S)。
+public struct HotkeyMods: OptionSet, Codable, Sendable, Equatable {
+    public let rawValue: Int
+    public init(rawValue: Int) { self.rawValue = rawValue }
+    public static let command = HotkeyMods(rawValue: 1 << 0)
+    public static let option  = HotkeyMods(rawValue: 1 << 1)
+    public static let control = HotkeyMods(rawValue: 1 << 2)
+    public static let shift   = HotkeyMods(rawValue: 1 << 3)
+}
+
 public enum VibeKeycodes {
+
+    /// 修饰键符号(按 ⌃⌥⇧⌘ 规范顺序,空格分隔),如 [.option,.command] → "⌥ ⌘"。
+    public static func modSymbols(_ mods: HotkeyMods) -> String {
+        var parts: [String] = []
+        if mods.contains(.control) { parts.append("⌃") }
+        if mods.contains(.option)  { parts.append("⌥") }
+        if mods.contains(.shift)   { parts.append("⇧") }
+        if mods.contains(.command) { parts.append("⌘") }
+        return parts.joined(separator: " ")
+    }
+
+    /// 组合键显示名:修饰键按 ⌃⌥⇧⌘ 规范顺序前缀,再接键名(如 ⌥ 1)。mods 为空 = 单键名。
+    /// 各符号之间留一个空格,避免「⌥1」这类挤在一起难以辨认。
+    public static func comboName(keyCode: Int, mods: HotkeyMods) -> String {
+        let m = modSymbols(mods)
+        return m.isEmpty ? name(keyCode) : m + " " + name(keyCode)
+    }
+
+    /// 统一显示名,覆盖三种主键形态:
+    ///   * 单键 / 修饰+普通键(modifierOnly=false):⌥ 1、F5、Space
+    ///   * 纯单修饰键(modifierOnly=true, mods 空):Right ⌘
+    ///   * 修饰键组合(modifierOnly=true, mods 非空):Right ⌘ + ⌥(主修饰区分左右,其余任意一侧)
+    public static func displayName(keyCode: Int, modifierOnly: Bool, mods: HotkeyMods) -> String {
+        if mods.isEmpty { return name(keyCode) }
+        if modifierOnly { return name(keyCode) + " + " + modSymbols(mods) }
+        return comboName(keyCode: keyCode, mods: mods)
+    }
+
+    /// 修饰键 keycode → 对应的 HotkeyMods 位(左右不分);非修饰键返回空。
+    public static func flagFor(_ keyCode: Int) -> HotkeyMods {
+        switch keyCode {
+        case 54, 55: return .command
+        case 58, 61: return .option
+        case 59, 62: return .control
+        case 56, 60: return .shift
+        default:     return []
+        }
+    }
 
     /// Virtual keycodes that are *modifier* keys (Command/Option/Control/Shift,
     /// left + right). These are watched via flagsChanged rather than keyDown.

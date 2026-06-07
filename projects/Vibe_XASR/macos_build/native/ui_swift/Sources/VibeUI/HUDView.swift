@@ -267,6 +267,7 @@ public struct HUDView: View {
         .offset(y: model.phase.isVisible ? 0 : 10)
         .animation(Vibe.Motion.easeOut, value: model.phase.isVisible)
         .animation(Vibe.Motion.spring, value: model.phase) // bounceIn on phase change
+        .onHover { model.onHoverChange?($0) }   // 悬浮时暂停自动消失,离开后再延迟收
     }
 
     // ----- compact / expanded capsule ---------------------------------
@@ -397,10 +398,42 @@ public struct HUDView: View {
                 .foregroundStyle(Vibe.Palette.textMuted(scheme))
                 .padding(.vertical, 4).padding(.horizontal, 9)
                 .background(Capsule().fill(Vibe.Palette.surface2(scheme)))
-        case .finalizing, .done:
+        case .finalizing:
             Text(l10n.t("hud.inserted"))
                 .font(Vibe.Fonts.ui(12.5, weight: .semibold))
                 .foregroundStyle(Vibe.Palette.success)
+        case .done:
+            if model.canRevise {
+                HStack(spacing: 6) {
+                    Button { model.onUndo?() } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.uturn.backward").font(.system(size: 10, weight: .semibold))
+                            Text(l10n.t("hud.undo")).font(Vibe.Fonts.ui(12, weight: .semibold))
+                        }
+                        .foregroundStyle(Vibe.Palette.text(scheme))
+                        .padding(.vertical, 5).padding(.horizontal, 9)
+                        .background(Capsule().fill(Vibe.Palette.surface2(scheme)))
+                    }.buttonStyle(.plain)
+                    Menu {
+                        ForEach(model.reviseTemplates) { t in
+                            Button(t.name) { model.onRepolish?(t.id) }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "wand.and.stars").font(.system(size: 10, weight: .semibold))
+                            Text(l10n.t("hud.repolish")).font(Vibe.Fonts.ui(12, weight: .semibold))
+                        }
+                        .foregroundStyle(.white)
+                        .padding(.vertical, 5).padding(.horizontal, 9)
+                        .background(Capsule().fill(Vibe.Palette.accentA))
+                    }
+                    .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                }
+            } else {
+                Text(l10n.t("hud.inserted"))
+                    .font(Vibe.Fonts.ui(12.5, weight: .semibold))
+                    .foregroundStyle(Vibe.Palette.success)
+            }
         case .polishing:
             if model.polishSlow {
                 // 等久了:给「立即插入 ✓」——用规则版立即插入,不再等大模型。

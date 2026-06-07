@@ -1,4 +1,5 @@
 import Foundation
+import VibeUI
 
 // 云端大模型润色 —— 后端 + 数据 + prompt 拼接。
 // =========================================================================
@@ -59,16 +60,10 @@ struct RefineMods: Sendable, Equatable {
     var numbers = true, fillers = true, restate = true, hotwords = true
 }
 
-/// 由处理项开关实时拼成的「自动」prompt(设计 buildPrompt 的 Swift 版)。
-/// {{hotwords}} / {{transcript}} 占位符保留,调用时替换。
-func buildAutoPrompt(_ m: RefineMods) -> String {
-    var r: [String] = []
-    if m.numbers { r.append("• 数字规整：把口语数字转成阿拉伯数字（一百二十三 → 123、三点半 → 3:30、百分之二十 → 20%）；成语、计数词保持不变。") }
-    if m.fillers { r.append("• 去口水词：删掉「嗯 / 呃 / 唉」等语气词和口吃式重复（那个那个 → 那个、我我我 → 我）；正常叠词（看看 / 想想）保留。") }
-    if m.restate { r.append("• 改口纠正：说话人中途自我更正（常见「不对 / 不是 / 应该是 / 我还是…吧」等）时，必须删掉被否定、被替换掉的前半句，只保留最终说法；必要时把最终说法补成通顺完整的句子。例：「我想开发现代风格的客户端，不对，还是古早风格的吧」→「我想开发古早风格的客户端」。") }
-    if m.hotwords { r.append("• 热词修正：优先按热词表修正同音 / 近音误写，正确写法以热词表为准。\n  热词表：{{hotwords}}") }
-    let body = r.isEmpty ? "•（暂未选择任何处理项，将原样返回文本）" : r.joined(separator: "\n")
-    return "你是语音转写(ASR)的后处理助手。任务：把这段口述整理成说话人最终想表达的样子。只做下面已开启规则要求的增删，其余内容保持原样——不要改写用词、不要臆造或补充信息、不要总结、不要翻译。\n\n\(body)\n\n【本地规则已做的改动 · 可能有误，请核对】\n下面是本机规则(同音字纠正 / 替换规则)对原始识别文本所做的修改；本地规则可能弄错，若发现改错了请改回正确写法，没问题则保持：\n{{changes}}\n\n只输出整理后的纯文本，不要解释、不要加引号。\n\n原文：{{transcript}}"
+/// 由处理项开关实时拼成的「自动」prompt。随 UI 语言本地化(与 UI 端 buildAutoPromptUI
+/// 共用 LocalizedPrompts,文案一致)。{{hotwords}} / {{transcript}} / {{changes}} 占位符保留,调用时替换。
+func buildAutoPrompt(_ m: RefineMods, lang: Lang) -> String {
+    LocalizedPrompts.auto((m.numbers, m.fillers, m.restate, m.hotwords), lang: lang)
 }
 
 /// 占位符替换:{{hotwords}} / {{date}} 在拼 system 时替换;{{transcript}} 留给后端(refine 时才有转写)。
@@ -85,8 +80,6 @@ struct PromptTemplate: Sendable, Equatable, Codable { var id: String; var name: 
 enum PromptSeeds {
     static let templates: [PromptTemplate] = [
         .init(id: "t1", name: "口语转书面", content: "把下面这段口述整理成通顺的书面表达，保留全部信息和原意，不要总结、不要遗漏。\n• 去掉口水词与重复，规整数字写法。\n• 专有名词以热词表为准：{{hotwords}}\n\n只输出整理后的文本。\n\n原文：{{transcript}}"),
-        .init(id: "t2", name: "会议纪要", content: "把下面的会议口述整理成结构化纪要：\n1）一句话主题；\n2）关键结论（要点列表）；\n3）待办事项（负责人 + 事项）。\n专有名词以热词表为准：{{hotwords}}\n\n会议转写：{{transcript}}"),
-        .init(id: "t3", name: "本地纠错复核", content: "你是语音转写后处理助手。下面给出原始识别文本，以及本机规则（同音字纠正 / 替换规则）已做的改动。请在保持原意、不增删信息的前提下整理文本，并重点核对本地规则的改动——若改错了请改回正确写法，没问题则保持。\n\n本地规则改动（可能有误）：\n{{changes}}\n\n专有名词以热词表为准：{{hotwords}}\n\n只输出整理后的纯文本，不要解释、不要加引号。\n\n原文：{{transcript}}"),
     ]
     static let tokens: [(token: String, desc: String)] = [
         ("{{transcript}}", "转写原文"), ("{{hotwords}}", "词典热词"),

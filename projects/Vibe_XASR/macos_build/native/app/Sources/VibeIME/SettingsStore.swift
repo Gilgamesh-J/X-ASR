@@ -45,6 +45,11 @@ final class SettingsStore: L10nPersistence {
         static let showDockIcon = "showDockIcon"
         static let hotkeyKeyCode = "hotkeyKeyCode"
         static let hotkeyModifierOnly = "hotkeyModifierOnly"
+        static let hotkeyMods = "hotkeyMods"
+        static let hotkeyToggleMode = "hotkeyToggleMode"
+        static let polishPaused = "polishPaused"
+        static let outputTraditional = "outputTraditional"
+        static let hudStaySeconds = "hudStaySeconds"
         static let didCompleteOnboarding = "didCompleteOnboarding"
         static let vadKind = "vadKind"
         static let latencyTier = "latencyTier"
@@ -76,6 +81,7 @@ final class SettingsStore: L10nPersistence {
         static let cloudModRestate = "cloudModRestate"
         static let cloudModHotwords = "cloudModHotwords"
         static let cloudTemplatesJSON = "cloudTemplatesJSON"
+        static let cloudTemplateHotkeysJSON = "cloudTemplateHotkeysJSON"
         static let cloudActiveTemplate = "cloudActiveTemplate"
         static let cloudAutoOverride = "cloudAutoOverride"
         static let cloudCustomProvidersJSON = "cloudCustomProvidersJSON"
@@ -99,16 +105,19 @@ final class SettingsStore: L10nPersistence {
             Key.showDockIcon: true,
             Key.hotkeyKeyCode: 54,            // Right ⌘
             Key.hotkeyModifierOnly: true,
+            Key.hotkeyMods: 0,
+            Key.hotkeyToggleMode: false,      // false = 智能(按住/轻点), true = 单击切换
+            Key.hudStaySeconds: 0.5,          // 说完后悬浮条停留秒数(默认尽快消失)
             Key.didCompleteOnboarding: false,
             Key.vadKind: "fire",
             Key.latencyTier: 960,
             Key.appLanguage: "auto",
-            Key.padWriteEnabled: false,
+            Key.padWriteEnabled: true,        // 听写写入便笺,默认开
             Key.historyEnabled: true,
-            Key.insertMethod: "type",   // default to streaming keystroke insertion
+            Key.insertMethod: "paste",   // default to one-shot paste on release
             Key.clipboardOverwrite: false,
-            Key.launchAtLogin: false,
-            Key.cueEnabled: true,             // Typeless-style cue sound, ON by default
+            Key.launchAtLogin: true,          // 开机自启,默认开
+            Key.cueEnabled: true,             // subtle cue sound, ON by default
             Key.cueTheme: "chime",            // default timbre
             Key.cueVolume: "low",             // cue volume: low (default) | med | high
             Key.hotwordsEnabled: false,       // hotword biasing OFF by default (zero regression)
@@ -130,6 +139,7 @@ final class SettingsStore: L10nPersistence {
             Key.cloudModRestate: true,
             Key.cloudModHotwords: true,
             Key.cloudTemplatesJSON: "",
+            Key.cloudTemplateHotkeysJSON: "",
             Key.cloudActiveTemplate: "auto",
             Key.cloudAutoOverride: "",
             Key.inputDeviceUID: "",           // "" = system default microphone
@@ -162,11 +172,37 @@ final class SettingsStore: L10nPersistence {
         get { defaults.bool(forKey: Key.hotkeyModifierOnly) }
         set { defaults.set(newValue, forKey: Key.hotkeyModifierOnly) }
     }
+    /// 主听写键的修饰位(HotkeyMods.rawValue)。0 = 纯修饰键或单键;非 0 = 组合(如 ⌥1)。
+    var hotkeyMods: Int {
+        get { defaults.integer(forKey: Key.hotkeyMods) }
+        set { defaults.set(newValue, forKey: Key.hotkeyMods) }
+    }
+    /// 触发方式:false = 按住说话(hold),true = 单击切换(tap to start / tap to stop)。
+    var hotkeyToggleMode: Bool {
+        get { defaults.bool(forKey: Key.hotkeyToggleMode) }
+        set { defaults.set(newValue, forKey: Key.hotkeyToggleMode); post(SettingsStore.hotkeyChanged) }
+    }
+    /// 菜单栏「暂停 AI 润色」总开关。true 时不论云端/本地配置,润色一律 no-op。
+    var polishPaused: Bool {
+        get { defaults.bool(forKey: Key.polishPaused) }
+        set { defaults.set(newValue, forKey: Key.polishPaused); post(SettingsStore.changed) }
+    }
+    /// 输出转繁体:最终结果(所有处理完成后)以繁体字形插入。默认关。
+    var outputTraditional: Bool {
+        get { defaults.bool(forKey: Key.outputTraditional) }
+        set { defaults.set(newValue, forKey: Key.outputTraditional); post(SettingsStore.changed) }
+    }
+    /// 说完后 HUD 停留秒数(默认 1s,尽快消失)。
+    var hudStaySeconds: Double {
+        get { defaults.double(forKey: Key.hudStaySeconds) }
+        set { defaults.set(newValue, forKey: Key.hudStaySeconds); post(SettingsStore.changed) }
+    }
 
     /// Update the hotkey atomically and notify observers.
-    func setHotkey(keyCode: Int, modifierOnly: Bool) {
+    func setHotkey(keyCode: Int, modifierOnly: Bool, mods: Int = 0) {
         defaults.set(keyCode, forKey: Key.hotkeyKeyCode)
         defaults.set(modifierOnly, forKey: Key.hotkeyModifierOnly)
+        defaults.set(mods, forKey: Key.hotkeyMods)
         post(SettingsStore.hotkeyChanged)
     }
 
@@ -250,7 +286,7 @@ final class SettingsStore: L10nPersistence {
 
     // MARK: Cue sound (dictation start/stop blip)
 
-    /// Play a Typeless-style cue sound on dictation start/stop. Default ON.
+    /// Play a subtle cue sound on dictation start/stop. Default ON.
     var cueEnabled: Bool {
         get { defaults.bool(forKey: Key.cueEnabled) }
         set { defaults.set(newValue, forKey: Key.cueEnabled); post(SettingsStore.changed) }
@@ -354,6 +390,11 @@ final class SettingsStore: L10nPersistence {
     var cloudTemplatesJSON: String {
         get { defaults.string(forKey: Key.cloudTemplatesJSON) ?? "" }
         set { defaults.set(newValue, forKey: Key.cloudTemplatesJSON) }
+    }
+    /// 每模板绑定的快捷键(sidecar map JSON)。改动 post hotkeyChanged → AppDelegate 重建多快捷键。
+    var cloudTemplateHotkeysJSON: String {
+        get { defaults.string(forKey: Key.cloudTemplateHotkeysJSON) ?? "" }
+        set { defaults.set(newValue, forKey: Key.cloudTemplateHotkeysJSON); post(SettingsStore.hotkeyChanged) }
     }
     var cloudActiveTemplate: String {
         get { defaults.string(forKey: Key.cloudActiveTemplate) ?? "auto" }

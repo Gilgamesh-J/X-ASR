@@ -18,6 +18,7 @@ public struct CloudConfigDTO: Equatable, Sendable {
     public var maxTokens: Int            // 最大输出 token(默认 2048)
     public var logEnabled: Bool          // 是否记录「最近请求」(默认开)
     public var profilesJSON: String      // [CloudProfile] JSON(已存的命名配置,可一键切换)
+    public var templateHotkeysJSON: String  // {templateId: TemplateHotkey} JSON(每模板绑定的快捷键)
 
     public init(enabled: Bool = false, provider: String = "openai",
                 baseURL: String = "https://api.openai.com/v1", model: String = "gpt-4o-mini",
@@ -25,7 +26,7 @@ public struct CloudConfigDTO: Equatable, Sendable {
                 apiKey: String = "", templatesJSON: String = "", activeTemplate: String = "auto",
                 autoOverride: String = "", customProvidersJSON: String = "",
                 temperature: Double = 0.3, maxTokens: Int = 2048, logEnabled: Bool = true,
-                profilesJSON: String = "") {
+                profilesJSON: String = "", templateHotkeysJSON: String = "") {
         self.enabled = enabled; self.provider = provider; self.baseURL = baseURL; self.model = model
         self.numbers = numbers; self.fillers = fillers; self.restate = restate; self.hotwords = hotwords
         self.apiKey = apiKey; self.templatesJSON = templatesJSON
@@ -33,6 +34,7 @@ public struct CloudConfigDTO: Equatable, Sendable {
         self.customProvidersJSON = customProvidersJSON
         self.temperature = temperature; self.maxTokens = maxTokens; self.logEnabled = logEnabled
         self.profilesJSON = profilesJSON
+        self.templateHotkeysJSON = templateHotkeysJSON
     }
     /// 4 处理项打包,给 buildAutoPromptUI。
     public var modsTuple: (Bool, Bool, Bool, Bool) { (numbers, fillers, restate, hotwords) }
@@ -69,6 +71,24 @@ public struct CloudTemplate: Codable, Equatable, Sendable, Identifiable {
     public init(id: String, name: String, content: String) { self.id = id; self.name = name; self.content = content }
 }
 
+/// 单个模板绑定的快捷键(单键或修饰+键)。存在 sidecar map,不进 CloudTemplate(复制/分享不带本机快捷键)。
+public struct TemplateHotkey: Codable, Equatable, Sendable {
+    public var keyCode: Int
+    public var mods: Int           // HotkeyMods.rawValue
+    public var modifierOnly: Bool  // 纯修饰键(一般为 false:模板键要求非纯修饰)
+    public init(keyCode: Int, mods: Int, modifierOnly: Bool) { self.keyCode = keyCode; self.mods = mods; self.modifierOnly = modifierOnly }
+}
+public enum CloudTemplateHotkeys {
+    public static func decode(_ json: String) -> [String: TemplateHotkey] {
+        guard let d = json.data(using: .utf8),
+              let m = try? JSONDecoder().decode([String: TemplateHotkey].self, from: d) else { return [:] }
+        return m
+    }
+    public static func encode(_ m: [String: TemplateHotkey]) -> String {
+        (try? String(data: JSONEncoder().encode(m), encoding: .utf8) ?? "") ?? ""
+    }
+}
+
 // 服务商(UI 显示用)
 public struct CloudModelUI: Sendable, Equatable { public let id, label, note: String }
 public struct CloudProviderUI: Sendable {
@@ -82,10 +102,11 @@ public enum CloudProvidersUI {
     public static func find(_ k: String) -> CloudProviderUI { all.first { $0.key == k } ?? all[0] }
     public static func isBuiltin(_ k: String) -> Bool { all.contains { $0.key == k } }
 
-    /// 本地化显示名:中文界面用中文译名(品牌名如 OpenAI / Claude / Groq 不译,保持原名);
-    /// 其它语言(en/ja/ko)统一用英文目录名。
+    /// 本地化显示名:中文界面(简/繁)用中文译名(品牌名如 OpenAI / Claude / Groq 不译,保持原名);
+    /// 其它语言(en/ja/ko)统一用英文目录名。这些多为中国大陆厂商,繁体界面亦沿用其中文名。
     @MainActor public static func localizedLabel(_ k: String) -> String {
-        if L10n.shared.resolved == .zh, let zh = zhNames[k] { return zh }
+        let r = L10n.shared.resolved
+        if r == .zh || r == .zhHant, let zh = zhNames[k] { return zh }
         return find(k).label
     }
     private static let zhNames: [String: String] = [
@@ -163,29 +184,29 @@ public enum CloudProfiles {
 }
 
 /// 由 4 处理项实时拼成的「自动」prompt(UI 预览用,与 app buildAutoPrompt 等价)。
-public func buildAutoPromptUI(_ m: (Bool, Bool, Bool, Bool)) -> String {
-    var r: [String] = []
-    if m.0 { r.append("• 数字规整：把口语数字转成阿拉伯数字（一百二十三 → 123、三点半 → 3:30、百分之二十 → 20%）；成语、计数词保持不变。") }
-    if m.1 { r.append("• 去口水词：删掉「嗯 / 呃 / 唉」等语气词和口吃式重复（那个那个 → 那个、我我我 → 我）；正常叠词（看看 / 想想）保留。") }
-    if m.2 { r.append("• 改口纠正：说话人中途自我更正（常见「不对 / 不是 / 应该是 / 我还是…吧」等）时，必须删掉被否定、被替换掉的前半句，只保留最终说法；必要时把最终说法补成通顺完整的句子。例：「我想开发现代风格的客户端，不对，还是古早风格的吧」→「我想开发古早风格的客户端」。") }
-    if m.3 { r.append("• 热词修正：优先按热词表修正同音 / 近音误写，正确写法以热词表为准。\n  热词表：{{hotwords}}") }
-    let body = r.isEmpty ? "•（暂未选择任何处理项，将原样返回文本）" : r.joined(separator: "\n")
-    return "你是语音转写(ASR)的后处理助手。任务：把这段口述整理成说话人最终想表达的样子。只做下面已开启规则要求的增删，其余内容保持原样——不要改写用词、不要臆造或补充信息、不要总结、不要翻译。\n\n\(body)\n\n【本地规则已做的改动 · 可能有误，请核对】\n下面是本机规则(同音字纠正 / 替换规则)对原始识别文本所做的修改；本地规则可能弄错，若发现改错了请改回正确写法，没问题则保持：\n{{changes}}\n\n只输出整理后的纯文本，不要解释、不要加引号。\n\n原文：{{transcript}}"
+/// 随当前 UI 语言本地化(见 LocalizedPrompts)。
+@MainActor public func buildAutoPromptUI(_ m: (Bool, Bool, Bool, Bool)) -> String {
+    LocalizedPrompts.autoUI(m)
 }
 
 public enum CloudSeeds {
+    /// 内置(锁定、不可改/删)的模板。第一套「自动」是 UI 特例(由开关实时拼成),不在此数组;
+    /// 这里只保留「口语转书面」(id=t1)。其余为用户自建(id 形如 "tN-M")。
     public static let templates: [CloudTemplate] = [
         .init(id: "t1", name: "口语转书面", content: "把下面这段口述整理成通顺的书面表达，保留全部信息和原意，不要总结、不要遗漏。\n• 去掉口水词与重复，规整数字写法。\n• 专有名词以热词表为准：{{hotwords}}\n\n只输出整理后的文本。\n\n原文：{{transcript}}"),
-        .init(id: "t2", name: "会议纪要", content: "把下面的会议口述整理成结构化纪要：\n1）一句话主题；\n2）关键结论（要点列表）；\n3）待办事项（负责人 + 事项）。\n专有名词以热词表为准：{{hotwords}}\n\n会议转写：{{transcript}}"),
-        .init(id: "t3", name: "本地纠错复核", content: "你是语音转写后处理助手。下面给出原始识别文本，以及本机规则（同音字纠正 / 替换规则）已做的改动。请在保持原意、不增删信息的前提下整理文本，并重点核对本地规则的改动——若改错了请改回正确写法，没问题则保持。\n\n本地规则改动（可能有误）：\n{{changes}}\n\n专有名词以热词表为准：{{hotwords}}\n\n只输出整理后的纯文本，不要解释、不要加引号。\n\n原文：{{transcript}}"),
     ]
+    /// 新建模板的起始内容(带占位符,方便用户直接改)。
+    public static let newTemplateStarter = "在此编写你的润色指令(例:把口述整理成简洁书面表达)。\n专有名词以热词表为准：{{hotwords}}\n\n只输出整理后的文本。\n\n原文：{{transcript}}"
     public static let tokens: [(token: String, desc: String)] = [
         ("{{transcript}}", "转写原文"), ("{{hotwords}}", "词典热词"),
         ("{{date}}", "当前日期"), ("{{changes}}", "本地规则改动"),
     ]
     public static func decode(_ json: String) -> [CloudTemplate] {
         guard let d = json.data(using: .utf8), let a = try? JSONDecoder().decode([CloudTemplate].self, from: d), !a.isEmpty else { return templates }
-        return a
+        // 迁移:移除已退役的内置种子(t2 会议纪要 / t3 本地纠错复核);确保锁定的 t1 始终存在。
+        var out = a.filter { $0.id != "t2" && $0.id != "t3" }
+        if !out.contains(where: { $0.id == "t1" }) { out.insert(templates[0], at: 0) }
+        return out
     }
     public static func encode(_ t: [CloudTemplate]) -> String {
         (try? String(data: JSONEncoder().encode(t), encoding: .utf8) ?? "") ?? ""

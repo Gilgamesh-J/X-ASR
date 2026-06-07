@@ -74,6 +74,25 @@ public final class HUDModel: ObservableObject {
     /// 「立即插入」回调(host 设置:取消润色、插规则版)。HUD 按钮点它。
     public var onInsertNow: (@MainActor () -> Void)?
 
+    // MARK: 落字后「撤销 / 换模板重润色」(仅 paste 模式 + 实际经过 AI 润色时可用)
+
+    /// 一个可选的重润色模板。
+    public struct ReviseTemplate: Identifiable, Sendable, Equatable {
+        public let id: String
+        public let name: String
+        public init(id: String, name: String) { self.id = id; self.name = name }
+    }
+    /// .done 阶段是否提供「撤销 / 重润色」操作。
+    @Published public var canRevise = false
+    /// 重润色可选模板(⚡自动 + 内置 + 自定义)。
+    @Published public var reviseTemplates: [ReviseTemplate] = []
+    /// 撤销刚插入的文本(host:回删 + 收 HUD)。
+    public var onUndo: (@MainActor () -> Void)?
+    /// 换模板重润色(host:回删旧文本 → 用该模板重跑 → 插入新文本)。
+    public var onRepolish: (@MainActor (String) -> Void)?
+    /// 鼠标悬浮在 HUD 上 / 离开(host:悬浮时暂停自动消失,离开后延迟再收)。
+    public var onHoverChange: (@MainActor (Bool) -> Void)?
+
     public init() {}
 
     // MARK: Convenience drivers (optional helpers for the host app)
@@ -93,6 +112,8 @@ public final class HUDModel: ObservableObject {
         errorInfo = nil
         polishSlow = false
         polishHint = nil
+        canRevise = false
+        reviseTemplates = []
     }
 
     /// Format a duration (seconds) into the mm:ss style the HUD expects

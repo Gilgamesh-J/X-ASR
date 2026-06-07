@@ -142,7 +142,7 @@ public static class L10n
 
         // ---- cue sound (提示音) ----
         ["dict.cue"] = "Cue sound",
-        ["dict.cue.help"] = "Plays a soft sound when dictation starts and ends (Typeless-style).",
+        ["dict.cue.help"] = "Plays a soft sound when dictation starts and ends.",
         ["dict.cueTheme"] = "Cue sound style",
         ["dict.cueTheme.help"] = "Pick a timbre — it previews when you switch.",
         ["cue.tick"] = "Tick", ["cue.chime"] = "Chime", ["cue.soft"] = "Soft", ["cue.drop"] = "Drop", ["cue.marimba"] = "Marimba",
@@ -380,7 +380,7 @@ public static class L10n
 
         // ---- 提示音 ----
         ["dict.cue"] = "提示音",
-        ["dict.cue.help"] = "听写开始和结束时播放一声轻提示音(类似 Typeless)。",
+        ["dict.cue.help"] = "听写开始和结束时播放一声轻提示音。",
         ["dict.cueTheme"] = "提示音音色",
         ["dict.cueTheme.help"] = "选择喜欢的音色,切换时会试听一下。",
         ["cue.tick"] = "轻点", ["cue.chime"] = "清脆", ["cue.soft"] = "柔和", ["cue.drop"] = "水滴", ["cue.marimba"] = "木琴",
@@ -618,7 +618,7 @@ public static class L10n
 
         // ---- 通知音 ----
         ["dict.cue"] = "通知音",
-        ["dict.cue.help"] = "ディクテーションの開始・終了時に軽い通知音を鳴らします(Typeless 風)。",
+        ["dict.cue.help"] = "ディクテーションの開始・終了時に軽い通知音を鳴らします。",
         ["dict.cueTheme"] = "通知音の音色",
         ["dict.cueTheme.help"] = "好みの音色を選択。切り替え時に試聴します。",
         ["cue.tick"] = "ティック", ["cue.chime"] = "チャイム", ["cue.soft"] = "ソフト", ["cue.drop"] = "ドロップ", ["cue.marimba"] = "マリンバ",
@@ -856,7 +856,7 @@ public static class L10n
 
         // ---- 알림음 ----
         ["dict.cue"] = "알림음",
-        ["dict.cue.help"] = "받아쓰기 시작·종료 시 부드러운 알림음을 재생합니다(Typeless 스타일).",
+        ["dict.cue.help"] = "받아쓰기 시작·종료 시 부드러운 알림음을 재생합니다.",
         ["dict.cueTheme"] = "알림음 음색",
         ["dict.cueTheme.help"] = "원하는 음색을 선택하세요. 전환 시 미리 들려줍니다.",
         ["cue.tick"] = "틱", ["cue.chime"] = "차임", ["cue.soft"] = "소프트", ["cue.drop"] = "드롭", ["cue.marimba"] = "마림바",

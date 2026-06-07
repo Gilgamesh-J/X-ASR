@@ -43,7 +43,7 @@ public interface IAppController
     void SetDefiller(bool on);       // 去口水词
     void SetSnippets(bool enabled, string json);   // 口令 (voice snippets)
 
-    // ----- cue sound (Typeless-style chime on dictation start/stop) -----
+    // ----- cue sound (subtle chime on dictation start/stop) -----
     void SetCueEnabled(bool on);
     void SetCueTheme(string theme);      // tick | chime | soft | drop | marimba
     void SetCueVolume(string preset);    // low | med | high

@@ -18,7 +18,7 @@ public struct OnCallSessionView: View {
     public init(log: OnCallLog) { self.log = log }
 
     private func tt(_ zh: String, _ en: String) -> String {
-        switch l10n.resolved { case .zh: return zh; default: return en }
+        switch l10n.resolved { case .zh, .zhHant: return zh; default: return en }
     }
 
     public var body: some View {

@@ -39,7 +39,7 @@ public struct OnCallOverlay: View {
     }
 
     private func tt(_ zh: String, _ en: String) -> String {
-        switch l10n.resolved { case .zh: return zh; default: return en }
+        switch l10n.resolved { case .zh, .zhHant: return zh; default: return en }
     }
 
     public var body: some View {

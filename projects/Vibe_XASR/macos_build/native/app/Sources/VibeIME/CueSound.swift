@@ -1,7 +1,7 @@
 import Foundation
 import AVFoundation
 
-/// Typeless-style "cue" sounds played when dictation STARTS / STOPS.
+/// Subtle "cue" sounds played when dictation STARTS / STOPS.
 ///
 /// All timbres are synthesized in-memory (no bundled audio assets → nothing extra
 /// to sign/notarize) and rendered once to a tiny 16-bit WAV, then cached as an

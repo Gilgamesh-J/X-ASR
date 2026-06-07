@@ -6,7 +6,7 @@ using System.Media;
 namespace VibeXASR.Windows;
 
 /// <summary>
-/// Typeless-style "cue" sounds played when dictation STARTS / STOPS. All five timbres are
+/// Subtle "cue" sounds played when dictation STARTS / STOPS. All five timbres are
 /// synthesized in-memory to a tiny 16-bit mono WAV (the low/med/high gain is baked into the
 /// samples, so <see cref="SoundPlayer"/> needs no volume control) and cached. Playback is fully
 /// independent of mic capture, so it never disturbs recording. Faithful port of macOS CueSound.swift.

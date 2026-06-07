@@ -1,7 +1,7 @@
 import Foundation
 
 /// Remove Chinese filler words from FINAL dictation — the touch that makes speech
-/// read like writing (Typeless / Willow / WisprFlow all do this). Conservative:
+/// read like writing. Conservative:
 /// deletes pure interjections (嗯/呃/唉…) and collapses ≥4× repeats, so genuine
 /// reduplications (看看 / 想想 / 好好) and short counting (三三三) stay, and a single
 /// meaningful 那个 / 就是 is left intact — only stutter-style repeats are folded.

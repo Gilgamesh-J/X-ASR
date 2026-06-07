@@ -29,6 +29,7 @@ final class CloudPromptCoordinator: NSObject, NSTextViewDelegate {
 struct CloudPromptEditor: NSViewRepresentable {
     @Binding var text: String
     var coordinator: CloudPromptCoordinator
+    var editable: Bool = true   // 锁定模板(自动 / 口语转书面)时只读
     func makeCoordinator() -> CloudPromptCoordinator { coordinator }
     func makeNSView(context: Context) -> NSScrollView {
         let scroll = NSTextView.scrollableTextView()
@@ -38,6 +39,7 @@ struct CloudPromptEditor: NSViewRepresentable {
         tv.textColor = NSColor(white: 0.82, alpha: 1); tv.backgroundColor = .clear
         tv.drawsBackground = false; tv.textContainerInset = NSSize(width: 6, height: 10)
         tv.string = text
+        tv.isEditable = editable; tv.isSelectable = true   // 只读时仍可选中复制
         context.coordinator.textView = tv
         context.coordinator.onChange = { text = $0 }
         scroll.drawsBackground = false
@@ -46,6 +48,8 @@ struct CloudPromptEditor: NSViewRepresentable {
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         guard let tv = scroll.documentView as? NSTextView else { return }
         if tv.string != text { tv.string = text }
+        tv.isEditable = editable
+        tv.textColor = NSColor(white: editable ? 0.82 : 0.55, alpha: 1)   // 只读稍暗
     }
 }
 
@@ -62,9 +66,6 @@ struct LLMTab: View {
     @State private var showKey = false
     @State private var testing = false
     @State private var test: CloudTestResult?
-    // 模板态
-    @State private var templates: [CloudTemplate]
-    @State private var editingId: String?
     // 自定义服务商态
     @State private var customProviders: [CloudCustomProvider]
     @State private var showProviderMenu = false
@@ -79,13 +80,11 @@ struct LLMTab: View {
     // 非 nil = 用户想开启润色("cloud"/"local")但当前听写模式冲突,弹窗征询切换。
     @State private var pendingEnable: String?
     private let logTimer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
-    private let promptCo = CloudPromptCoordinator()
 
     init(s: SettingsState, l10n: L10n, relay: ModelManagerRelay) {
         self.s = s; self.l10n = l10n
         _relay = StateObject(wrappedValue: relay)
         _cfg = State(initialValue: s.cloud)
-        _templates = State(initialValue: CloudSeeds.decode(s.cloud.templatesJSON))
         _customProviders = State(initialValue: CloudCustomProviders.decode(s.cloud.customProvidersJSON))
         _profiles = State(initialValue: CloudProfiles.decode(s.cloud.profilesJSON))
     }
@@ -102,9 +101,12 @@ struct LLMTab: View {
         return CloudProvidersUI.find(cfg.provider)
     }
     private func commit() {
-        cfg.templatesJSON = CloudSeeds.encode(templates)
         cfg.customProvidersJSON = CloudCustomProviders.encode(customProviders)
         cfg.profilesJSON = CloudProfiles.encode(profiles)
+        // 模板由「提示词工作室」管理,提交时取最新 store 值(可能来自独立窗口),避免覆盖其编辑。
+        let live = s.liveCloud ?? s.cloud
+        cfg.templatesJSON = live.templatesJSON
+        cfg.activeTemplate = live.activeTemplate
         s.applyCloud(cfg)
     }
     private func setEnabled(_ on: Bool) {
@@ -145,7 +147,7 @@ struct LLMTab: View {
                 Text(l10n.t("llm.sec.mods")).sectionLabel(scheme)
                 modsCard
                 Text(l10n.t("llm.sec.templates")).sectionLabel(scheme)
-                promptCard
+                PromptTemplateStudioView(s: s, l10n: l10n, embedded: true)
             }
 
             Text(l10n.t("llm.sec.local")).sectionLabel(scheme)
@@ -154,7 +156,6 @@ struct LLMTab: View {
         .onChange(of: s.cloud) { _, newVal in   // 外部(如重置)同步进来
             if newVal != cfg {
                 cfg = newVal
-                templates = CloudSeeds.decode(newVal.templatesJSON)
                 customProviders = CloudCustomProviders.decode(newVal.customProvidersJSON)
                 profiles = CloudProfiles.decode(newVal.profilesJSON)
             }
@@ -642,67 +643,9 @@ struct LLMTab: View {
         }
     }
 
-    // ===== Prompt 模板工作室 =====
-    private var promptCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // 模板 chips
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    chipT(l10n.t("llm.tpl.auto"), active: cfg.activeTemplate == "auto") { cfg.activeTemplate = "auto"; commit() }
-                    ForEach(templates) { t in
-                        templateChip(t)
-                    }
-                    Button { addTemplate() } label: { Text(l10n.t("llm.tpl.new")) }
-                        .buttonStyle(.plain).font(Vibe.Fonts.ui(13))
-                        .foregroundStyle(Vibe.Palette.textMuted(scheme))
-                        .padding(.horizontal, 13).frame(height: 34)
-                        .background(RoundedRectangle(cornerRadius: 9).strokeBorder(Vibe.Palette.hairline(scheme), style: StrokeStyle(lineWidth: 1, dash: [4])))
-                }
-            }
-            // 占位符工具条
-            HStack(spacing: 8) {
-                Text(l10n.t("llm.tpl.insertToken")).font(Vibe.Fonts.ui(12)).foregroundStyle(Vibe.Palette.textMuted(scheme))
-                ForEach(CloudSeeds.tokens, id: \.token) { tk in
-                    Button { promptCo.insert(tk.token) } label: { Text(tk.token) }
-                        .buttonStyle(.plain).font(.system(size: 11.5, design: .monospaced))
-                        .foregroundStyle(Color(red: 0.70, green: 0.66, blue: 1))
-                        .padding(.horizontal, 8).padding(.vertical, 3)
-                        .background(RoundedRectangle(cornerRadius: 6).fill(Color(red: 0.55, green: 0.48, blue: 0.94).opacity(0.12)))
-                }
-                Spacer()
-                Text(l10n.t("llm.tpl.autoReplace")).font(Vibe.Fonts.ui(11)).foregroundStyle(Vibe.Palette.textMuted(scheme).opacity(0.7))
-            }
-            // 编辑器
-            CloudPromptEditor(text: promptBinding, coordinator: promptCo)
-                .frame(minHeight: 172)
-                .background(RoundedRectangle(cornerRadius: 12).fill(Color.black.opacity(0.25))
-                    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Vibe.Palette.hairline(scheme))))
-            Text(l10n.t("llm.tpl.hint"))
-                .font(Vibe.Fonts.ui(12)).foregroundStyle(Vibe.Palette.textMuted(scheme).opacity(0.8))
-        }
-        .padding(20)
-        .background(RoundedRectangle(cornerRadius: 16).fill(Vibe.Palette.surface2(scheme))
-            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Vibe.Palette.hairline(scheme))))
-        .cloudFade(cfg.enabled)
-    }
-
     // ===== 绑定 & 动作 =====
     private var keyBinding: Binding<String> {
         Binding(get: { cfg.apiKey }, set: { cfg.apiKey = $0; test = nil; commit() })   // 即时写 Keychain
-    }
-    private var promptBinding: Binding<String> {
-        Binding(
-            get: {
-                if cfg.activeTemplate == "auto" {
-                    return cfg.autoOverride.isEmpty ? buildAutoPromptUI(cfg.modsTuple) : cfg.autoOverride
-                }
-                return templates.first { $0.id == cfg.activeTemplate }?.content ?? ""
-            },
-            set: { v in
-                if cfg.activeTemplate == "auto" { cfg.autoOverride = v }
-                else if let i = templates.firstIndex(where: { $0.id == cfg.activeTemplate }) { templates[i].content = v }
-                commit()
-            })
     }
     private func switchProvider(_ key: String) {
         cfg.provider = key
@@ -779,21 +722,6 @@ struct LLMTab: View {
             _ = c
         }
     }
-    private func addTemplate() {
-        let id = "t\(templates.count + 1)-\(templates.count)"
-        let base = l10n.t("llm.tpl.default")
-        var n = templates.count + 1, name = "\(base)\(n)"
-        while templates.contains(where: { $0.name == name }) { n += 1; name = "\(base)\(n)" }
-        let cur = promptBinding.wrappedValue
-        templates.append(CloudTemplate(id: id, name: name, content: cur))
-        cfg.activeTemplate = id; editingId = id; commit()
-    }
-    private func delTemplate(_ id: String) {
-        templates.removeAll { $0.id == id }
-        if cfg.activeTemplate == id { cfg.activeTemplate = "auto" }
-        commit()
-    }
-
     // ===== 复用小组件 =====
     private func fieldCol<C: View>(_ label: String, @ViewBuilder _ content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 7) {
@@ -916,35 +844,5 @@ struct LLMTab: View {
             .padding(.horizontal, 9).padding(.vertical, 3)
             .background(RoundedRectangle(cornerRadius: 7).fill(Color.white.opacity(0.05))
                 .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Vibe.Palette.hairline(scheme))))
-    }
-    private func chipT(_ title: String, active: Bool, _ tap: @escaping () -> Void) -> some View {
-        Button(action: tap) { Text(title) }
-            .buttonStyle(.plain).font(Vibe.Fonts.ui(13, weight: active ? .medium : .regular))
-            .foregroundStyle(active ? .white : Vibe.Palette.text(scheme))
-            .padding(.horizontal, 13).frame(height: 34)
-            .background(RoundedRectangle(cornerRadius: 9).fill(active ? Color(red: 0.45, green: 0.42, blue: 0.85).opacity(0.28) : Color.black.opacity(0.2))
-                .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(active ? Color(red: 0.55, green: 0.48, blue: 0.94).opacity(0.55) : Vibe.Palette.hairline(scheme))))
-    }
-    private func templateChip(_ t: CloudTemplate) -> some View {
-        let active = cfg.activeTemplate == t.id
-        return HStack(spacing: 6) {
-            if editingId == t.id {
-                TextField("", text: Binding(
-                    get: { t.name },
-                    set: { nv in if let i = templates.firstIndex(where: { $0.id == t.id }) { templates[i].name = nv } }))
-                    .textFieldStyle(.plain).frame(width: 80)
-                    .onSubmit { editingId = nil; commit() }
-            } else {
-                Text(t.name).font(Vibe.Fonts.ui(13, weight: active ? .medium : .regular))
-                    .foregroundStyle(active ? .white : Vibe.Palette.text(scheme))
-            }
-            Button { delTemplate(t.id) } label: { Image(systemName: "xmark").font(.system(size: 9)) }
-                .buttonStyle(.plain).foregroundStyle(Vibe.Palette.textMuted(scheme))
-        }
-        .padding(.horizontal, 13).frame(height: 34)
-        .background(RoundedRectangle(cornerRadius: 9).fill(active ? Color(red: 0.45, green: 0.42, blue: 0.85).opacity(0.28) : Color.black.opacity(0.2))
-            .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(active ? Color(red: 0.55, green: 0.48, blue: 0.94).opacity(0.55) : Vibe.Palette.hairline(scheme))))
-        .onTapGesture { cfg.activeTemplate = t.id; commit() }
-        .onTapGesture(count: 2) { editingId = t.id }
     }
 }
