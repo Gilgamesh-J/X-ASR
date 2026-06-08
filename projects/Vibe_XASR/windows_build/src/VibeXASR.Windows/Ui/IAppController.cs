@@ -23,11 +23,18 @@ public interface IAppController
     void SetVad(VadKind vad);
     void SelectTier(ModelTier tier);
     void SetModelSource(string code);   // "official" | "modelscope" | "huggingface" — download mirror
-    void SetHotkey(int vk);
+    void SetHotkey(int vk, int mods);   // vk + modifier bitfield (Ctrl=1,Alt=2,Shift=4,Win=8)
     void SetLanguage(Lang lang);
     void SetClipboardOverwrite(bool on);
     void SetHistoryEnabled(bool on);
     void SetLaunchAtLogin(bool on);
+
+    // ----- macOS build 204 parity -----
+    void SetHudStay(double seconds);          // E: overlay bar stay duration after each utterance
+    void SetOutputTraditional(bool on);       // C: convert inserted text to 繁体 (simplified→traditional)
+    void SetTrigger(TriggerMode mode);        // A: hold-to-talk / tap-to-latch / pure toggle
+    void SetMicMuted(bool on);                // G: tray quick mic-mute (drops capture)
+    void SetActiveTemplate(string id);        // G/B: switch the active AI-polish prompt template
 
     // ----- desktop floating launcher (find/open the app) -----
     void SetLauncherEnabled(bool on);                       // 通用 toggle: show/hide the launcher pill
@@ -84,5 +91,6 @@ public interface IAppController
     // ----- window actions (tray popup / menu) -----
     void OpenSettings();
     void OpenHistory();
+    void OpenPromptStudio();   // 提示词工作室 (Prompt Template Studio)
     void Quit();
 }

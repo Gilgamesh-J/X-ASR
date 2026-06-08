@@ -38,6 +38,11 @@ public sealed class OverlayWindow : Window
     private DateTime _startedAt = DateTime.Now;
     private bool _paused;
 
+    // Overlay-stay duration (macOS build 204 parity): how long the "已插入" confirm lingers, and
+    // hover-to-keep. Driven by Settings.HudStaySeconds via SetStaySeconds().
+    private double _staySeconds = 0.5;
+    private DispatcherTimer? _hideTimer;
+
     private readonly double[] _bars = new double[20];
     private readonly Random _rng = new();
     private readonly DispatcherTimer _anim = new() { Interval = TimeSpan.FromMilliseconds(45) };
@@ -53,6 +58,15 @@ public sealed class OverlayWindow : Window
     public event EventHandler? StopRequested;
     public event EventHandler? ViewRequested;
     public event EventHandler? PauseRequested;
+    public event EventHandler? UndoRequested;          // post-insert: delete the just-inserted text
+    public event EventHandler<string>? RepolishRequested;   // post-insert: re-polish the last text with the CHOSEN template id
+
+    // Templates offered by the 换模板重润色 picker (⚡auto + saved templates). Set by TrayApp before ShowInserted.
+    private System.Collections.Generic.List<(string id, string name)> _repolishTemplates = new();
+    public void SetRepolishTemplates(System.Collections.Generic.IEnumerable<(string id, string name)> t)
+        => _repolishTemplates = new System.Collections.Generic.List<(string, string)>(t);
+    /// <summary>Dev/screenshot hook: open the re-polish template menu directly.</summary>
+    public void DevShowRepolishMenu() { _state = OverlayState.Inserted; ShowRepolishMenu(); }
 
     public string CurrentText => _text;
     public IntPtr Handle => new WindowInteropHelper(this).EnsureHandle();
@@ -77,11 +91,17 @@ public sealed class OverlayWindow : Window
         for (int i = 0; i < _bars.Length; i++) _bars[i] = 0.08;
         SourceInitialized += (_, _) => ApplyExStyles();
         _anim.Tick += (_, _) => OnAnimTick();
+        // Hover-to-keep the "已插入" confirm (macOS parity): cursor on → cancel hide; cursor off → restart.
+        MouseEnter += (_, _) => { if (_state == OverlayState.Inserted) _hideTimer?.Stop(); };
+        MouseLeave += (_, _) => { if (_state == OverlayState.Inserted) StartHideTimer(); };
     }
 
     // ============================ public driving API ============================
 
     public void SetLevel(double level) => _level = Math.Max(0, Math.Min(1, level));
+
+    /// <summary>How long the "已插入" confirm bar lingers after each utterance (seconds). 0 = vanish ASAP.</summary>
+    public void SetStaySeconds(double seconds) => _staySeconds = Math.Max(0, seconds);
 
     public void SetText(string text)
     {
@@ -103,19 +123,66 @@ public sealed class OverlayWindow : Window
         ShowNoActivate();
     }
 
-    public void ShowInserted(bool autoHide = true)
+    public void ShowInserted(bool autoHide = true, bool withUndo = false, bool withRepolish = false)
     {
-        if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(() => ShowInserted(autoHide)); return; }
+        if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(() => ShowInserted(autoHide, withUndo, withRepolish)); return; }
         if (_state == OverlayState.OnCall) return;
         _state = OverlayState.Inserted;
         Height = 56;
-        BuildConfirm(true, L10n.T("hud.insertedN", CharCount(_text)));
+        SetClickThrough(false);   // allow MouseEnter/Leave (hover-to-keep) + clickable action pills
+        var actions = new System.Collections.Generic.List<(string, bool, Action)>();
+        if (withUndo) actions.Add(("↶ " + L10n.T("hud.undo"), false, () => { _hideTimer?.Stop(); UndoRequested?.Invoke(this, EventArgs.Empty); }));
+        if (withRepolish) actions.Add(("✨ " + L10n.T("hud.repolish"), true, () => ShowRepolishMenu()));
+        BuildConfirm(true, L10n.T("hud.insertedN", CharCount(_text)), actions.ToArray());
         PositionBottomCenter();
         ShowNoActivate();
+        // With action pills, give the user time to reach them (hover keeps it indefinitely).
         if (!autoHide) return;
-        var t = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1100) };
-        t.Tick += (_, _) => { t.Stop(); HideOverlay(); };
-        t.Start();
+        StartHideTimer(actions.Count > 0 ? Math.Max(_staySeconds, 2.4) : -1);
+    }
+
+    /// <summary>换模板重润色: replace the HUD content with an in-window dark menu of templates (⚡auto +
+    /// saved). Rendered INSIDE the overlay (not a separate Popup, which would orphan when the HUD hides) —
+    /// picking one re-polishes the original text with THAT template (macOS dropdown parity).</summary>
+    private void ShowRepolishMenu()
+    {
+        if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(ShowRepolishMenu); return; }
+        _hideTimer?.Stop();   // no auto-hide while the menu is open
+        SetClickThrough(false);
+        var items = new System.Collections.Generic.List<(string id, string name)>(_repolishTemplates);
+        if (items.Count == 0) items.Add(("auto", "⚡ " + L10n.T("popup.template.auto")));
+        var sp = new StackPanel { Margin = new Thickness(6) };
+        sp.Children.Add(new TextBlock { Text = "✨ " + L10n.T("hud.repolish.pick"), Foreground = AccentA, FontSize = 12, FontWeight = FontWeights.SemiBold, Margin = new Thickness(12, 9, 12, 6) });
+        foreach (var (id, name) in items)
+        {
+            var cid = id;
+            var row = new Border { CornerRadius = new CornerRadius(8), Padding = new Thickness(12, 8, 14, 8), Margin = new Thickness(4, 0, 4, 2), Cursor = Cursors.Hand, Background = Brushes.Transparent,
+                Child = new TextBlock { Text = name, Foreground = TextB, FontSize = 13 } };
+            row.MouseEnter += (_, _) => row.Background = Surface2;
+            row.MouseLeave += (_, _) => row.Background = Brushes.Transparent;
+            row.MouseLeftButtonUp += (_, _) => RepolishRequested?.Invoke(this, cid);
+            sp.Children.Add(row);
+        }
+        var panel = new Border { Background = Bg, BorderBrush = Hair, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(14), Child = sp, Margin = new Thickness(20),
+            HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+            Effect = new DropShadowEffect { BlurRadius = 18, ShadowDepth = 4, Opacity = 0.5, Color = Colors.Black } };
+        Content = panel;
+        SizeToContent = SizeToContent.WidthAndHeight;
+        PositionBottomCenter();
+        ShowNoActivate();
+        StartHideTimer(8);   // fallback dismiss if the user picks nothing; hovering keeps it (MouseEnter)
+    }
+
+    /// <summary>(Re)start the auto-hide timer for the inserted confirm, using the configured stay duration.
+    /// <paramref name="overrideSecs"/> &gt;= 0 forces a specific interval (e.g. longer when action pills show).</summary>
+    private void StartHideTimer(double overrideSecs = -1)
+    {
+        _hideTimer?.Stop();
+        // Floor at 0.35 s so even "Instant" shows a brief flash rather than never painting.
+        double secs = overrideSecs >= 0 ? overrideSecs : Math.Max(_staySeconds, 0.35);
+        _hideTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(secs) };
+        _hideTimer.Tick += (_, _) => { _hideTimer?.Stop(); HideOverlay(); };
+        _hideTimer.Start();
     }
 
     public void ShowRefining()
@@ -135,7 +202,7 @@ public sealed class OverlayWindow : Window
     {
         if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(ShowOnCall); return; }
         _state = OverlayState.OnCall; _text = string.Empty; _paused = false; _startedAt = DateTime.Now;
-        Width = 340; Height = 196;
+        FixSize(340, 196);
         SetClickThrough(false);
         BuildOnCall();
         PositionTopRight();
@@ -147,6 +214,7 @@ public sealed class OverlayWindow : Window
     {
         if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(HideOverlay); return; }
         if (_state == OverlayState.OnCall) return;
+        _hideTimer?.Stop();
         _state = OverlayState.Hidden; _anim.Stop(); ClearRefs(); Hide();
     }
 
@@ -170,10 +238,20 @@ public sealed class OverlayWindow : Window
         Effect = new DropShadowEffect { BlurRadius = 18, ShadowDepth = 0, Opacity = 0.5, Color = Colors.Black },
     };
 
+    /// <summary>Force the window to a fixed size, reliably switching out of a prior SizeToContent=WidthAndHeight
+    /// (confirm / re-polish menu) state. Re-assigning the same Width/Height is a no-op that won't resize a
+    /// window left auto-sized, so we nudge by 1px first to guarantee a real change.</summary>
+    private void FixSize(double w, double h)
+    {
+        SizeToContent = SizeToContent.Manual;
+        Width = w + 1; Height = h + 1;
+        Width = w; Height = h;
+    }
+
     private void BuildHud()
     {
         ClearRefs();
-        SizeToContent = SizeToContent.Manual; Width = 560; Height = 64;
+        FixSize(560, 64);
         var grid = new Grid();
         _hudGrid = grid;
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });   // orb + wave (inset)
@@ -211,14 +289,35 @@ public sealed class OverlayWindow : Window
         Content = Pill(Height / 2.0, AccentA, 0.6, grid);
     }
 
-    private void BuildConfirm(bool done, string label)
+    private void BuildConfirm(bool done, string label, params (string text, bool filled, Action onClick)[] actions)
     {
         ClearRefs();
-        var sp = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(16, 0, 18, 0) };
-        sp.Children.Add(Orb(12, done));
-        sp.Children.Add(new TextBlock { Text = label, Foreground = done ? OkB : AccentA, FontSize = 15, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0) });
-        Content = Pill(Height / 2.0, done ? OkB : AccentA, done ? 0.8 : 0.6, sp);
-        SizeToContent = SizeToContent.Width; // fit the confirmation
+        var sp = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(14, 9, 14, 9) };
+        // small status dot (green check when inserted; pulsing accent while refining) — no big glowing orb
+        sp.Children.Add(StatusDot(done));
+        sp.Children.Add(new TextBlock { Text = label, Foreground = done ? OkB : AccentA, FontSize = 13.5, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(9, 0, actions.Length > 0 ? 12 : 2, 0) });
+        foreach (var (text, filled, onClick) in actions) sp.Children.Add(Pill2(text, filled, onClick, filled ? AccentA : null));
+        // Subtle dark HUD bar (NOT a loud colored outline) + transparent margin so the drop shadow
+        // can fade out instead of being clipped into a hard black edge at the window border.
+        var pill = new Border
+        {
+            CornerRadius = new CornerRadius(13), Background = Bg, BorderBrush = Hair, BorderThickness = new Thickness(1),
+            Child = sp, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(20),
+            Effect = new DropShadowEffect { BlurRadius = 16, ShadowDepth = 3, Opacity = 0.45, Color = Colors.Black },
+        };
+        Content = pill;
+        SizeToContent = SizeToContent.WidthAndHeight;   // window fits pill + shadow margin exactly
+    }
+
+    /// <summary>A small 16px status dot for the confirm bar — green check (done) or a soft accent dot (refining).</summary>
+    private FrameworkElement StatusDot(bool done)
+    {
+        var g = new Grid { Width = 18, Height = 18, VerticalAlignment = VerticalAlignment.Center };
+        var core = new Ellipse { Width = 18, Height = 18, Fill = done ? OkB : new SolidColorBrush(WithAlpha(((SolidColorBrush)AccentA).Color, 235)) };
+        g.Children.Add(core);
+        if (done) g.Children.Add(new TextBlock { Text = "✓", Foreground = Brushes.White, FontSize = 11, FontWeight = FontWeights.Bold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center });
+        else { _orbGlow = core; }   // let OnAnimTick pulse it while refining
+        return g;
     }
 
     private void BuildOnCall()
@@ -257,9 +356,9 @@ public sealed class OverlayWindow : Window
             Effect = new DropShadowEffect { BlurRadius = 22, ShadowDepth = 2, Opacity = 0.5, Color = Colors.Black } };
     }
 
-    private Border Pill2(string text, bool filled, Action onClick)
+    private Border Pill2(string text, bool filled, Action onClick, Brush? fill = null)
     {
-        var b = new Border { CornerRadius = new CornerRadius(14), Background = filled ? DangerB : Surface2, Padding = new Thickness(12, 5, 12, 5), Margin = new Thickness(0, 0, 7, 0), Cursor = Cursors.Hand,
+        var b = new Border { CornerRadius = new CornerRadius(13), Background = filled ? (fill ?? DangerB) : Surface2, BorderBrush = filled ? Brushes.Transparent : Hair, BorderThickness = new Thickness(1), Padding = new Thickness(11, 5, 11, 5), Margin = new Thickness(0, 0, 7, 0), Cursor = Cursors.Hand,
             Child = new TextBlock { Text = text, Foreground = filled ? Brushes.White : TextB, FontSize = 12, FontWeight = FontWeights.SemiBold } };
         b.MouseLeftButtonUp += (_, _) => onClick();
         return b;
@@ -315,9 +414,8 @@ public sealed class OverlayWindow : Window
     private void UpdateOnCallBody()
     {
         if (_onCallBody is null) return;
-        bool zh = L10n.Resolved == Lang.Zh;
-        if (_paused) { _onCallBody.Text = "❚❚ " + (zh ? "已暂停" : "Paused"); _onCallBody.Foreground = Muted; }
-        else if (_text.Length == 0) { _onCallBody.Text = zh ? "候机中,识别到说话即显示…" : "Standby — speak to capture…"; _onCallBody.Foreground = Muted; }
+        if (_paused) { _onCallBody.Text = "❚❚ " + L10n.Loc("已暂停", "Paused", "一時停止中", "일시 중지됨"); _onCallBody.Foreground = Muted; }
+        else if (_text.Length == 0) { _onCallBody.Text = L10n.Loc("候机中,识别到说话即显示…", "Standby — speak to capture…", "待機中。話すと認識結果を表示します…", "대기 중. 말하면 인식 결과를 표시합니다…"); _onCallBody.Foreground = Muted; }
         else { _onCallBody.Text = _text; _onCallBody.Foreground = TextB; }
     }
 

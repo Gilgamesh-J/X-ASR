@@ -12,7 +12,7 @@ internal sealed class PreviewController : IAppController
 {
     public Settings Settings { get; } = PreviewSettings();
     private static Settings PreviewSettings() { var s = Settings.Load(); if (Environment.GetEnvironmentVariable("VIBEXASR_PREVIEW_SHARE") == "1") s.ApiEnabled = true; return s; }
-    public HistoryStore History => null!;
+    public HistoryStore History { get; } = new HistoryStore();
     public ModelManager Models { get; }
     public PreviewController() => Models = new ModelManager(Settings);
     public bool EngineSwapping => false;
@@ -21,11 +21,16 @@ internal sealed class PreviewController : IAppController
     public void SetVad(VadKind vad) { }
     public void SelectTier(ModelTier tier) => Settings.Tier = tier;
     public void SetModelSource(string code) => Settings.ModelSource = code;
-    public void SetHotkey(int vk) => Settings.HotkeyVk = vk;
+    public void SetHotkey(int vk, int mods) { Settings.HotkeyVk = vk; Settings.HotkeyMods = mods; }
     public void SetLanguage(Lang lang) { Settings.Language = L10n.ToCode(lang); L10n.Current = lang; }
     public void SetClipboardOverwrite(bool on) => Settings.ClipboardOverwrite = on;
     public void SetHistoryEnabled(bool on) => Settings.HistoryEnabled = on;
     public void SetLaunchAtLogin(bool on) => Settings.LaunchAtLogin = on;
+    public void SetHudStay(double seconds) => Settings.HudStaySeconds = seconds;
+    public void SetOutputTraditional(bool on) => Settings.OutputTraditional = on;
+    public void SetTrigger(TriggerMode mode) => Settings.Trigger = mode;
+    public void SetMicMuted(bool on) => Settings.MicMuted = on;
+    public void SetActiveTemplate(string id) => Settings.CloudActiveTemplate = id;
     public void SetLauncherEnabled(bool on) => Settings.LauncherEnabled = on;
     public void ShowQuickMenu(double screenX, double screenY) { }
 
@@ -65,5 +70,6 @@ internal sealed class PreviewController : IAppController
 
     public void OpenSettings() { }
     public void OpenHistory() { }
+    public void OpenPromptStudio() { }
     public void Quit() { }
 }

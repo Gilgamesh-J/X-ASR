@@ -73,6 +73,45 @@ internal static class CloudJson
         src.Select(t => new CloudTemplate { Id = t.Id, Name = t.Name, Content = t.Content }).ToList();
 }
 
+/// <summary>Per-template hotkey bindings (Prompt Studio): JSON {"templateId":{"vk":88,"mods":3}}.</summary>
+internal static class CloudTemplateHotkeys
+{
+    public static List<(string Id, int Vk, int Mods)> Parse(string? json)
+    {
+        var list = new List<(string, int, int)>();
+        if (string.IsNullOrWhiteSpace(json)) return list;
+        try
+        {
+            using var doc = JsonDocument.Parse(json!);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return list;
+            foreach (var p in doc.RootElement.EnumerateObject())
+            {
+                if (p.Value.ValueKind != JsonValueKind.Object) continue;
+                int vk = p.Value.TryGetProperty("vk", out var v) && v.TryGetInt32(out var vi) ? vi : 0;
+                int mods = p.Value.TryGetProperty("mods", out var m) && m.TryGetInt32(out var mi) ? mi : 0;
+                if (vk != 0) list.Add((p.Name, vk, mods));
+            }
+        }
+        catch { }
+        return list;
+    }
+
+    public static (int Vk, int Mods) For(string? json, string id)
+    {
+        foreach (var (i, vk, mods) in Parse(json)) if (i == id) return (vk, mods);
+        return (0, 0);
+    }
+
+    public static string Set(string? json, string id, int vk, int mods)
+    {
+        var map = Parse(json).Where(b => b.Id != id).ToList();
+        if (vk != 0) map.Add((id, vk, mods));
+        var d = new Dictionary<string, Dictionary<string, int>>();
+        foreach (var (i, v, m) in map) d[i] = new() { ["vk"] = v, ["mods"] = m };
+        return JsonSerializer.Serialize(d);
+    }
+}
+
 internal static class CloudSeeds
 {
     public static readonly List<CloudTemplate> Templates = new()

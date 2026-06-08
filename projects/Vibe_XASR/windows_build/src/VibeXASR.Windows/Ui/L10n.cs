@@ -5,7 +5,7 @@ using System.Globalization;
 namespace VibeXASR.Windows.Ui;
 
 /// <summary>UI language selection. <c>Auto</c> follows the system; the rest are explicit.</summary>
-public enum Lang { Auto, Zh, En, Ja, Ko }
+public enum Lang { Auto, Zh, En, Ja, Ko, Hant }
 
 /// <summary>
 /// Dependency-free runtime localization, ported from the macOS app's <c>L10n.swift</c>.
@@ -29,19 +29,19 @@ public static class L10n
     /// <summary>Map a persisted code ("auto"/"zh"/...) to a <see cref="Lang"/>.</summary>
     public static Lang FromCode(string? code) => code?.ToLowerInvariant() switch
     {
-        "zh" => Lang.Zh, "en" => Lang.En, "ja" => Lang.Ja, "ko" => Lang.Ko, _ => Lang.Auto,
+        "zh" => Lang.Zh, "zh-hant" => Lang.Hant, "en" => Lang.En, "ja" => Lang.Ja, "ko" => Lang.Ko, _ => Lang.Auto,
     };
 
     public static string ToCode(Lang l) => l switch
     {
-        Lang.Zh => "zh", Lang.En => "en", Lang.Ja => "ja", Lang.Ko => "ko", _ => "auto",
+        Lang.Zh => "zh", Lang.Hant => "zh-Hant", Lang.En => "en", Lang.Ja => "ja", Lang.Ko => "ko", _ => "auto",
     };
 
     /// <summary>Native display name for the picker.</summary>
     public static string Display(Lang l) => l switch
     {
         Lang.Auto => T("lang.auto"),
-        Lang.Zh => "中文", Lang.En => "English", Lang.Ja => "日本語", Lang.Ko => "한국어",
+        Lang.Zh => "简体中文", Lang.Hant => "繁體中文", Lang.En => "English", Lang.Ja => "日本語", Lang.Ko => "한국어",
         _ => "English",
     };
 
@@ -50,8 +50,15 @@ public static class L10n
 
     private static Lang SystemPreferred()
     {
-        var name = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.ToLowerInvariant();
-        return name switch { "zh" => Lang.Zh, "ja" => Lang.Ja, "ko" => Lang.Ko, _ => Lang.En };
+        var ci = CultureInfo.CurrentUICulture;
+        var two = ci.TwoLetterISOLanguageName.ToLowerInvariant();
+        if (two == "zh")
+        {
+            var name = ci.Name.ToLowerInvariant();   // e.g. zh-TW, zh-HK, zh-Hant
+            if (name.Contains("hant") || name.Contains("tw") || name.Contains("hk") || name.Contains("mo")) return Lang.Hant;
+            return Lang.Zh;
+        }
+        return two switch { "ja" => Lang.Ja, "ko" => Lang.Ko, _ => Lang.En };
     }
 
     /// <summary>Translate a key: resolved language → English → the key itself.</summary>
@@ -66,14 +73,35 @@ public static class L10n
     /// <summary>Translate + composite-format ({0}, {1}, …).</summary>
     public static string T(string key, params object[] args) => string.Format(T(key), args);
 
+    /// <summary>Inline localized literal (build 205 full-localization parity). Picks by resolved language;
+    /// 繁體 is synthesized from the 简体 string via the native 简→繁 transform (no separate table entry).
+    /// Use to upgrade hardcoded <c>Zh ? "中" : "英"</c> ternaries → idiomatic ja/ko too.</summary>
+    public static string Loc(string zh, string en, string ja, string ko) => Resolved switch
+    {
+        Lang.Zh => zh,
+        Lang.Hant => Lexicon.Hant.ToTraditional(zh),
+        Lang.Ja => string.IsNullOrEmpty(ja) ? en : ja,
+        Lang.Ko => string.IsNullOrEmpty(ko) ? en : ko,
+        _ => en,
+    };
+
     // Lazy so it builds AFTER the per-language dictionaries below are initialized
     // (static field initializers run in textual order; En/Zh/Ja/Ko are declared later).
     private static Dictionary<Lang, Dictionary<string, string>>? _tables;
     private static Dictionary<Lang, Dictionary<string, string>> Tables =>
         _tables ??= new()
         {
-            [Lang.En] = En, [Lang.Zh] = Zh, [Lang.Ja] = Ja, [Lang.Ko] = Ko,
+            [Lang.En] = En, [Lang.Zh] = Zh, [Lang.Ja] = Ja, [Lang.Ko] = Ko, [Lang.Hant] = BuildHant(),
         };
+
+    /// <summary>繁體中文 table, synthesized from the 简体 table via the native 简→繁 transform — avoids
+    /// hand-maintaining a 5th dictionary. ASCII/punctuation/placeholders pass through unchanged.</summary>
+    private static Dictionary<string, string> BuildHant()
+    {
+        var d = new Dictionary<string, string>(Zh.Count);
+        foreach (var kv in Zh) d[kv.Key] = Lexicon.Hant.ToTraditional(kv.Value);
+        return d;
+    }
 
     // ---- English (fallback — complete) ----
     private static readonly Dictionary<string, string> En = new()
@@ -90,6 +118,15 @@ public static class L10n
         ["menu.recent"] = "Most recent",
         ["menu.enable"] = "Enable dictation",
         ["menu.settings"] = "Settings…",
+        ["studio.title"] = "Prompt Studio…",
+        ["studio.window"] = "Prompt Studio",
+        ["win.settings"] = "Vibe XASR Settings",
+        ["studio.open"] = "Open in window",
+        ["tpl.hotkey"] = "Template hotkey",
+        ["tpl.hotkey.unset"] = "Click to record…",
+        ["tpl.hotkey.clear"] = "Clear",
+        ["tpl.hotkey.conflict"] = "Key already in use",
+        ["tpl.hotkey.hint"] = "Hold this key to dictate using this template (needs AI polish on). Use a modifier combo (e.g. Ctrl+Alt+X).",
         ["menu.pad"] = "Pad…",
         ["menu.history"] = "History…",
         ["menu.quit"] = "Quit Vibe XASR",
@@ -128,6 +165,9 @@ public static class L10n
         ["dict.defiller"] = "Remove filler words",
         ["dict.defiller.help"] = "Strip 嗯/呃/唉 and stutter repeats (那个那个→那个) from the final result. Real reduplications (看看/想想) are kept.",
         ["tab.snippet"] = "Snippets",
+        ["tab.history"] = "Records",
+        ["history.entry.desc"] = "Records open in their own window — search, group, calendar, multi-select, merge & tag.",
+        ["history.entry.open"] = "Open records window",
         ["tab.share"] = "Share",
         ["grp.snippet"] = "SNIPPETS",
         ["snip.enable"] = "Enable snippets",
@@ -165,10 +205,29 @@ public static class L10n
         ["gen.launcher"] = "Desktop launcher",
         ["gen.launcher.help"] = "A small floating pill so you can always find + open Vibe XASR. Drag to move; click the ✕ on it to hide.",
 
+        ["grp.trigger"] = "TRIGGER",
+        ["dict.trigger"] = "Trigger mode",
+        ["dict.trigger.help"] = "Hold the key to talk, or tap once to start and again to stop.",
+        ["dict.trigger.hold"] = "Hold to talk",
+        ["dict.trigger.toggle"] = "Tap to toggle",
         ["grp.dictation"] = "DICTATION",
+        ["dict.hudStay"] = "Overlay stay",
+        ["dict.hudStay.help"] = "How long the overlay bar lingers after each utterance. Move the cursor onto it to keep it; new speech replaces it at once.",
+        ["dict.hudStay.s0"] = "Instant",
+        ["dict.hudStay.s05"] = "0.5 s",
+        ["dict.hudStay.s1"] = "1 s",
+        ["dict.hudStay.s2"] = "2 s",
+        ["dict.hudStay.s4"] = "4 s",
+        ["dict.toTraditional"] = "Output Traditional Chinese",
+        ["dict.toTraditional.help"] = "Convert the inserted text to Traditional characters (简体→繁體).",
+        ["io.import"] = "Import",
+        ["io.export"] = "Export",
+        ["popup.micMute"] = "Mute mic",
+        ["popup.template"] = "Polish template",
+        ["popup.template.auto"] = "Auto",
         ["dict.hotkey"] = "Trigger key (push-to-talk)",
         ["dict.hotkey.help"] = "Click to record, then press the key you want to use.",
-        ["dict.hotkey.recording"] = "Press a key…",
+        ["dict.hotkey.recording"] = "Press a key / combo…",
         ["dict.mode"] = "Dictation mode",
         ["dict.mode.paste.title"] = "Insert when done",
         ["dict.mode.paste.desc"] = "Writes the whole sentence at the cursor once you finish speaking.",
@@ -275,6 +334,9 @@ public static class L10n
         ["hud.inserted"] = "Inserted",
         ["hud.insertedN"] = "Inserted · {0} chars",
         ["hud.refining"] = "✨ Refining…",
+        ["hud.undo"] = "Undo",
+        ["hud.repolish"] = "Re-polish",
+        ["hud.repolish.pick"] = "Re-polish with…",
         ["tab.cloud"] = "AI polish",
         ["badge.recommended"] = "Recommended",
         ["llm.cancel"] = "Cancel",
@@ -328,6 +390,15 @@ public static class L10n
         ["menu.recent"] = "最近一条",
         ["menu.enable"] = "启用听写",
         ["menu.settings"] = "设置…",
+        ["studio.title"] = "提示词工作室…",
+        ["studio.window"] = "提示词工作室",
+        ["win.settings"] = "Vibe XASR 设置",
+        ["studio.open"] = "在新窗口打开",
+        ["tpl.hotkey"] = "模板快捷键",
+        ["tpl.hotkey.unset"] = "点击录制…",
+        ["tpl.hotkey.clear"] = "清除",
+        ["tpl.hotkey.conflict"] = "快捷键已被占用",
+        ["tpl.hotkey.hint"] = "按住此键即用该模板听写(需开启 AI 润色)。建议用组合键(如 Ctrl+Alt+X)。",
         ["menu.pad"] = "便笺…",
         ["menu.history"] = "历史…",
         ["menu.quit"] = "退出 Vibe XASR",
@@ -366,6 +437,9 @@ public static class L10n
         ["dict.defiller"] = "去口水词",
         ["dict.defiller.help"] = "说完时去掉「嗯/呃/唉」和口吃重复(那个那个→那个、我我我→我)。叠词(看看/想想)保留。",
         ["tab.snippet"] = "口令",
+        ["tab.history"] = "记录",
+        ["history.entry.desc"] = "记录是独立窗口 —— 支持搜索、碎句聚合、日历、多选、合并与加标签。",
+        ["history.entry.open"] = "打开记录窗口",
         ["tab.share"] = "共享",
         ["grp.snippet"] = "口令",
         ["snip.enable"] = "启用口令",
@@ -403,10 +477,29 @@ public static class L10n
         ["gen.launcher"] = "桌面悬浮入口",
         ["gen.launcher.help"] = "一个小浮窗,随时找到并打开 Vibe XASR。可拖动;点它上面的 ✕ 即可隐藏。",
 
+        ["grp.trigger"] = "触发",
+        ["dict.trigger"] = "触发方式",
+        ["dict.trigger.help"] = "按住说话(松开结束),或单击开始、再单击结束。",
+        ["dict.trigger.hold"] = "按住说话",
+        ["dict.trigger.toggle"] = "单击切换",
         ["grp.dictation"] = "听写",
+        ["dict.hudStay"] = "悬浮条停留",
+        ["dict.hudStay.help"] = "说完后悬浮条停留多久。把鼠标移上去可保持;有新的说话会立刻覆盖。",
+        ["dict.hudStay.s0"] = "立刻",
+        ["dict.hudStay.s05"] = "0.5 秒",
+        ["dict.hudStay.s1"] = "1 秒",
+        ["dict.hudStay.s2"] = "2 秒",
+        ["dict.hudStay.s4"] = "4 秒",
+        ["dict.toTraditional"] = "输出转繁体",
+        ["dict.toTraditional.help"] = "把插入的文字转换成繁体字(简体→繁體)。",
+        ["io.import"] = "导入",
+        ["io.export"] = "导出",
+        ["popup.micMute"] = "静音麦克风",
+        ["popup.template"] = "润色模板",
+        ["popup.template.auto"] = "自动",
         ["dict.hotkey"] = "触发键(push-to-talk)",
         ["dict.hotkey.help"] = "点一下开始录制,然后按下你想用的键。",
-        ["dict.hotkey.recording"] = "请按一个键…",
+        ["dict.hotkey.recording"] = "按下按键 / 组合…",
         ["dict.mode"] = "听写模式",
         ["dict.mode.paste.title"] = "说完插入",
         ["dict.mode.paste.desc"] = "说完一句,一次性写入光标处。",
@@ -513,6 +606,9 @@ public static class L10n
         ["hud.inserted"] = "已插入",
         ["hud.insertedN"] = "已插入 · {0} 字",
         ["hud.refining"] = "✨ 润色中…",
+        ["hud.undo"] = "撤销",
+        ["hud.repolish"] = "换模板重润色",
+        ["hud.repolish.pick"] = "选模板重新润色…",
         ["tab.cloud"] = "AI 润色",
         ["badge.recommended"] = "推荐",
         ["llm.cancel"] = "取消",
@@ -566,6 +662,15 @@ public static class L10n
         ["menu.recent"] = "最近の項目",
         ["menu.enable"] = "音声入力を有効化",
         ["menu.settings"] = "設定…",
+        ["studio.title"] = "プロンプトスタジオ…",
+        ["studio.window"] = "プロンプトスタジオ",
+        ["win.settings"] = "Vibe XASR 設定",
+        ["studio.open"] = "ウィンドウで開く",
+        ["tpl.hotkey"] = "テンプレートのキー",
+        ["tpl.hotkey.unset"] = "クリックして記録…",
+        ["tpl.hotkey.clear"] = "クリア",
+        ["tpl.hotkey.conflict"] = "このキーは使用中です",
+        ["tpl.hotkey.hint"] = "このキーを押している間、このテンプレートで音声入力します(AI 整形が必要)。組み合わせ(例:Ctrl+Alt+X)推奨。",
         ["menu.pad"] = "メモ…",
         ["menu.history"] = "履歴…",
         ["menu.quit"] = "Vibe XASR を終了",
@@ -604,6 +709,9 @@ public static class L10n
         ["dict.defiller"] = "言いよどみ除去",
         ["dict.defiller.help"] = "確定時に「嗯/呃」や口ごもりの繰り返し(那个那个→那个)を除去。重ね型(看看/想想)は保持。",
         ["tab.snippet"] = "定型文",
+        ["tab.history"] = "履歴",
+        ["history.entry.desc"] = "履歴は別ウィンドウで開きます —— 検索・集約・カレンダー・複数選択・結合とタグ付け。",
+        ["history.entry.open"] = "履歴ウィンドウを開く",
         ["tab.share"] = "共有",
         ["grp.snippet"] = "定型文",
         ["snip.enable"] = "定型文を有効化",
@@ -641,10 +749,29 @@ public static class L10n
         ["gen.launcher"] = "デスクトップ ランチャー",
         ["gen.launcher.help"] = "小さなフローティングピル。いつでも Vibe XASR を見つけて開けます。ドラッグで移動、✕ で非表示。",
 
+        ["grp.trigger"] = "トリガー",
+        ["dict.trigger"] = "トリガー方式",
+        ["dict.trigger.help"] = "押している間だけ話す、または1回タップで開始・もう1回で停止。",
+        ["dict.trigger.hold"] = "押して話す",
+        ["dict.trigger.toggle"] = "タップで切替",
         ["grp.dictation"] = "音声入力",
+        ["dict.hudStay"] = "オーバーレイ表示時間",
+        ["dict.hudStay.help"] = "発話後にオーバーレイが残る時間。カーソルを乗せると保持し、新しい発話で即座に置き換わります。",
+        ["dict.hudStay.s0"] = "即時",
+        ["dict.hudStay.s05"] = "0.5 秒",
+        ["dict.hudStay.s1"] = "1 秒",
+        ["dict.hudStay.s2"] = "2 秒",
+        ["dict.hudStay.s4"] = "4 秒",
+        ["dict.toTraditional"] = "繁体字で出力",
+        ["dict.toTraditional.help"] = "挿入するテキストを繁体字に変換します(簡体→繁體)。",
+        ["io.import"] = "インポート",
+        ["io.export"] = "エクスポート",
+        ["popup.micMute"] = "マイクをミュート",
+        ["popup.template"] = "推敲テンプレート",
+        ["popup.template.auto"] = "自動",
         ["dict.hotkey"] = "トリガーキー(プッシュ・トゥ・トーク)",
         ["dict.hotkey.help"] = "クリックして録音し、使いたいキーを押してください。",
-        ["dict.hotkey.recording"] = "キーを押してください…",
+        ["dict.hotkey.recording"] = "キー / 組み合わせを押す…",
         ["dict.mode"] = "音声入力モード",
         ["dict.mode.paste.title"] = "話し終えたら挿入",
         ["dict.mode.paste.desc"] = "一文を話し終えると、カーソル位置にまとめて書き込みます。",
@@ -751,6 +878,9 @@ public static class L10n
         ["hud.inserted"] = "挿入済み",
         ["hud.insertedN"] = "{0} 文字を挿入",
         ["hud.refining"] = "✨ 整形中…",
+        ["hud.undo"] = "取り消し",
+        ["hud.repolish"] = "別テンプレで再整形",
+        ["hud.repolish.pick"] = "テンプレを選んで再整形…",
         ["tab.cloud"] = "AI 整形",
         ["badge.recommended"] = "おすすめ",
         ["llm.cancel"] = "キャンセル",
@@ -804,6 +934,15 @@ public static class L10n
         ["menu.recent"] = "최근 항목",
         ["menu.enable"] = "받아쓰기 사용",
         ["menu.settings"] = "설정…",
+        ["studio.title"] = "프롬프트 스튜디오…",
+        ["studio.window"] = "프롬프트 스튜디오",
+        ["win.settings"] = "Vibe XASR 설정",
+        ["studio.open"] = "새 창에서 열기",
+        ["tpl.hotkey"] = "템플릿 단축키",
+        ["tpl.hotkey.unset"] = "클릭하여 기록…",
+        ["tpl.hotkey.clear"] = "지우기",
+        ["tpl.hotkey.conflict"] = "이미 사용 중인 키",
+        ["tpl.hotkey.hint"] = "이 키를 누르고 있으면 이 템플릿으로 받아쓰기합니다(AI 다듬기 필요). 조합키(예: Ctrl+Alt+X) 권장.",
         ["menu.pad"] = "메모…",
         ["menu.history"] = "기록…",
         ["menu.quit"] = "Vibe XASR 종료",
@@ -842,6 +981,9 @@ public static class L10n
         ["dict.defiller"] = "군말 제거",
         ["dict.defiller.help"] = "확정 시 '嗯/呃'와 말 더듬 반복(那个那个→那个)을 제거. 첩어(看看/想想)는 유지.",
         ["tab.snippet"] = "스니펫",
+        ["tab.history"] = "기록",
+        ["history.entry.desc"] = "기록은 별도 창에서 열립니다 —— 검색·묶기·달력·다중 선택·병합 및 태그.",
+        ["history.entry.open"] = "기록 창 열기",
         ["tab.share"] = "공유",
         ["grp.snippet"] = "스니펫",
         ["snip.enable"] = "스니펫 사용",
@@ -879,10 +1021,29 @@ public static class L10n
         ["gen.launcher"] = "데스크톱 런처",
         ["gen.launcher.help"] = "작은 플로팅 알약 — 언제든 Vibe XASR를 찾아 열 수 있습니다. 드래그로 이동, ✕로 숨기기.",
 
+        ["grp.trigger"] = "트리거",
+        ["dict.trigger"] = "트리거 방식",
+        ["dict.trigger.help"] = "키를 누르고 있는 동안 말하거나, 한 번 탭해 시작하고 다시 탭해 멈춥니다.",
+        ["dict.trigger.hold"] = "눌러서 말하기",
+        ["dict.trigger.toggle"] = "탭하여 전환",
         ["grp.dictation"] = "받아쓰기",
+        ["dict.hudStay"] = "오버레이 유지",
+        ["dict.hudStay.help"] = "발화 후 오버레이 막대가 머무는 시간. 커서를 올리면 유지되고, 새 발화가 즉시 대체합니다.",
+        ["dict.hudStay.s0"] = "즉시",
+        ["dict.hudStay.s05"] = "0.5초",
+        ["dict.hudStay.s1"] = "1초",
+        ["dict.hudStay.s2"] = "2초",
+        ["dict.hudStay.s4"] = "4초",
+        ["dict.toTraditional"] = "번체자로 출력",
+        ["dict.toTraditional.help"] = "삽입되는 텍스트를 번체자로 변환합니다(간체→번체).",
+        ["io.import"] = "가져오기",
+        ["io.export"] = "내보내기",
+        ["popup.micMute"] = "마이크 음소거",
+        ["popup.template"] = "다듬기 템플릿",
+        ["popup.template.auto"] = "자동",
         ["dict.hotkey"] = "트리거 키(푸시 투 토크)",
         ["dict.hotkey.help"] = "클릭하여 녹음한 후 사용할 키를 누르세요.",
-        ["dict.hotkey.recording"] = "키를 누르세요…",
+        ["dict.hotkey.recording"] = "키 / 조합을 누르세요…",
         ["dict.mode"] = "받아쓰기 모드",
         ["dict.mode.paste.title"] = "말을 마치면 삽입",
         ["dict.mode.paste.desc"] = "한 문장을 말하고 나면 커서 위치에 한 번에 입력합니다.",
@@ -989,6 +1150,9 @@ public static class L10n
         ["hud.inserted"] = "삽입됨",
         ["hud.insertedN"] = "{0}자 삽입",
         ["hud.refining"] = "✨ 다듬는 중…",
+        ["hud.undo"] = "실행 취소",
+        ["hud.repolish"] = "템플릿 변경 후 재다듬기",
+        ["hud.repolish.pick"] = "템플릿 선택 후 재다듬기…",
         ["tab.cloud"] = "AI 다듬기",
         ["badge.recommended"] = "추천",
         ["llm.cancel"] = "취소",

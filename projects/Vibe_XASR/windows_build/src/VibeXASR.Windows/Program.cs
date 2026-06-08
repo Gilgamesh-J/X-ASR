@@ -105,10 +105,13 @@ internal static class Program
                     cap.Start();
                     return;
                 }
-                if (which is "overlay" or "overlay-oncall")
+                if (which is "overlay" or "overlay-oncall" or "overlay-inserted" or "overlay-repolishmenu" or "overlay-trans")
                 {
                     var ov = new Ui.Wpf.OverlayWindow();
                     if (which == "overlay-oncall") { ov.ShowOnCall(); ov.SetText("把这个 function 改成 async,顺手把错误处理也补上。"); }
+                    else if (which == "overlay-inserted") { ov.SetRepolishTemplates(new[] { ("auto", "⚡ 自动"), ("t1", "口语转书面"), ("t2", "会议纪要"), ("t3", "本地纠错复核") }); ov.SetText("把这个 function 改成 async,顺手把错误处理也补上"); ov.ShowInserted(autoHide: false, withUndo: true, withRepolish: true); }
+                    else if (which == "overlay-repolishmenu") { ov.SetRepolishTemplates(new[] { ("auto", "⚡ 自动"), ("t1", "口语转书面"), ("t2", "会议纪要"), ("t3", "本地纠错复核") }); ov.DevShowRepolishMenu(); }
+                    else if (which == "overlay-trans") { ov.SetRepolishTemplates(new[] { ("auto", "⚡ 自动"), ("t1", "口语转书面") }); ov.SetText("x"); ov.ShowInserted(autoHide: false, withUndo: true, withRepolish: true); ov.DevShowRepolishMenu(); ov.ShowListening(); ov.SetLevel(0.7); ov.SetText("把这个 function 改成 async"); }
                     else { ov.ShowListening(); ov.SetLevel(0.7); ov.SetText("把这个 function 改成 async,顺手把错误处理也补上,再写两句单元测试"); }
                     // let layout + one anim frame settle, then self-capture and close.
                     var cap = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };

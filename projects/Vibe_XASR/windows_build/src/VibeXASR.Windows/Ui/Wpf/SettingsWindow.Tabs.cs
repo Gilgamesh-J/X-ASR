@@ -89,7 +89,15 @@ public partial class SettingsWindow
                     Segmented(new[] { ("3", L10n.T("hw.score.low")), ("5", L10n.T("hw.score.mid")), ("7", L10n.T("hw.score.high")) },
                         ((int)S.HotwordsScore).ToString(), v => { _app.SetHotwords(S.HotwordsEnabled, HwText(), double.Parse(v)); SelectTab("dictionary"); })),
                 Row(L10n.T("hw.pinyin"), L10n.T("hw.pinyin.help"), Toggle(S.PinyinFuzzyEnabled, v => _app.SetPinyinFuzzy(v))));
-            AddFooter(L10n.T("hw.count", _hotwords.Count(w => !string.IsNullOrWhiteSpace(w))), () => { ApplyHotwords(); SelectTab("dictionary"); });
+            AddFooter(L10n.T("hw.count", _hotwords.Count(w => !string.IsNullOrWhiteSpace(w))), () => { ApplyHotwords(); SelectTab("dictionary"); },
+                onExport: () => ExportTextFile(HwText(), "vibe-hotwords.txt"),
+                onImport: () =>
+                {
+                    var t = ImportTextFile();
+                    if (t is null) return;
+                    _hotwords = t.Split('\n').Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
+                    _hwPage = 0; ApplyHotwords(); SelectTab("dictionary");
+                });
         }
 
         // ===== replacements =====
@@ -136,7 +144,15 @@ public partial class SettingsWindow
             addRep.MouseLeftButtonUp += (_, _) => { _reps.Add(new RepRule()); SelectTab("dictionary"); };
             rsp.Children.Add(addRep);
             Content.Children.Add(new Border { Style = St("Card"), Child = rsp });
-            AddFooter(L10n.T("rep.count", _reps.Count(r => r.From.Trim().Length > 0)), () => { ApplyReps(); SelectTab("dictionary"); });
+            AddFooter(L10n.T("rep.count", _reps.Count(r => r.From.Trim().Length > 0)), () => { ApplyReps(); SelectTab("dictionary"); },
+                onExport: () => ExportTextFile(RepText(), "vibe-replacements.txt"),
+                onImport: () =>
+                {
+                    var t = ImportTextFile();
+                    if (t is null) return;
+                    _reps = Replacements.Parse(t).Select(r => new RepRule { From = r.From, To = r.To }).ToList();
+                    ApplyReps(); SelectTab("dictionary");
+                });
         }
     }
 
@@ -174,16 +190,45 @@ public partial class SettingsWindow
         return outer;
     }
 
-    private void AddFooter(string countText, Action onSave)
+    private void AddFooter(string countText, Action onSave, Action? onExport = null, Action? onImport = null)
     {
         var g = new Grid { Margin = new Thickness(20, 6, 8, 2) };
         g.ColumnDefinitions.Add(new ColumnDefinition());
         g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         g.Children.Add(new TextBlock { Text = countText, Foreground = Br("TextMuted"), FontSize = 12, VerticalAlignment = VerticalAlignment.Center });
-        var save = new Button { Style = St("Solid"), Content = L10n.T("hw.save"), HorizontalAlignment = HorizontalAlignment.Right };
+        var btns = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+        if (onExport is not null)
+        {
+            var ex = new Button { Style = St("Ghost"), Content = L10n.T("io.export"), Margin = new Thickness(0, 0, 8, 0) };
+            ex.Click += (_, _) => onExport();
+            btns.Children.Add(ex);
+        }
+        if (onImport is not null)
+        {
+            var im = new Button { Style = St("Ghost"), Content = L10n.T("io.import"), Margin = new Thickness(0, 0, 8, 0) };
+            im.Click += (_, _) => onImport();
+            btns.Children.Add(im);
+        }
+        var save = new Button { Style = St("Solid"), Content = L10n.T("hw.save") };
         save.Click += (_, _) => onSave();
-        Grid.SetColumn(save, 1); g.Children.Add(save);
+        btns.Children.Add(save);
+        Grid.SetColumn(btns, 1); g.Children.Add(btns);
         Content.Children.Add(g);
+    }
+
+    // ---- import / export (macOS LexiconIO parity) ----
+    private static string? ImportTextFile()
+    {
+        var d = new Microsoft.Win32.OpenFileDialog { Filter = "Text / JSON (*.txt;*.json)|*.txt;*.json|All files (*.*)|*.*" };
+        try { return d.ShowDialog() == true ? System.IO.File.ReadAllText(d.FileName) : null; }
+        catch { return null; }
+    }
+    private static void ExportTextFile(string content, string suggestedName)
+    {
+        var ext = suggestedName.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? "JSON (*.json)|*.json" : "Text (*.txt)|*.txt";
+        var d = new Microsoft.Win32.SaveFileDialog { FileName = suggestedName, Filter = ext + "|All files (*.*)|*.*" };
+        try { if (d.ShowDialog() == true) System.IO.File.WriteAllText(d.FileName, content); }
+        catch { }
     }
 
     // ============================ 口令 (voice snippets) ============================
@@ -229,9 +274,17 @@ public partial class SettingsWindow
         footGrid.ColumnDefinitions.Add(new ColumnDefinition());
         footGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         footGrid.Children.Add(new TextBlock { Text = L10n.T("snip.count", _snips.Count), Foreground = Br("TextMuted"), FontSize = 12, VerticalAlignment = VerticalAlignment.Center });
-        var saveBtn = new Button { Style = St("Solid"), Content = L10n.T("hw.save"), HorizontalAlignment = HorizontalAlignment.Right };
+        var footBtns = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+        var exBtn = new Button { Style = St("Ghost"), Content = L10n.T("io.export"), Margin = new Thickness(0, 0, 8, 0) };
+        exBtn.Click += (_, _) => ExportTextFile(SerializeSnips(_snips), "vibe-snippets.json");
+        footBtns.Children.Add(exBtn);
+        var imBtn = new Button { Style = St("Ghost"), Content = L10n.T("io.import"), Margin = new Thickness(0, 0, 8, 0) };
+        imBtn.Click += (_, _) => { var t = ImportTextFile(); if (t is null) return; _snips = ParseSnips(t); SaveSnips(); SelectTab("snippet"); };
+        footBtns.Children.Add(imBtn);
+        var saveBtn = new Button { Style = St("Solid"), Content = L10n.T("hw.save") };
         saveBtn.Click += (_, _) => { SaveSnips(); SelectTab("snippet"); };
-        Grid.SetColumn(saveBtn, 1); footGrid.Children.Add(saveBtn);
+        footBtns.Children.Add(saveBtn);
+        Grid.SetColumn(footBtns, 1); footGrid.Children.Add(footBtns);
         Content.Children.Add(footGrid);
     }
 
@@ -271,7 +324,7 @@ public partial class SettingsWindow
 
     private void BuildModel()
     {
-        AddGroupTitle(Zh ? "模型" : "Model");
+        AddGroupTitle(L10n.Loc("模型", "Model", "モデル", "모델"));
 
         var src = ModelSourceX.From(S.ModelSource);
 
@@ -456,7 +509,7 @@ public partial class SettingsWindow
 
         // access url + LAN
         AddCard(
-            Row(Zh ? "访问地址" : "Endpoint", Zh ? "默认仅本机可访问" : "Localhost only by default", MonoValue(baseUrl)),
+            Row(L10n.Loc("访问地址", "Endpoint", "アクセス先", "접속 주소"), L10n.Loc("默认仅本机可访问", "Localhost only by default", "デフォルトではこの端末のみアクセス可能", "기본적으로 이 기기에서만 접속 가능"), MonoValue(baseUrl)),
             Row(L10n.T("share.lan.title"), L10n.T("share.lan.help"), Toggle(S.ApiAllowLAN, v => { _app.SetApiAllowLAN(v); SelectTab("share"); })));
 
         // auth key + copy / reset (value left of buttons, on the right)
@@ -467,16 +520,18 @@ public partial class SettingsWindow
         reset.Click += (_, _) => { _app.RegenerateApiKey(); SelectTab("share"); };
         var keyRight = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
         keyRight.Children.Add(keyVal); keyRight.Children.Add(copy); keyRight.Children.Add(reset);
-        AddCard(Row(Zh ? "鉴权 key" : "Auth key", Zh ? "每个请求都要带它;泄露后点「重置」即可作废旧 key。" : "Required on every request; Reset revokes the old key.", keyRight));
+        AddCard(Row(L10n.Loc("鉴权 key", "Auth key", "認証キー", "인증 키"), L10n.Loc("每个请求都要带它;泄露后点「重置」即可作废旧 key。", "Required on every request; Reset revokes the old key.", "リクエストごとに必要です。漏えいした場合は「リセット」で旧キーを無効化できます。", "모든 요청에 필요합니다. 유출 시 「재설정」으로 기존 키를 무효화할 수 있습니다."), keyRight));
 
         // one-tap install into AI assistants
         AddGroupTitle(L10n.T("share.install.title"));
         var agents = new (string label, string dir)[] { ("OpenClaw", ".openclaw/skills/vibe_xasr/"), ("Claude Code", ".claude/skills/vibe_xasr/"), ("Hermes", ".hermes/skills/vibe_xasr/") };
         foreach (var (label, dir) in agents)
         {
-            string cmd = Zh
-                ? $"请帮我安装 Vibe XASR 技能:先 `mkdir -p ~/{dir}`,再 `curl -s -H \"Authorization: Bearer {_app.ApiKey}\" \"{baseUrl}/skill\" -o ~/{dir}SKILL.md` 取得说明并保存。之后照 SKILL.md 用它读我的语音听写记录 / 词典 / 口令(只读,仅本机)。"
-                : $"Please install the Vibe XASR skill: `mkdir -p ~/{dir}`, then `curl -s -H \"Authorization: Bearer {_app.ApiKey}\" \"{baseUrl}/skill\" -o ~/{dir}SKILL.md`. Then use SKILL.md to read my dictation records / dictionary / snippets (read-only, local).";
+            string cmd = L10n.Loc(
+                $"请帮我安装 Vibe XASR 技能:先 `mkdir -p ~/{dir}`,再 `curl -s -H \"Authorization: Bearer {_app.ApiKey}\" \"{baseUrl}/skill\" -o ~/{dir}SKILL.md` 取得说明并保存。之后照 SKILL.md 用它读我的语音听写记录 / 词典 / 口令(只读,仅本机)。",
+                $"Please install the Vibe XASR skill: `mkdir -p ~/{dir}`, then `curl -s -H \"Authorization: Bearer {_app.ApiKey}\" \"{baseUrl}/skill\" -o ~/{dir}SKILL.md`. Then use SKILL.md to read my dictation records / dictionary / snippets (read-only, local).",
+                $"Vibe XASR スキルをインストールしてください:まず `mkdir -p ~/{dir}`、次に `curl -s -H \"Authorization: Bearer {_app.ApiKey}\" \"{baseUrl}/skill\" -o ~/{dir}SKILL.md` で説明を取得して保存します。その後は SKILL.md に従って、私の音声入力の記録 / 辞書 / 口令を読み取ってください(読み取り専用・この端末のみ)。",
+                $"Vibe XASR 스킬을 설치해 주세요: 먼저 `mkdir -p ~/{dir}`, 그다음 `curl -s -H \"Authorization: Bearer {_app.ApiKey}\" \"{baseUrl}/skill\" -o ~/{dir}SKILL.md` 로 설명을 받아 저장합니다. 이후 SKILL.md에 따라 제 음성 받아쓰기 기록 / 사전 / 명령어를 읽어 주세요(읽기 전용, 이 기기에서만).");
             var head = new Grid();
             head.ColumnDefinitions.Add(new ColumnDefinition());
             head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -516,14 +571,14 @@ public partial class SettingsWindow
         // recording device select
         var devices = _app.MicDevices();
         var opts = devices.Select(d => (d.Id, d.Name)).ToArray();
-        var devSel = Select(opts.Length == 0 ? new[] { ("", Zh ? "系统默认麦克风" : "System default mic") } : opts, _app.MicDeviceId, v => _app.SetMicDevice(v), 230);
+        var devSel = Select(opts.Length == 0 ? new[] { ("", L10n.Loc("系统默认麦克风", "System default mic", "システム既定のマイク", "시스템 기본 마이크")) } : opts, _app.MicDeviceId, v => _app.SetMicDevice(v), 230);
 
         var recheck = new Button { Style = St("Ghost"), Content = L10n.T("perm.recheck"), HorizontalAlignment = HorizontalAlignment.Right };
         recheck.Click += (_, _) => SelectTab("permissions");
 
         AddCard(
             Row(L10n.T("perm.mic"), L10n.T("perm.mic.help"), micPill),
-            Row(Zh ? "录音设备" : "Recording device", Zh ? "选择用哪个麦克风录音(默认跟随系统)。" : "Pick the mic to record with.", devSel),
+            Row(L10n.Loc("录音设备", "Recording device", "録音デバイス", "녹음 장치"), L10n.Loc("选择用哪个麦克风录音(默认跟随系统)。", "Pick the mic to record with.", "録音に使うマイクを選択します(既定はシステムに従います)。", "녹음에 사용할 마이크를 선택합니다(기본값은 시스템 설정)."), devSel),
             Row(L10n.T("perm.input"), L10n.T("perm.input.help"), MutedValue("ⓘ")),
             Row("", null, recheck));
     }
@@ -544,24 +599,24 @@ public partial class SettingsWindow
         _cloudProfiles = CloudJson.Profiles(S.CloudProfilesJson);
         CloudRequestLog.Shared.Enabled = S.CloudLogEnabled;
 
-        AddGroupTitle(Zh ? "云端大模型" : "Cloud LLM");
+        AddGroupTitle(L10n.Loc("云端大模型", "Cloud LLM", "クラウド LLM", "클라우드 LLM"));
         BuildCloudConfigCard();
 
         if (!S.CloudEnabled) return;
 
-        AddGroupTitle(Zh ? "最近请求 · 排查" : "Recent requests · debug");
+        AddGroupTitle(L10n.Loc("最近请求 · 排查", "Recent requests · debug", "最近のリクエスト · デバッグ", "최근 요청 · 디버그"));
         BuildCloudLogCard();
-        AddGroupTitle(Zh ? "润色处理项 · 自动拼成 Prompt" : "Processing · builds the auto prompt");
+        AddGroupTitle(L10n.Loc("润色处理项 · 自动拼成 Prompt", "Processing · builds the auto prompt", "整形処理 · 自動でプロンプトを生成", "정리 항목 · 자동 프롬프트 생성"));
         AddCard(
-            Row(Zh ? "数字规整" : "Numbers → digits", Zh ? "一百二十三 → 123、三点半 → 3:30、百分之二十 → 20%。成语、计数词不动。" : "Spoken numerals → digits.", Toggle(S.CloudNumbers, v => { S.CloudNumbers = v; _app.ApplyCloudSettings(); })),
-            Row(Zh ? "去口水词" : "Remove fillers", Zh ? "去掉「嗯 / 呃 / 唉」和口吃重复(那个那个 → 那个)。叠词保留。" : "Strip fillers + stutters.", Toggle(S.CloudFillers, v => { S.CloudFillers = v; _app.ApplyCloudSettings(); })),
-            Row(Zh ? "改口纠正" : "Keep restatement", Zh ? "说话中途自我更正时,只保留最终说法,删掉被改掉的前半句。" : "Keep only the final wording on self-correction.", Toggle(S.CloudRestate, v => { S.CloudRestate = v; _app.ApplyCloudSettings(); })),
-            Row(Zh ? "热词修正" : "Apply hotwords", Zh ? "参照「词典」里的专有名词与术语,修正同音 / 近音误写。" : "Fix homophones using the 词典 hotword list.", Toggle(S.CloudHotwords, v => { S.CloudHotwords = v; _app.ApplyCloudSettings(); })));
-        AddGroupTitle(Zh ? "提示词模板" : "Prompt templates");
+            Row(L10n.Loc("数字规整", "Numbers → digits", "数字の整形", "숫자 정규화"), L10n.Loc("一百二十三 → 123、三点半 → 3:30、百分之二十 → 20%。成语、计数词不动。", "Spoken numerals → digits.", "「一百二十三」→ 123、「三点半」→ 3:30、「百分之二十」→ 20%。慣用句・助数詞はそのまま。", "「一百二十三」→ 123, 「三点半」→ 3:30, 「百分之二十」→ 20%. 관용구·수량사는 유지."), Toggle(S.CloudNumbers, v => { S.CloudNumbers = v; _app.ApplyCloudSettings(); })),
+            Row(L10n.Loc("去口水词", "Remove fillers", "言いよどみ除去", "군더더기 제거"), L10n.Loc("去掉「嗯 / 呃 / 唉」和口吃重复(那个那个 → 那个)。叠词保留。", "Strip fillers + stutters.", "「えー / あの / うー」やどもりの重複(あのあの → あの)を除去。畳語は保持。", "「음 / 어 / 에」와 말더듬 반복(저기저기 → 저기)을 제거. 첩어는 유지."), Toggle(S.CloudFillers, v => { S.CloudFillers = v; _app.ApplyCloudSettings(); })),
+            Row(L10n.Loc("改口纠正", "Keep restatement", "言い直しの修正", "정정 반영"), L10n.Loc("说话中途自我更正时,只保留最终说法,删掉被改掉的前半句。", "Keep only the final wording on self-correction.", "話の途中で言い直したとき、最終的な表現だけを残し、訂正前の部分を削除します。", "말하는 도중 정정한 경우 최종 표현만 남기고 정정된 앞부분을 삭제합니다."), Toggle(S.CloudRestate, v => { S.CloudRestate = v; _app.ApplyCloudSettings(); })),
+            Row(L10n.Loc("热词修正", "Apply hotwords", "ホットワード修正", "핫워드 보정"), L10n.Loc("参照「词典」里的专有名词与术语,修正同音 / 近音误写。", "Fix homophones using the 词典 hotword list.", "「辞書」の固有名詞・専門用語を参照し、同音・類音の誤りを修正します。", "「사전」의 고유명사·전문 용어를 참조하여 동음·유음 오기를 보정합니다."), Toggle(S.CloudHotwords, v => { S.CloudHotwords = v; _app.ApplyCloudSettings(); })));
+        AddGroupTitle(L10n.Loc("提示词模板", "Prompt templates", "プロンプトテンプレート", "프롬프트 템플릿"));
         BuildCloudPromptCard();
 
         // local LLM — not supported on Windows: shown greyed/disabled (macOS parity, Win-disabled)
-        AddGroupTitle(Zh ? "本地大模型" : "Local LLM");
+        AddGroupTitle(L10n.Loc("本地大模型", "Local LLM", "ローカル LLM", "로컬 LLM"));
         BuildCloudLocalCard();
     }
 
@@ -606,13 +661,13 @@ public partial class SettingsWindow
         head.ColumnDefinitions.Add(new ColumnDefinition());
         head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var titleRow = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-        titleRow.Children.Add(new TextBlock { Text = Zh ? "调用云端大模型" : "Use a cloud LLM", Foreground = Br("Text"), FontSize = 15, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
+        titleRow.Children.Add(new TextBlock { Text = L10n.Loc("调用云端大模型", "Use a cloud LLM", "クラウド LLM を利用", "클라우드 LLM 사용"), Foreground = Br("Text"), FontSize = 15, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
         titleRow.Children.Add(new Border { Style = St("Badge"), Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, Child = new TextBlock { Text = L10n.T("badge.recommended"), Foreground = Br("AccentA"), FontSize = 10, FontWeight = FontWeights.SemiBold } });
         Grid.SetColumn(titleRow, 0); head.Children.Add(titleRow);
         var enToggle = Toggle(S.CloudEnabled, v => { S.CloudEnabled = v; if (v && S.Mode != DictationMode.Paste) _app.SetMode(DictationMode.Paste); _app.ApplyCloudSettings(); SelectTab("cloud"); });
         Grid.SetColumn(enToggle, 1); head.Children.Add(enToggle);
         sp.Children.Add(head);
-        sp.Children.Add(new TextBlock { Text = Zh ? "润色质量更高、速度更快,需联网并消耗服务商额度。API Key 仅加密存储在本机,不会上传。" : "Higher quality + faster; needs the internet and uses your provider quota. The API key is encrypted on this machine only, never uploaded.", Style = St("RowDesc"), Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap });
+        sp.Children.Add(new TextBlock { Text = L10n.Loc("润色质量更高、速度更快,需联网并消耗服务商额度。API Key 仅加密存储在本机,不会上传。", "Higher quality + faster; needs the internet and uses your provider quota. The API key is encrypted on this machine only, never uploaded.", "整形品質が高く高速ですが、ネット接続とプロバイダーの利用枠を消費します。API キーはこの端末に暗号化して保存され、送信されません。", "정리 품질이 높고 빠르지만 인터넷 연결과 제공업체 사용량이 필요합니다. API 키는 이 기기에만 암호화 저장되며 업로드되지 않습니다."), Style = St("RowDesc"), Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap });
 
         if (S.CloudEnabled)
         {
@@ -633,10 +688,10 @@ public partial class SettingsWindow
                 ms.HorizontalAlignment = HorizontalAlignment.Stretch; ms.Width = double.NaN; modelCtl = ms;
             }
             else modelCtl = MonoField(S.CloudModel, t => { S.CloudModel = t; _cloudTest = default; _app.ApplyCloudSettings(); });
-            sp.Children.Add(TwoCol(Zh ? "服务商" : "Provider", provSel, prov.ModelLabel, modelCtl));
+            sp.Children.Add(TwoCol(L10n.Loc("服务商", "Provider", "プロバイダー", "제공업체"), provSel, prov.ModelLabel, modelCtl));
 
             // base url
-            sp.Children.Add(Label(Zh ? "API 地址(Base URL)" : "API base URL"));
+            sp.Children.Add(Label(L10n.Loc("API 地址(Base URL)", "API base URL", "API アドレス(Base URL)", "API 주소(Base URL)")));
             sp.Children.Add(MonoField(S.CloudBaseURL, t => { S.CloudBaseURL = t; _cloudTest = default; _app.ApplyCloudSettings(); }, prov.BaseUrl));
 
             // api key + show
@@ -647,7 +702,7 @@ public partial class SettingsWindow
             var keyBox = new TextBox { Style = St("FieldBox"), FontFamily = new FontFamily("Cascadia Mono, Consolas"), FontSize = 12, IsReadOnly = !_cloudShowKey, Text = _cloudShowKey ? S.CloudApiKey : MaskKey(S.CloudApiKey) };
             keyBox.LostFocus += (_, _) => { if (_cloudShowKey) { S.CloudApiKey = keyBox.Text.Trim(); _cloudTest = default; _app.ApplyCloudSettings(); } };
             Grid.SetColumn(keyBox, 0); keyGrid.Children.Add(keyBox);
-            var showBtn = new Button { Style = St("Ghost"), Content = _cloudShowKey ? (Zh ? "隐藏" : "Hide") : (Zh ? "显示" : "Show"), Margin = new Thickness(8, 0, 0, 0) };
+            var showBtn = new Button { Style = St("Ghost"), Content = _cloudShowKey ? L10n.Loc("隐藏", "Hide", "非表示", "숨기기") : L10n.Loc("显示", "Show", "表示", "표시"), Margin = new Thickness(8, 0, 0, 0) };
             showBtn.Click += (_, _) => { if (_cloudShowKey) { S.CloudApiKey = keyBox.Text.Trim(); _app.ApplyCloudSettings(); } _cloudShowKey = !_cloudShowKey; SelectTab("cloud"); };
             Grid.SetColumn(showBtn, 1); keyGrid.Children.Add(showBtn);
             sp.Children.Add(keyGrid);
@@ -655,16 +710,16 @@ public partial class SettingsWindow
             // temperature + max tokens
             var tempBox = MonoField(S.CloudTemperature.ToString("0.##"), t => { if (double.TryParse(t, out var v)) { S.CloudTemperature = Math.Min(2, Math.Max(0, v)); _app.ApplyCloudSettings(); } });
             var maxBox = MonoField(S.CloudMaxTokens.ToString(), t => { if (int.TryParse(t, out var n)) { S.CloudMaxTokens = Math.Max(1, n); _app.ApplyCloudSettings(); } });
-            sp.Children.Add(TwoCol(Zh ? "Temperature(0~1,润色建议 0.3)" : "Temperature (0–1)", tempBox, Zh ? "Max Tokens(最大输出长度)" : "Max tokens", maxBox));
+            sp.Children.Add(TwoCol(L10n.Loc("Temperature(0~1,润色建议 0.3)", "Temperature (0–1)", "Temperature(0〜1、整形は 0.3 推奨)", "Temperature(0~1, 정리는 0.3 권장)"), tempBox, L10n.Loc("Max Tokens(最大输出长度)", "Max tokens", "Max Tokens(最大出力長)", "Max Tokens(최대 출력 길이)"), maxBox));
 
             // test connection + status
-            var testBtn = new Button { Style = St("Solid"), Content = Zh ? "测试连接与延迟" : "Test connection", HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 12, 0, 0) };
+            var testBtn = new Button { Style = St("Solid"), Content = L10n.Loc("测试连接与延迟", "Test connection", "接続と遅延をテスト", "연결 및 지연 테스트"), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 12, 0, 0) };
             var testMsg = new TextBlock { Style = St("RowDesc"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 12, 0, 0) };
-            void SetMsg() { if (_cloudTest.done) { testMsg.Text = _cloudTest.ok ? (Zh ? $"● 连接正常 · 单次往返 {_cloudTest.ping}ms · 整段润色约 {_cloudTest.add}" : $"● OK · {_cloudTest.ping}ms RTT") : (Zh ? $"● 测试失败 · {_cloudTest.msg}" : $"● Failed · {_cloudTest.msg}"); testMsg.Foreground = Br(_cloudTest.ok ? "Success" : "Warn"); } else { testMsg.Text = Zh ? "会发送一次极短请求,测量真实往返延迟。" : "Sends one tiny request to measure latency."; testMsg.Foreground = Br("TextMuted"); } }
+            void SetMsg() { if (_cloudTest.done) { testMsg.Text = _cloudTest.ok ? L10n.Loc($"● 连接正常 · 单次往返 {_cloudTest.ping}ms · 整段润色约 {_cloudTest.add}", $"● OK · {_cloudTest.ping}ms RTT", $"● 接続正常 · 往復 {_cloudTest.ping}ms · 全文整形 約 {_cloudTest.add}", $"● 연결 정상 · 왕복 {_cloudTest.ping}ms · 전체 정리 약 {_cloudTest.add}") : L10n.Loc($"● 测试失败 · {_cloudTest.msg}", $"● Failed · {_cloudTest.msg}", $"● テスト失敗 · {_cloudTest.msg}", $"● 테스트 실패 · {_cloudTest.msg}"); testMsg.Foreground = Br(_cloudTest.ok ? "Success" : "Warn"); } else { testMsg.Text = L10n.Loc("会发送一次极短请求,测量真实往返延迟。", "Sends one tiny request to measure latency.", "ごく短いリクエストを 1 回送信し、実際の往復遅延を測定します。", "아주 짧은 요청을 한 번 보내 실제 왕복 지연을 측정합니다."); testMsg.Foreground = Br("TextMuted"); } }
             SetMsg();
             testBtn.Click += async (_, _) =>
             {
-                testBtn.IsEnabled = false; testMsg.Text = Zh ? "测试中…" : "Testing…"; testMsg.Foreground = Br("TextMuted");
+                testBtn.IsEnabled = false; testMsg.Text = L10n.Loc("测试中…", "Testing…", "テスト中…", "테스트 중…"); testMsg.Foreground = Br("TextMuted");
                 var r = await CloudRefiner.TestConnectionAsync(S.CloudBaseURL, S.CloudModel, S.CloudApiKey);
                 _cloudTest = (true, r.ok, r.ping, r.add, r.msg); testBtn.IsEnabled = true; SetMsg();
             };
@@ -682,7 +737,7 @@ public partial class SettingsWindow
     private FrameworkElement CloudProfilesBar()
     {
         var host = new StackPanel { Margin = new Thickness(0, 16, 0, 2) };
-        host.Children.Add(new TextBlock { Text = Zh ? "我的配置 · 保存当前设置,一键切换(点选套用)" : "My profiles · save + one-tap switch", Style = St("RowDesc"), Margin = new Thickness(0, 0, 0, 6) });
+        host.Children.Add(new TextBlock { Text = L10n.Loc("我的配置 · 保存当前设置,一键切换(点选套用)", "My profiles · save + one-tap switch", "マイ設定 · 現在の設定を保存し、ワンタップで切替(クリックで適用)", "내 설정 · 현재 설정 저장, 한 번에 전환(클릭하여 적용)"), Style = St("RowDesc"), Margin = new Thickness(0, 0, 0, 6) });
         var wrap = new WrapPanel();
         foreach (var p in _cloudProfiles)
         {
@@ -696,12 +751,12 @@ public partial class SettingsWindow
             chip.MouseLeftButtonUp += (_, _) => { var prof = _cloudProfiles.FirstOrDefault(z => z.Id == pid); if (prof is not null) CloudLoadProfile(prof); };
             wrap.Children.Add(chip);
         }
-        var save = new Border { CornerRadius = new CornerRadius(8), BorderBrush = Br("Hairline"), BorderThickness = new Thickness(1), Padding = new Thickness(11, 6, 11, 6), Margin = new Thickness(0, 0, 8, 8), Cursor = Cursors.Hand, Child = new TextBlock { Text = Zh ? "＋ 保存当前为配置" : "＋ Save current", Foreground = Br("AccentA"), FontSize = 12 } };
+        var save = new Border { CornerRadius = new CornerRadius(8), BorderBrush = Br("Hairline"), BorderThickness = new Thickness(1), Padding = new Thickness(11, 6, 11, 6), Margin = new Thickness(0, 0, 8, 8), Cursor = Cursors.Hand, Child = new TextBlock { Text = L10n.Loc("＋ 保存当前为配置", "＋ Save current", "＋ 現在の設定を保存", "＋ 현재 설정 저장"), Foreground = Br("AccentA"), FontSize = 12 } };
         save.MouseLeftButtonUp += (_, _) =>
         {
             int n = _cloudProfiles.Count + 1; var id = $"prof{n}";
             while (_cloudProfiles.Any(z => z.Id == id)) { n++; id = $"prof{n}"; }
-            _cloudProfiles.Add(new CloudProfile { Id = id, Name = (Zh ? "配置" : "Profile") + n, Provider = S.CloudProvider, BaseURL = S.CloudBaseURL, Model = S.CloudModel, Temperature = S.CloudTemperature, MaxTokens = S.CloudMaxTokens, Numbers = S.CloudNumbers, Fillers = S.CloudFillers, Restate = S.CloudRestate, Hotwords = S.CloudHotwords, ActiveTemplate = S.CloudActiveTemplate, AutoOverride = S.CloudAutoOverride });
+            _cloudProfiles.Add(new CloudProfile { Id = id, Name = L10n.Loc("配置", "Profile", "設定", "설정") + n, Provider = S.CloudProvider, BaseURL = S.CloudBaseURL, Model = S.CloudModel, Temperature = S.CloudTemperature, MaxTokens = S.CloudMaxTokens, Numbers = S.CloudNumbers, Fillers = S.CloudFillers, Restate = S.CloudRestate, Hotwords = S.CloudHotwords, ActiveTemplate = S.CloudActiveTemplate, AutoOverride = S.CloudAutoOverride });
             try { SecretStore.Set("cloud_profile_" + id, S.CloudApiKey); } catch { }
             CloudCommit(); SelectTab("cloud");
         };
@@ -737,24 +792,24 @@ public partial class SettingsWindow
         var head = new Grid();
         head.ColumnDefinitions.Add(new ColumnDefinition());
         head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        head.Children.Add(new TextBlock { Text = Zh ? "记录每次云端调用,便于排查 / 提 issue · 最近 20 条" : "Logs each cloud call · last 20", Style = St("RowDesc"), VerticalAlignment = VerticalAlignment.Center });
+        head.Children.Add(new TextBlock { Text = L10n.Loc("记录每次云端调用,便于排查 / 提 issue · 最近 20 条", "Logs each cloud call · last 20", "クラウド呼び出しを記録 · デバッグ / issue 報告に · 直近 20 件", "클라우드 호출 기록 · 디버그 / 이슈 제보용 · 최근 20건"), Style = St("RowDesc"), VerticalAlignment = VerticalAlignment.Center });
         var right = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
         if (S.CloudLogEnabled)
         {
-            var clear = new TextBlock { Text = Zh ? "清空" : "Clear", Foreground = Br("TextMuted"), FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 12, 0), Cursor = Cursors.Hand };
+            var clear = new TextBlock { Text = L10n.Loc("清空", "Clear", "クリア", "비우기"), Foreground = Br("TextMuted"), FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 12, 0), Cursor = Cursors.Hand };
             clear.MouseLeftButtonUp += (_, _) => { CloudRequestLog.Shared.Clear(); SelectTab("cloud"); };
             right.Children.Add(clear);
         }
-        right.Children.Add(new TextBlock { Text = Zh ? "记录" : "Log", Foreground = Br("TextMuted"), FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) });
+        right.Children.Add(new TextBlock { Text = L10n.Loc("记录", "Log", "記録", "기록"), Foreground = Br("TextMuted"), FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) });
         right.Children.Add(Toggle(S.CloudLogEnabled, v => { S.CloudLogEnabled = v; _app.ApplyCloudSettings(); SelectTab("cloud"); }));
         Grid.SetColumn(right, 1); head.Children.Add(right);
         sp.Children.Add(head);
 
         var entries = CloudRequestLog.Shared.Snapshot().Take(8).ToList();
         if (!S.CloudLogEnabled)
-            sp.Children.Add(new TextBlock { Text = Zh ? "「记录请求」已关闭。打开后保存最近 20 条(输入→输出),用于排查或提 issue。" : "Logging is off.", Style = St("RowDesc"), Margin = new Thickness(0, 10, 0, 0), TextWrapping = TextWrapping.Wrap });
+            sp.Children.Add(new TextBlock { Text = L10n.Loc("「记录请求」已关闭。打开后保存最近 20 条(输入→输出),用于排查或提 issue。", "Logging is off.", "「リクエスト記録」はオフです。オンにすると直近 20 件(入力→出力)を保存し、デバッグや issue 報告に使えます。", "「요청 기록」이 꺼져 있습니다. 켜면 최근 20건(입력→출력)을 저장하여 디버그나 이슈 제보에 사용할 수 있습니다."), Style = St("RowDesc"), Margin = new Thickness(0, 10, 0, 0), TextWrapping = TextWrapping.Wrap });
         else if (entries.Count == 0)
-            sp.Children.Add(new TextBlock { Text = Zh ? "还没有记录。说一段话(≥6 字),这里会列出每次云端请求。" : "No requests yet.", Style = St("RowDesc"), Margin = new Thickness(0, 10, 0, 0), TextWrapping = TextWrapping.Wrap });
+            sp.Children.Add(new TextBlock { Text = L10n.Loc("还没有记录。说一段话(≥6 字),这里会列出每次云端请求。", "No requests yet.", "まだ記録がありません。6 文字以上話すと、ここに各クラウドリクエストが一覧表示されます。", "아직 기록이 없습니다. 6자 이상 말하면 각 클라우드 요청이 여기에 표시됩니다."), Style = St("RowDesc"), Margin = new Thickness(0, 10, 0, 0), TextWrapping = TextWrapping.Wrap });
         else
             foreach (var e in entries)
             {
@@ -766,8 +821,8 @@ public partial class SettingsWindow
                 top.Children.Add(new TextBlock { Text = $"   {e.Ms}ms  {CloudLogText(e.Status)}", Foreground = Br(CloudLogBrush(e.Status)), FontFamily = new FontFamily("Cascadia Mono, Consolas"), FontSize = 11, VerticalAlignment = VerticalAlignment.Center });
                 row.Children.Add(top);
                 string change = e.Status != "ok" ? $"「{Clip(e.Input, 40)}」 · {CloudLogText(e.Status)}"
-                              : e.Input.Trim() == e.Output.Trim() ? $"「{Clip(e.Input, 60)}」 · {(Zh ? "无修改" : "no change")}"
-                              : (Zh ? $"从「{Clip(e.Input, 30)}」改成「{Clip(e.Output, 30)}」" : $"{Clip(e.Input, 30)} → {Clip(e.Output, 30)}");
+                              : e.Input.Trim() == e.Output.Trim() ? $"「{Clip(e.Input, 60)}」 · {L10n.Loc("无修改", "no change", "変更なし", "변경 없음")}"
+                              : L10n.Loc($"从「{Clip(e.Input, 30)}」改成「{Clip(e.Output, 30)}」", $"{Clip(e.Input, 30)} → {Clip(e.Output, 30)}", $"「{Clip(e.Input, 30)}」→「{Clip(e.Output, 30)}」", $"「{Clip(e.Input, 30)}」→「{Clip(e.Output, 30)}」");
                 row.Children.Add(new TextBlock { Text = change, Style = St("RowDesc"), Margin = new Thickness(16, 2, 0, 0), TextWrapping = TextWrapping.Wrap });
                 sp.Children.Add(row);
             }
@@ -780,7 +835,7 @@ public partial class SettingsWindow
 
         // template chips
         var chips = new WrapPanel();
-        chips.Children.Add(TemplateChip("⚡ " + (Zh ? "自动" : "Auto"), S.CloudActiveTemplate == "auto", () => { S.CloudActiveTemplate = "auto"; _app.ApplyCloudSettings(); RebuildCurrent(); }, null));
+        chips.Children.Add(TemplateChip("⚡ " + L10n.Loc("自动", "Auto", "自動", "자동"), S.CloudActiveTemplate == "auto", () => { S.CloudActiveTemplate = "auto"; _app.ApplyCloudSettings(); RebuildCurrent(); }, null));
         foreach (var t in _cloudTemplates)
         {
             var tid = t.Id;
@@ -788,9 +843,13 @@ public partial class SettingsWindow
                 () => { S.CloudActiveTemplate = tid; _app.ApplyCloudSettings(); RebuildCurrent(); },
                 () => { _cloudTemplates.RemoveAll(x => x.Id == tid); if (S.CloudActiveTemplate == tid) S.CloudActiveTemplate = "auto"; CloudCommit(); RebuildCurrent(); }));
         }
-        var add = new Border { CornerRadius = new CornerRadius(8), BorderBrush = Br("Hairline"), BorderThickness = new Thickness(1), Padding = new Thickness(11, 6, 11, 6), Margin = new Thickness(0, 0, 8, 8), Cursor = Cursors.Hand, Child = new TextBlock { Text = Zh ? "＋ 新建模板" : "＋ New", Foreground = Br("AccentA"), FontSize = 12 } };
-        add.MouseLeftButtonUp += (_, _) => { int n = _cloudTemplates.Count + 1; var id = $"t{n}-{_cloudTemplates.Count}"; _cloudTemplates.Add(new CloudTemplate { Id = id, Name = (Zh ? "模板" : "Tpl") + n, Content = CloudCurrentPrompt() }); S.CloudActiveTemplate = id; CloudCommit(); RebuildCurrent(); };
+        var add = new Border { CornerRadius = new CornerRadius(8), BorderBrush = Br("Hairline"), BorderThickness = new Thickness(1), Padding = new Thickness(11, 6, 11, 6), Margin = new Thickness(0, 0, 8, 8), Cursor = Cursors.Hand, Child = new TextBlock { Text = L10n.Loc("＋ 新建模板", "＋ New", "＋ 新規テンプレート", "＋ 새 템플릿"), Foreground = Br("AccentA"), FontSize = 12 } };
+        add.MouseLeftButtonUp += (_, _) => { int n = _cloudTemplates.Count + 1; var id = $"t{n}-{_cloudTemplates.Count}"; _cloudTemplates.Add(new CloudTemplate { Id = id, Name = L10n.Loc("模板", "Tpl", "テンプレート", "템플릿") + n, Content = CloudCurrentPrompt() }); S.CloudActiveTemplate = id; CloudCommit(); RebuildCurrent(); };
         chips.Children.Add(add);
+        // open the standalone Prompt Studio window (macOS build 204 parity)
+        var openWin = new Border { CornerRadius = new CornerRadius(8), BorderBrush = Br("Hairline"), BorderThickness = new Thickness(1, 1, 1, 1), Padding = new Thickness(11, 6, 11, 6), Margin = new Thickness(0, 0, 8, 8), Cursor = Cursors.Hand, Child = new TextBlock { Text = "⧉ " + L10n.T("studio.open"), Foreground = Br("AccentB"), FontSize = 12 } };
+        openWin.MouseLeftButtonUp += (_, _) => _app.OpenPromptStudio();
+        chips.Children.Add(openWin);
         sp.Children.Add(chips);
 
         // editor (declare first so token chips can reference it)
@@ -798,7 +857,7 @@ public partial class SettingsWindow
 
         // placeholder token chips
         var tokRow = new WrapPanel { Margin = new Thickness(0, 6, 0, 6) };
-        tokRow.Children.Add(new TextBlock { Text = Zh ? "插入占位符" : "Insert token", Style = St("RowDesc"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) });
+        tokRow.Children.Add(new TextBlock { Text = L10n.Loc("插入占位符", "Insert token", "プレースホルダーを挿入", "자리표시자 삽입"), Style = St("RowDesc"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) });
         foreach (var (token, _) in CloudSeeds.Tokens)
         {
             var tok = token;
@@ -810,7 +869,7 @@ public partial class SettingsWindow
 
         editor.LostFocus += (_, _) => { var v = editor.Text; if (S.CloudActiveTemplate == "auto") S.CloudAutoOverride = v; else { var t = _cloudTemplates.FirstOrDefault(x => x.Id == S.CloudActiveTemplate); if (t is not null) t.Content = v; } CloudCommit(); };
         sp.Children.Add(editor);
-        sp.Children.Add(new TextBlock { Text = Zh ? "「自动」由上方开关实时拼成;改后可恢复自动。模板可增删、点选即套用。占位符调用时自动替换(热词取自「词典」)。" : "“Auto” is built from the toggles above. Tokens are filled at call time.", Style = St("RowDesc"), Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap });
+        sp.Children.Add(new TextBlock { Text = L10n.Loc("「自动」由上方开关实时拼成;改后可恢复自动。模板可增删、点选即套用。占位符调用时自动替换(热词取自「词典」)。", "“Auto” is built from the toggles above. Tokens are filled at call time.", "「自動」は上のスイッチからリアルタイムに生成されます。編集後も自動に戻せます。テンプレートは追加・削除でき、クリックで適用。プレースホルダーは呼び出し時に自動置換されます(ホットワードは「辞書」から取得)。", "「자동」은 위 스위치로 실시간 생성됩니다. 수정 후 자동으로 되돌릴 수 있습니다. 템플릿은 추가·삭제할 수 있고 클릭하면 적용됩니다. 자리표시자는 호출 시 자동 치환됩니다(핫워드는 「사전」에서 가져옴)."), Style = St("RowDesc"), Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap });
 
         Content.Children.Add(new Border { Style = St("Card"), Child = sp });
     }
@@ -839,7 +898,7 @@ public partial class SettingsWindow
 
     private static string Clip(string s, int n) { s = (s ?? "").Replace("\n", " ").Trim(); return s.Length > n ? s.Substring(0, n) + "…" : s; }
     private string CloudLogBrush(string s) => s == "ok" ? "Success" : (s is "timeout" or "skipped" ? "Warn" : "Danger");
-    private string CloudLogText(string s) => s switch { "ok" => Zh ? "成功" : "ok", "timeout" => Zh ? "超时" : "timeout", "skipped" => Zh ? "超 token" : "skipped", _ => Zh ? "失败" : "error" };
+    private string CloudLogText(string s) => s switch { "ok" => L10n.Loc("成功", "ok", "成功", "성공"), "timeout" => L10n.Loc("超时", "timeout", "タイムアウト", "시간 초과"), "skipped" => L10n.Loc("超 token", "skipped", "トークン超過", "토큰 초과"), _ => L10n.Loc("失败", "error", "失敗", "실패") };
 
     private TextBox MonoField(string text, Action<string> onCommit, string? placeholder = null)
     {

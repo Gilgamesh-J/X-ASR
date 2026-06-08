@@ -22,6 +22,11 @@ public static class VkNames
         [0x21] = "Page Up", [0x22] = "Page Down",
         [0x90] = "Num Lock", [0x91] = "Scroll Lock", [0x2C] = "Print Screen",
         [0x25] = "←", [0x26] = "↑", [0x27] = "→", [0x28] = "↓",
+        // OEM / punctuation keys (US layout glyphs) — so combos like Alt+. show ".", not "VK 0xBE"
+        [0xBA] = ";", [0xBB] = "=", [0xBC] = ",", [0xBD] = "-", [0xBE] = ".", [0xBF] = "/",
+        [0xC0] = "`", [0xDB] = "[", [0xDC] = "\\", [0xDD] = "]", [0xDE] = "'",
+        // numpad operators
+        [0x6A] = "Num *", [0x6B] = "Num +", [0x6D] = "Num -", [0x6E] = "Num .", [0x6F] = "Num /",
     };
 
     public static string Name(int vk)
@@ -33,6 +38,17 @@ public static class VkNames
         if (vk >= 0x60 && vk <= 0x69) return "Num " + (vk - 0x60);       // numpad 0..9
         return $"VK 0x{vk:X2}";
     }
+
+    /// <summary>"Ctrl+Alt+X" — modifier prefix (bitfield Ctrl=1,Alt=2,Shift=4,Win=8) + the key name.</summary>
+    public static string Combo(int vk, int mods)
+    {
+        var p = "";
+        if ((mods & 1) != 0) p += "Ctrl+";
+        if ((mods & 2) != 0) p += "Alt+";
+        if ((mods & 4) != 0) p += "Shift+";
+        if ((mods & 8) != 0) p += "Win+";
+        return p + Name(vk);
+    }
 }
 
 /// <summary>
@@ -43,7 +59,7 @@ public static class VkNames
 public sealed class KeyCaptureHook : IDisposable
 {
     private const int WH_KEYBOARD_LL = 13;
-    private const int WM_KEYDOWN = 0x0100, WM_SYSKEYDOWN = 0x0104;
+    private const int WM_KEYDOWN = 0x0100, WM_SYSKEYDOWN = 0x0104, WM_KEYUP = 0x0101, WM_SYSKEYUP = 0x0105;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct KBDLLHOOKSTRUCT { public uint vkCode; public uint scanCode; public uint flags; public uint time; public IntPtr dwExtraInfo; }
@@ -51,11 +67,27 @@ public sealed class KeyCaptureHook : IDisposable
 
     private readonly Proc _proc;
     private IntPtr _hook = IntPtr.Zero;
+    private readonly bool _combo;
 
-    /// <summary>Raised on the first key-down with the captured virtual-key code.</summary>
+    /// <summary>Raised on the first key-down with the captured virtual-key code (single-key mode).</summary>
     public event Action<int>? Captured;
+    /// <summary>Raised with (vk, mods) when a combo is captured (combo mode): a normal key with the held
+    /// modifiers, or a bare modifier on its release. Esc → (0x1B, 0). Mods bitfield: Ctrl1/Alt2/Shift4/Win8.</summary>
+    public event Action<int, int>? CapturedCombo;
 
-    public KeyCaptureHook() => _proc = Callback;
+    // live modifier state (combo mode)
+    private bool _lc, _rc, _la, _ra, _ls, _rs, _lw, _rw;
+    private bool _captured;   // one-shot guard: once captured, swallow the rest, fire nothing more
+    private int CurMods => ((_lc || _rc) ? 1 : 0) | ((_la || _ra) ? 2 : 0) | ((_ls || _rs) ? 4 : 0) | ((_lw || _rw) ? 8 : 0);
+    // macOS processAny parity: modifier-down is only a CANDIDATE. _heldOrder = the modifier vks pressed
+    // (ordered; first = primary, keeps L/R); _peakMods = the OR of all held modifier bits. A modifier
+    // alone never ends recording (else ⌥1-style combos could never be recorded — the ⌥ press would end it).
+    private readonly System.Collections.Generic.List<int> _heldOrder = new();
+    private int _peakMods;
+
+    /// <param name="combo">true → capture vk+modifier combos (fires <see cref="CapturedCombo"/>);
+    /// false → legacy single-key capture (fires <see cref="Captured"/>).</param>
+    public KeyCaptureHook(bool combo = false) { _combo = combo; _proc = Callback; }
 
     public void Start()
     {
@@ -65,20 +97,83 @@ public sealed class KeyCaptureHook : IDisposable
         _hook = SetWindowsHookEx(WH_KEYBOARD_LL, _proc, GetModuleHandle(mod.ModuleName), 0);
     }
 
+    private const int VK_SHIFT = 0x10, VK_CONTROL = 0x11, VK_MENU = 0x12;   // generic (some drivers/remappers send these)
+    private const int VK_LSHIFT = 0xA0, VK_RSHIFT = 0xA1, VK_LCTRL = 0xA2, VK_RCTRL = 0xA3, VK_LALT = 0xA4, VK_RALT = 0xA5, VK_LWIN = 0x5B, VK_RWIN = 0x5C;
+    private static int ModBit(int vk) => vk switch
+    {
+        VK_LCTRL or VK_RCTRL or VK_CONTROL => 1,
+        VK_LALT or VK_RALT or VK_MENU => 2,
+        VK_LSHIFT or VK_RSHIFT or VK_SHIFT => 4,
+        VK_LWIN or VK_RWIN => 8,
+        _ => 0,
+    };
+    private void UpdateMod(int vk, bool down)
+    {
+        switch (vk)
+        {
+            case VK_LCTRL: case VK_CONTROL: _lc = down; break; case VK_RCTRL: _rc = down; break;
+            case VK_LALT: case VK_MENU: _la = down; break; case VK_RALT: _ra = down; break;
+            case VK_LSHIFT: case VK_SHIFT: _ls = down; break; case VK_RSHIFT: _rs = down; break;
+            case VK_LWIN: _lw = down; break; case VK_RWIN: _rw = down; break;
+        }
+    }
+
     private IntPtr Callback(int nCode, IntPtr wParam, IntPtr lParam)
     {
         if (nCode >= 0)
         {
             int msg = wParam.ToInt32();
-            if (msg is WM_KEYDOWN or WM_SYSKEYDOWN)
+            var data = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
+            int vk = (int)data.vkCode;
+            bool down = msg is WM_KEYDOWN or WM_SYSKEYDOWN, up = msg is WM_KEYUP or WM_SYSKEYUP;
+
+            if (_combo)
             {
-                var data = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
-                int vk = (int)data.vkCode;
-                if (vk != 0x1B) // Esc cancels (handled by the recorder); don't bind it
+                if (_captured) return (IntPtr)1;   // already fired once — swallow the trailing key events
+                if (down)
                 {
-                    Captured?.Invoke(vk);
-                    return (IntPtr)1; // swallow the binding keypress
+                    if (vk == 0x1B) { _captured = true; CapturedCombo?.Invoke(0x1B, 0); return (IntPtr)1; }   // Esc cancels
+                    int mb = ModBit(vk);
+                    if (mb != 0)
+                    {
+                        // modifier down = candidate only (don't finish — that's how ⌥1 / Ctrl+Alt get recorded)
+                        UpdateMod(vk, true);
+                        if (!_heldOrder.Contains(vk)) _heldOrder.Add(vk);
+                        _peakMods |= mb;
+                        return (IntPtr)1;
+                    }
+                    // a normal key → single key (mods=0) or modifier+key combo (mods=held).
+                    // Skip the BARE activation/nav keys that armed us (Enter/Space click, Tab) — keep waiting.
+                    if (CurMods == 0 && (vk == 0x0D || vk == 0x20 || vk == 0x09)) return (IntPtr)1;
+                    _captured = true;
+                    VibeXASR.Windows.Diag.Log($"hkrec CAPTURE key vk=0x{vk:X2} mods={CurMods}");
+                    CapturedCombo?.Invoke(vk, CurMods);
+                    return (IntPtr)1;
                 }
+                if (up)
+                {
+                    int mb = ModBit(vk);
+                    UpdateMod(vk, false);
+                    // a modifier was RELEASED with no normal key pressed → finalize from the peak:
+                    //   1 held → pure single modifier (e.g. Right Ctrl);  ≥2 held → modifier combo (Ctrl+Alt).
+                    if (mb != 0 && _heldOrder.Count >= 1)
+                    {
+                        int primary = _heldOrder[0];
+                        int mods = _heldOrder.Count >= 2 ? (_peakMods & ~ModBit(primary)) : 0;
+                        _captured = true;
+                        VibeXASR.Windows.Diag.Log($"hkrec CAPTURE mod primary=0x{primary:X2} mods={mods} held={_heldOrder.Count}");
+                        CapturedCombo?.Invoke(primary, mods);
+                        return (IntPtr)1;
+                    }
+                    return (IntPtr)1;
+                }
+                return (IntPtr)1;   // swallow everything while recording
+            }
+
+            // legacy single-key mode
+            if (down)
+            {
+                if (vk != 0x1B) { Captured?.Invoke(vk); return (IntPtr)1; }
                 Captured?.Invoke(0x1B);
                 return (IntPtr)1;
             }

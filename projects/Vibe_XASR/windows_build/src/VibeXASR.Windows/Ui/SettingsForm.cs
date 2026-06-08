@@ -252,7 +252,7 @@ public sealed partial class SettingsForm : Form
     private void BuildDictation(Column col)
     {
         var hotkey = new HotkeyRecorder { Vk = S.HotkeyVk, Width = 150 };
-        hotkey.HotkeyChanged += vk => _app.SetHotkey(vk);
+        hotkey.HotkeyChanged += vk => _app.SetHotkey(vk, 0);
 
         var rows = new List<Control>
         {

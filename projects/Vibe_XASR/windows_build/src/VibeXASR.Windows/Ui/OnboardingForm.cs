@@ -31,7 +31,7 @@ public sealed class OnboardingForm : Form
     public OnboardingForm(IAppController app)
     {
         _app = app;
-        _zh = L10n.Resolved == Lang.Zh;
+        _zh = L10n.Resolved is Lang.Zh or Lang.Hant;
         _keyName = VkNames.Name(app.Settings.HotkeyVk);
 
         FormBorderStyle = FormBorderStyle.None;

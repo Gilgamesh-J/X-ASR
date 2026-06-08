@@ -34,6 +34,19 @@ public enum VadKind
     FireRed,
 }
 
+/// <summary>How the push-to-talk key behaves. Mirrors macOS build 204's trigger modes.</summary>
+public enum TriggerMode
+{
+    /// <summary>Hold the key to talk; release to stop and insert (the classic push-to-talk).</summary>
+    Hold,
+
+    /// <summary>Tap once to start, tap again to stop (hands-free latch).</summary>
+    Latch,
+
+    /// <summary>Pure on/off toggle (same key flips dictation; for OnCall-style use).</summary>
+    Toggle,
+}
+
 /// <summary>
 /// Persisted user settings. Serialized to %APPDATA%/VibeXASR/settings.json.
 /// Keep this a plain DTO so System.Text.Json round-trips it cleanly.
@@ -65,8 +78,27 @@ public sealed class Settings
     /// </summary>
     public int HotkeyVk { get; set; } = 0xA3;
 
+    /// <summary>Modifier bitfield required alongside <see cref="HotkeyVk"/> (Ctrl=1, Alt=2, Shift=4, Win=8;
+    /// OR-combined). 0 = the bare key. macOS build 204 combo-hotkey parity.</summary>
+    public int HotkeyMods { get; set; } = 0;
+
+    /// <summary>Push-to-talk behaviour: hold-to-talk (default), tap-to-latch, or pure toggle.</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public TriggerMode Trigger { get; set; } = TriggerMode.Hold;
+
     /// <summary>If true, the OnCall overlay starts automatically at launch.</summary>
     public bool OnCallAutoStart { get; set; } = false;
+
+    /// <summary>How long the overlay bar lingers (seconds) after each final result. macOS parity (build 204).
+    /// 0 = vanish instantly; hovering the bar keeps it; new speech replaces it at once.</summary>
+    public double HudStaySeconds { get; set; } = 0.5;
+
+    /// <summary>Convert the inserted text to Traditional Chinese (繁体) at the very end of the pipeline.
+    /// Off by default. Uses the native Win32 LCMapStringEx 简→繁 transform (no bundled table).</summary>
+    public bool OutputTraditional { get; set; } = false;
+
+    /// <summary>Microphone mute (tray quick-toggle). When on, capture is dropped — the meter goes flat.</summary>
+    public bool MicMuted { get; set; } = false;
 
     /// <summary>UI language code (auto, en, zh, ja, ko). Auto follows the system.</summary>
     public string Language { get; set; } = "auto";
@@ -77,8 +109,8 @@ public sealed class Settings
     /// <summary>Persist dictation history locally. When off, records live 60 s then vanish.</summary>
     public bool HistoryEnabled { get; set; } = true;
 
-    /// <summary>Start Vibe XASR with Windows sign-in (HKCU Run key).</summary>
-    public bool LaunchAtLogin { get; set; } = false;
+    /// <summary>Start Vibe XASR with Windows sign-in (HKCU Run key). On by default (macOS build 204 parity).</summary>
+    public bool LaunchAtLogin { get; set; } = true;
 
     /// <summary>Desktop floating launcher pill (so users can always find/open the app). Default on; closable.</summary>
     public bool LauncherEnabled { get; set; } = true;
@@ -219,6 +251,8 @@ public sealed class Settings
     public string CloudAutoOverride { get; set; } = "";
     /// <summary>Saved prompt templates as JSON [{id,name,content}]. Empty = the 3 seed templates.</summary>
     public string CloudTemplatesJson { get; set; } = "";
+    /// <summary>Per-template hotkey bindings as JSON {"templateId":{"vk":88,"mods":3}}. macOS Prompt Studio parity.</summary>
+    public string CloudTemplateHotkeysJson { get; set; } = "";
     /// <summary>User custom providers as JSON [{id,label,baseURL}].</summary>
     public string CloudCustomProvidersJson { get; set; } = "";
     /// <summary>Saved named cloud profiles as JSON (each profile's key stored separately in SecretStore).</summary>

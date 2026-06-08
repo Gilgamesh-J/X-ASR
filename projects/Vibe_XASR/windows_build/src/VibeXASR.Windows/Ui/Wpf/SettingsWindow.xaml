@@ -36,8 +36,12 @@
         </Border>
 
         <!-- content -->
-        <ScrollViewer Grid.Column="1" x:Name="ContentScroll" VerticalScrollBarVisibility="Auto" Padding="0,8,0,24">
-            <StackPanel x:Name="Content" MaxWidth="720" HorizontalAlignment="Stretch"/>
-        </ScrollViewer>
+        <Grid Grid.Column="1">
+            <ScrollViewer x:Name="ContentScroll" VerticalScrollBarVisibility="Auto" Padding="0,8,0,24">
+                <StackPanel x:Name="Content" MaxWidth="720" HorizontalAlignment="Stretch"/>
+            </ScrollViewer>
+            <!-- full-bleed host (记录 workspace): replaces the scroller for tabs that need the whole pane -->
+            <ContentControl x:Name="FullBleed" Visibility="Collapsed"/>
+        </Grid>
     </Grid>
 </Window>

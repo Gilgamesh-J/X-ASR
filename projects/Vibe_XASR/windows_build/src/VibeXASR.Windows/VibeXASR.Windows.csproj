@@ -33,10 +33,10 @@
     <!-- Windows tracks the macOS base version (1.4.0) + a Windows patch suffix (.1), labelled
          "-beta". AssemblyVersion/FileVersion stay numeric (1.4.0.1) for WinSparkle + MSI version
          comparison; InformationalVersion carries the "-beta" shown on the About page. -->
-    <Version>2.0.0.2-beta</Version>
-    <FileVersion>2.0.0.2</FileVersion>
-    <AssemblyVersion>2.0.0.2</AssemblyVersion>
-    <InformationalVersion>2.0.0.2-beta</InformationalVersion>
+    <Version>2.0.0.3-beta</Version>
+    <FileVersion>2.0.0.3</FileVersion>
+    <AssemblyVersion>2.0.0.3</AssemblyVersion>
+    <InformationalVersion>2.0.0.3-beta</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 

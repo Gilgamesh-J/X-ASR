@@ -39,14 +39,16 @@ public partial class SettingsWindow : Window
     private string _tab = "dictation";
     private readonly Dictionary<string, RadioButton> _navButtons = new();
 
-    private static bool Zh => L10n.Resolved == Lang.Zh;
+    private static bool Zh => L10n.Resolved is Lang.Zh or Lang.Hant;
 
     // label is an L10n key, resolved at render time so the nav re-localizes on language change.
+    // Order mirrors macOS SettingsView.tabs exactly: 通用 → 听写 → AI润色 → 模型 → 词典 → 口令 → 记录 → 共享 → 权限 → 关于.
     private static readonly (string key, string icon, string label)[] Tabs =
     {
-        ("general", "⚙", "tab.general"), ("dictation", "🎙", "tab.dictation"), ("dictionary", "📖", "tab.dictionary"),
-        ("snippet", "⚡", "tab.snippet"), ("model", "🧠", "tab.model"), ("share", "🔗", "tab.share"),
-        ("cloud", "✨", "tab.cloud"), ("permissions", "🔐", "tab.permissions"), ("about", "ⓘ", "tab.about"),
+        ("general", "⚙", "tab.general"), ("dictation", "🎙", "tab.dictation"), ("cloud", "✨", "tab.cloud"),
+        ("model", "🧠", "tab.model"), ("dictionary", "📖", "tab.dictionary"), ("snippet", "⚡", "tab.snippet"),
+        ("history", "📋", "tab.history"), ("share", "🔗", "tab.share"), ("permissions", "🔐", "tab.permissions"),
+        ("about", "ⓘ", "tab.about"),
     };
 
     public SettingsWindow(IAppController app)
@@ -77,6 +79,8 @@ public partial class SettingsWindow : Window
     {
         Nav.Children.Clear();
         _navButtons.Clear();
+        _historyControl = null;   // rebuild the 记录 workspace in the new language
+        FullBleed.Content = null;
         BuildNav();
         SelectTab(_tab);
     }
@@ -98,6 +102,8 @@ public partial class SettingsWindow : Window
     private void RebuildCurrent() => Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background,
         new Action(() => SelectTab(_tab)));
 
+    private HistoryWorkspaceControl? _historyControl;
+
     private void SelectTab(string key)
     {
         bool sameTab = _tab == key && Content.Children.Count > 0;     // in-tab rebuild → keep scroll
@@ -105,6 +111,20 @@ public partial class SettingsWindow : Window
         _tab = key;
         StopModelTimer();   // tear down the previous tab's live model-download poller, if any
         if (_navButtons.TryGetValue(key, out var rb)) rb.IsChecked = true;
+
+        // 记录 is a full-bleed workspace (100% macOS parity) — it replaces the scroller entirely.
+        if (key == "history")
+        {
+            Content.Children.Clear();
+            _historyControl ??= new HistoryWorkspaceControl(_app.History);
+            FullBleed.Content = _historyControl;
+            ContentScroll.Visibility = Visibility.Collapsed;
+            FullBleed.Visibility = Visibility.Visible;
+            return;
+        }
+        ContentScroll.Visibility = Visibility.Visible;
+        FullBleed.Visibility = Visibility.Collapsed;
+
         Content.Children.Clear();
         if (sameTab)
             Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(() => ContentScroll.ScrollToVerticalOffset(keepOffset)));
@@ -129,7 +149,7 @@ public partial class SettingsWindow : Window
 
     private void BuildGeneral()
     {
-        var lang = Select(new[] { ("auto", L10n.T("lang.auto")), ("zh", "简体中文"), ("en", "English"), ("ja", "日本語"), ("ko", "한국어") },
+        var lang = Select(new[] { ("auto", L10n.T("lang.auto")), ("zh", "简体中文"), ("zh-Hant", "繁體中文"), ("en", "English"), ("ja", "日本語"), ("ko", "한국어") },
             S.Language, v => { _app.SetLanguage(L10n.FromCode(v)); Relocalize(); }, 170);
         AddGroup(L10n.T("grp.general"),
             Row(L10n.T("gen.lang"), L10n.T("gen.lang.help"), lang),
@@ -139,16 +159,22 @@ public partial class SettingsWindow : Window
                 Toggle(S.ClipboardOverwrite, v => _app.SetClipboardOverwrite(v))),
             Row(L10n.T("gen.launcher"), L10n.T("gen.launcher.help"),
                 Toggle(S.LauncherEnabled, v => _app.SetLauncherEnabled(v))));
+
+        // 触发 (trigger): hotkey + trigger mode + dictation mode — high-frequency core interaction,
+        // moved up from the 听写 page to mirror macOS build 204's tab reorg.
+        AddGroupTitle(L10n.T("grp.trigger"));
+        AddCard(
+            Row(L10n.T("dict.hotkey"), L10n.T("dict.hotkey.help"), HotkeyButton()),
+            Row(L10n.T("dict.trigger"), L10n.T("dict.trigger.help"),
+                Segmented(new[] { ("hold", L10n.T("dict.trigger.hold")), ("toggle", L10n.T("dict.trigger.toggle")) },
+                    S.Trigger == TriggerMode.Toggle ? "toggle" : "hold",
+                    v => _app.SetTrigger(v == "toggle" ? TriggerMode.Toggle : TriggerMode.Hold))));
+        Content.Children.Add(BuildModeCards());
     }
 
-    private void BuildDictation()
+    /// <summary>The 听写模式 radio-card block (说完插入 / 逐字 / 持续候机). Lives under 通用 → 触发.</summary>
+    private Border BuildModeCards()
     {
-        AddGroupTitle(L10n.T("grp.dictation"));
-
-        // hotkey
-        AddCard(Row(L10n.T("dict.hotkey"), L10n.T("dict.hotkey.help"), HotkeyButton()));
-
-        // mode cards
         var modeCard = new StackPanel { Margin = new Thickness(16, 12, 16, 12) };
         modeCard.Children.Add(new TextBlock { Text = L10n.T("dict.mode"), Style = St("RowTitle"), FontWeight = FontWeights.SemiBold, Margin = new Thickness(2, 0, 0, 10) });
         var modes = new (DictationMode m, string t, string d, string? warn)[]
@@ -157,7 +183,6 @@ public partial class SettingsWindow : Window
             (DictationMode.Type,  L10n.T("dict.mode.type.title"),  L10n.T("dict.mode.type.desc"),  L10n.T("dict.mode.type.warn")),
             (DictationMode.OnCall, L10n.T("dict.mode.oncall.title"), L10n.T("dict.mode.oncall.desc"), null),
         };
-        var cards = new List<Border>();
         foreach (var (m, t, d, warn) in modes)
         {
             var card = ModeCard(t, d, S.Mode == m, m == DictationMode.Paste && S.CloudEnabled, warn);
@@ -169,20 +194,30 @@ public partial class SettingsWindow : Window
                     if (MessageBox.Show(L10n.T("dict.mode.conflict.msg"), L10n.T("dict.mode.conflict.title"), MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
                     S.CloudEnabled = false; _app.ApplyCloudSettings();
                 }
-                _app.SetMode(cm); SelectTab("dictation");
+                _app.SetMode(cm); SelectTab("general");
             };
-            cards.Add(card);
             modeCard.Children.Add(card);
         }
         if (S.CloudEnabled)
             modeCard.Children.Insert(1, new TextBlock { Text = L10n.T("dict.mode.lockedByPolish"), Foreground = Br("Warn"), FontSize = 11.5, Margin = new Thickness(2, 0, 0, 8), TextWrapping = TextWrapping.Wrap });
-        Content.Children.Add(new Border { Style = St("Card"), Child = modeCard });
+        return new Border { Style = St("Card"), Child = modeCard };
+    }
+
+    private void BuildDictation()
+    {
+        AddGroupTitle(L10n.T("grp.dictation"));
+
+        // overlay stay duration (macOS build 204): how long the 已插入 bar lingers; hover keeps it.
+        AddCard(Row(L10n.T("dict.hudStay"), L10n.T("dict.hudStay.help"),
+            Segmented(new[] { ("0", L10n.T("dict.hudStay.s0")), ("0.5", L10n.T("dict.hudStay.s05")), ("1", L10n.T("dict.hudStay.s1")), ("2", L10n.T("dict.hudStay.s2")), ("4", L10n.T("dict.hudStay.s4")) },
+                HudStayKey(S.HudStaySeconds), v => _app.SetHudStay(double.Parse(v, System.Globalization.CultureInfo.InvariantCulture)))));
 
         // post-processing toggles
         bool byLLM = S.CloudEnabled;
         AddCard(
             Row(L10n.T("dict.itn"), L10n.T(byLLM ? "dict.byLLM" : "dict.itn.help"), Toggle(S.ItnEnabled, v => _app.SetItn(v), !byLLM)),
             Row(L10n.T("dict.defiller"), L10n.T(byLLM ? "dict.defiller.byLLM" : "dict.defiller.help"), Toggle(S.DefillerEnabled, v => _app.SetDefiller(v), !byLLM)),
+            Row(L10n.T("dict.toTraditional"), L10n.T("dict.toTraditional.help"), Toggle(S.OutputTraditional, v => _app.SetOutputTraditional(v))),
             Row(L10n.T("dict.history"), L10n.T("dict.history.help"), Toggle(S.HistoryEnabled, v => _app.SetHistoryEnabled(v))),
             Row(L10n.T("dict.cue"), L10n.T("dict.cue.help"), Toggle(S.CueEnabled, v => { _app.SetCueEnabled(v); SelectTab("dictation"); })));
 
@@ -205,7 +240,7 @@ public partial class SettingsWindow : Window
         card.Children.Add(new TextBlock { Text = "Vibe XASR", Foreground = Br("Text"), FontSize = 20, FontWeight = FontWeights.Bold, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 12, 0, 2) });
         var disp = System.Windows.Forms.Application.ProductVersion; var plus = disp.IndexOf('+'); if (plus >= 0) disp = disp[..plus];
         card.Children.Add(new TextBlock { Text = L10n.T("about.version", disp), Foreground = Br("TextMuted"), FontSize = 11.5, FontFamily = new FontFamily("Cascadia Mono, Consolas"), HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 0, 0, 16) });
-        var upd = new Button { Style = St("Ghost"), Content = "⟳  " + (Zh ? "检查更新" : "Check for updates"), HorizontalAlignment = HorizontalAlignment.Center, Foreground = Br("AccentB") };
+        var upd = new Button { Style = St("Ghost"), Content = "⟳  " + L10n.Loc("检查更新", "Check for updates", "アップデートを確認", "업데이트 확인"), HorizontalAlignment = HorizontalAlignment.Center, Foreground = Br("AccentB") };
         upd.Click += (_, _) => Updater.CheckForUpdatesUi();
         card.Children.Add(upd);
         var fb = Link(L10n.T("about.feedback"), "https://github.com/Gilgamesh-J/X-ASR/issues");
@@ -215,20 +250,20 @@ public partial class SettingsWindow : Window
 
         // GitHub issue form — fill 3 fields → opens a prefilled "New issue" page
         var form = new StackPanel { Margin = new Thickness(18, 14, 18, 14) };
-        form.Children.Add(new TextBlock { Text = Zh ? "反馈问题 · 一键提交到 GitHub" : "Report a problem · one-tap to GitHub", Foreground = Br("Text"), FontSize = 14, FontWeight = FontWeights.SemiBold });
-        form.Children.Add(new TextBlock { Text = Zh ? "填好下面三项,点按钮会打开已预填内容的 GitHub「新建 issue」页,确认后提交即可。" : "Fill these, then the button opens a prefilled GitHub New-issue page.", Style = St("RowDesc"), Margin = new Thickness(0, 4, 0, 8), TextWrapping = TextWrapping.Wrap });
-        var fFeature = AboutField(Zh ? "使用的功能" : "Feature used", Zh ? "如:云端润色 / 听写插入 / 热词修正" : "e.g. cloud polish / dictation / hotwords");
-        var fProblem = AboutField(Zh ? "遇到的问题" : "Problem", Zh ? "具体现象、什么时候出现、能否复现" : "What happened, when, can it reproduce", 64);
-        var fExpect = AboutField(Zh ? "预期结果" : "Expected", Zh ? "你期望它怎样" : "What you expected");
+        form.Children.Add(new TextBlock { Text = L10n.Loc("反馈问题 · 一键提交到 GitHub", "Report a problem · one-tap to GitHub", "問題を報告 · ワンタップで GitHub へ", "문제 신고 · 원터치로 GitHub 제출"), Foreground = Br("Text"), FontSize = 14, FontWeight = FontWeights.SemiBold });
+        form.Children.Add(new TextBlock { Text = L10n.Loc("填好下面三项,点按钮会打开已预填内容的 GitHub「新建 issue」页,确认后提交即可。", "Fill these, then the button opens a prefilled GitHub New-issue page.", "以下の3項目を入力すると、内容が事前入力された GitHub「新規 issue」ページが開きます。", "아래 세 항목을 입력하면 내용이 미리 채워진 GitHub '새 issue' 페이지가 열립니다."), Style = St("RowDesc"), Margin = new Thickness(0, 4, 0, 8), TextWrapping = TextWrapping.Wrap });
+        var fFeature = AboutField(L10n.Loc("使用的功能", "Feature used", "使用した機能", "사용한 기능"), L10n.Loc("如:云端润色 / 听写插入 / 热词修正", "e.g. cloud polish / dictation / hotwords", "例:クラウド整形 / 音声入力 / ホットワード補正", "예: 클라우드 다듬기 / 받아쓰기 / 핫워드 교정"));
+        var fProblem = AboutField(L10n.Loc("遇到的问题", "Problem", "発生した問題", "발생한 문제"), L10n.Loc("具体现象、什么时候出现、能否复现", "What happened, when, can it reproduce", "具体的な症状、発生時期、再現可否", "구체적인 증상, 발생 시점, 재현 가능 여부"), 64);
+        var fExpect = AboutField(L10n.Loc("预期结果", "Expected", "期待する結果", "예상 결과"), L10n.Loc("你期望它怎样", "What you expected", "どうなることを期待したか", "어떻게 동작하기를 기대했는지"));
         form.Children.Add(fFeature.label); form.Children.Add(fFeature.visual);
         form.Children.Add(fProblem.label); form.Children.Add(fProblem.visual);
         form.Children.Add(fExpect.label); form.Children.Add(fExpect.visual);
-        var submit = new Button { Style = St("Solid"), Content = "✈  " + (Zh ? "在 GitHub 提交(已预填)" : "Open prefilled GitHub issue"), HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0) };
+        var submit = new Button { Style = St("Solid"), Content = "✈  " + L10n.Loc("在 GitHub 提交(已预填)", "Open prefilled GitHub issue", "GitHub で送信(事前入力済み)", "GitHub에 제출(미리 채워짐)"), HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0) };
         submit.Click += (_, _) =>
         {
-            string title = Uri.EscapeDataString($"[Windows] {(Zh ? "反馈" : "Feedback")}: {Trunc(fProblem.box.Text, 50)}");
+            string title = Uri.EscapeDataString($"[Windows] {L10n.Loc("反馈", "Feedback", "フィードバック", "피드백")}: {Trunc(fProblem.box.Text, 50)}");
             string body = Uri.EscapeDataString(
-                $"### {(Zh ? "使用的功能" : "Feature")}\n{fFeature.box.Text}\n\n### {(Zh ? "遇到的问题" : "Problem")}\n{fProblem.box.Text}\n\n### {(Zh ? "预期结果" : "Expected")}\n{fExpect.box.Text}\n\n---\nVibe XASR {disp} · Windows");
+                $"### {L10n.Loc("使用的功能", "Feature", "使用した機能", "사용한 기능")}\n{fFeature.box.Text}\n\n### {L10n.Loc("遇到的问题", "Problem", "発生した問題", "발생한 문제")}\n{fProblem.box.Text}\n\n### {L10n.Loc("预期结果", "Expected", "期待する結果", "예상 결과")}\n{fExpect.box.Text}\n\n---\nVibe XASR {disp} · Windows");
             try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo($"https://github.com/Gilgamesh-J/X-ASR/issues/new?title={title}&body={body}") { UseShellExecute = true }); } catch { }
         };
         form.Children.Add(submit);
@@ -260,13 +295,31 @@ public partial class SettingsWindow : Window
 
     private static string Trunc(string s, int n) { s = (s ?? "").Replace("\n", " ").Trim(); return s.Length > n ? s[..n] : s; }
 
+    /// <summary>Snap a stored HudStaySeconds value to the nearest segmented option key.</summary>
+    private static string HudStayKey(double v) => v <= 0.25 ? "0" : v <= 0.75 ? "0.5" : v <= 1.5 ? "1" : v <= 3 ? "2" : "4";
+
+    /// <summary>记录 entry: History is a standalone window — this tab opens it (and offers a re-open button).</summary>
+    private void BuildHistoryEntry()
+    {
+        AddGroupTitle(L10n.T("tab.history"));
+        var sp = new StackPanel { Margin = new Thickness(20, 22, 20, 22), HorizontalAlignment = HorizontalAlignment.Center };
+        sp.Children.Add(new TextBlock { Text = "🗂", FontSize = 40, HorizontalAlignment = HorizontalAlignment.Center });
+        sp.Children.Add(new TextBlock { Text = L10n.T("history.entry.desc"), Foreground = Br("TextMuted"), FontSize = 12.5, TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap, MaxWidth = 420, Margin = new Thickness(0, 12, 0, 16) });
+        var open = new Button { Style = St("Solid"), Content = "🗂  " + L10n.T("history.entry.open"), HorizontalAlignment = HorizontalAlignment.Center };
+        open.Click += (_, _) => _app.OpenHistory();
+        sp.Children.Add(open);
+        Content.Children.Add(new Border { Style = St("Card"), Child = sp });
+        // also open it immediately when navigating here (idempotent: just activates if already open)
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, new Action(() => _app.OpenHistory()));
+    }
+
     private void BuildPlaceholder(string key)
     {
         var label = L10n.T(Tabs.FirstOrDefault(t => t.key == key).label);
         AddGroupTitle(label);
         var sp = new StackPanel { Margin = new Thickness(20, 26, 20, 26) };
         sp.Children.Add(new TextBlock { Text = "🚧", FontSize = 28, HorizontalAlignment = HorizontalAlignment.Center });
-        sp.Children.Add(new TextBlock { Text = Zh ? $"「{label}」正在迁移到新界面…" : $"“{label}” is being migrated…", Foreground = Br("TextMuted"), FontSize = 12.5, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 10, 0, 0) });
+        sp.Children.Add(new TextBlock { Text = L10n.Loc($"「{label}」正在迁移到新界面…", $"“{label}” is being migrated…", $"「{label}」を新しい画面に移行中…", $"'{label}'을(를) 새 화면으로 이전 중…"), Foreground = Br("TextMuted"), FontSize = 12.5, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 10, 0, 0) });
         Content.Children.Add(new Border { Style = St("Card"), Child = sp });
     }
 
@@ -321,20 +374,27 @@ public partial class SettingsWindow : Window
         return c;
     }
 
+    private KeyCaptureHook? _hotkeyHook;
     private Button HotkeyButton()
     {
-        var b = new Button { Style = St("Ghost"), Content = VkNames.Name(S.HotkeyVk), HorizontalAlignment = HorizontalAlignment.Right, MinWidth = 110 };
-        bool capturing = false;
-        b.Click += (_, _) => { capturing = true; b.Content = L10n.T("dict.hotkey.recording"); b.Focus(); };
-        b.PreviewKeyDown += (_, e) =>
+        var b = new Button { Style = St("Ghost"), Content = VkNames.Combo(S.HotkeyVk, S.HotkeyMods), HorizontalAlignment = HorizontalAlignment.Right, MinWidth = 110 };
+        // Capture the combo at the OS level (WH_KEYBOARD_LL) rather than via WPF key events — a WPF
+        // button loses focus when Alt enters menu-mode, which would drop Alt combos. The hook swallows
+        // the keys while recording so they never leak to the app behind.
+        b.Click += (_, _) =>
         {
-            if (!capturing) return;
-            e.Handled = true;
-            var key = e.Key == Key.System ? e.SystemKey : e.Key;
-            if (key is Key.LeftShift or Key.RightShift or Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LWin or Key.RWin or Key.Escape && key == Key.Escape) { }
-            int vk = KeyInterop.VirtualKeyFromKey(key);
-            capturing = false; _app.SetHotkey(vk); b.Content = VkNames.Name(vk);
+            if (_hotkeyHook is not null) return;
+            b.Content = L10n.T("dict.hotkey.recording");
+            _hotkeyHook = new KeyCaptureHook(combo: true);
+            _hotkeyHook.CapturedCombo += (vk, mods) => Dispatcher.BeginInvoke(new Action(() =>
+            {
+                _hotkeyHook?.Dispose(); _hotkeyHook = null;
+                if (vk == 0x1B) { b.Content = VkNames.Combo(S.HotkeyVk, S.HotkeyMods); return; }   // Esc cancels
+                _app.SetHotkey(vk, mods); b.Content = VkNames.Combo(vk, mods);
+            }));
+            _hotkeyHook.Start();
         };
+        b.Unloaded += (_, _) => { _hotkeyHook?.Dispose(); _hotkeyHook = null; };
         return b;
     }
 

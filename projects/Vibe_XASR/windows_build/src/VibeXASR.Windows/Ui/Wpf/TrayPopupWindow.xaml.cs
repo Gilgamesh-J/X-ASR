@@ -25,7 +25,7 @@ public partial class TrayPopupWindow : Window
 {
     private readonly IAppController _app;
     private Settings S => _app.Settings;
-    private static bool Zh => L10n.Resolved == Lang.Zh;
+    private static bool Zh => L10n.Resolved is Lang.Zh or Lang.Hant;
 
     public TrayPopupWindow(IAppController app)
     {
@@ -95,7 +95,7 @@ public partial class TrayPopupWindow : Window
         var stateStack = new StackPanel { Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
         string state = !ready ? L10n.T("menu.loading") : listening ? L10n.T("menu.listening") : L10n.T("menu.ready");
         stateStack.Children.Add(new TextBlock { Text = state, Foreground = Br("Text"), FontSize = 13.5, FontWeight = FontWeights.SemiBold });
-        stateStack.Children.Add(new TextBlock { Text = "X-ASR · " + (Zh ? "本地" : "local"), Foreground = Br("TextMuted"), FontSize = 10.5, FontFamily = new FontFamily("Cascadia Mono, Consolas") });
+        stateStack.Children.Add(new TextBlock { Text = "X-ASR · " + L10n.Loc("本地", "local", "ローカル", "로컬"), Foreground = Br("TextMuted"), FontSize = 10.5, FontFamily = new FontFamily("Cascadia Mono, Consolas") });
         Grid.SetColumn(stateStack, 1); statusGrid.Children.Add(stateStack);
         Root.Children.Add(statusGrid);
 
@@ -106,7 +106,7 @@ public partial class TrayPopupWindow : Window
         string recent = listening ? _app.CurrentOverlayText : (_app.History?.List().FirstOrDefault()?.Text ?? "");
         bool empty = string.IsNullOrEmpty(recent);
         var card = new Border { CornerRadius = new CornerRadius(9), Background = Br("Surface2"), BorderBrush = Br("Hairline"), BorderThickness = new Thickness(1), Margin = new Thickness(16, 0, 16, 4), Padding = new Thickness(12, 10, 12, 10), MinHeight = 36 };
-        card.Child = new TextBlock { Text = empty ? (Zh ? "(暂无)" : "(none)") : recent, Foreground = Br(empty ? "TextMuted" : "Text"), FontFamily = new FontFamily("Cascadia Mono, Consolas"), FontSize = 12, TextWrapping = TextWrapping.Wrap, MaxHeight = 120 };
+        card.Child = new TextBlock { Text = empty ? L10n.Loc("(暂无)", "(none)", "(なし)", "(없음)") : recent, Foreground = Br(empty ? "TextMuted" : "Text"), FontFamily = new FontFamily("Cascadia Mono, Consolas"), FontSize = 12, TextWrapping = TextWrapping.Wrap, MaxHeight = 120 };
         Root.Children.Add(card);
 
         AddSeparator();
@@ -134,6 +134,36 @@ public partial class TrayPopupWindow : Window
         polish.Unchecked += (_, _) => { S.CloudEnabled = false; _app.ApplyCloudSettings(); };
         Grid.SetColumn(polish, 1); polishGrid.Children.Add(polish);
         Root.Children.Add(polishGrid);
+
+        // ---- active polish template switcher (only when 云端润色 is on) ----
+        if (S.CloudEnabled)
+        {
+            var ids = new System.Collections.Generic.List<(string id, string name)> { ("auto", L10n.T("popup.template.auto")) };
+            foreach (var t in Refine.CloudJson.Templates(S.CloudTemplatesJson))
+                ids.Add((t.Id, string.IsNullOrEmpty(t.Name) ? t.Id : t.Name));
+            int cur = Math.Max(0, ids.FindIndex(x => x.id == (string.IsNullOrEmpty(S.CloudActiveTemplate) ? "auto" : S.CloudActiveTemplate)));
+
+            var tplGrid = new Grid { Margin = new Thickness(16, 0, 16, 8) };
+            tplGrid.ColumnDefinitions.Add(new ColumnDefinition());
+            tplGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            tplGrid.Children.Add(new TextBlock { Text = L10n.T("popup.template"), Foreground = Br("Text"), FontSize = 13, VerticalAlignment = VerticalAlignment.Center });
+            var chip = new Border { CornerRadius = new CornerRadius(7), Background = Br("AccentSoft"), Padding = new Thickness(11, 4, 11, 4), Cursor = Cursors.Hand, HorizontalAlignment = HorizontalAlignment.Right,
+                Child = new TextBlock { Text = ids[cur].name + "  ⇄", Foreground = Br("AccentA"), FontSize = 12.5, FontWeight = FontWeights.SemiBold } };
+            chip.MouseLeftButtonUp += (_, _) => { var next = ids[(cur + 1) % ids.Count].id; _app.SetActiveTemplate(next); Rebuild(); };
+            Grid.SetColumn(chip, 1); tplGrid.Children.Add(chip);
+            Root.Children.Add(tplGrid);
+        }
+
+        // ---- mic mute quick-toggle ----
+        var muteGrid = new Grid { Margin = new Thickness(16, 0, 16, 8) };
+        muteGrid.ColumnDefinitions.Add(new ColumnDefinition());
+        muteGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        muteGrid.Children.Add(new TextBlock { Text = "🎙 " + L10n.T("popup.micMute"), Foreground = Br("Text"), FontSize = 13, VerticalAlignment = VerticalAlignment.Center });
+        var mute = new System.Windows.Controls.Primitives.ToggleButton { Style = St("Toggle"), IsChecked = S.MicMuted, HorizontalAlignment = HorizontalAlignment.Right };
+        mute.Checked += (_, _) => _app.SetMicMuted(true);
+        mute.Unchecked += (_, _) => _app.SetMicMuted(false);
+        Grid.SetColumn(mute, 1); muteGrid.Children.Add(mute);
+        Root.Children.Add(muteGrid);
 
         AddSeparator();
 
