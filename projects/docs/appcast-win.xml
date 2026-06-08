@@ -12,32 +12,32 @@
     <description>Vibe XASR Windows auto-update feed</description>
     <language>zh</language>
     <item>
-      <title>Vibe XASR 2.0.0.2-beta</title>
-      <pubDate>Sat, 06 Jun 2026 23:40:00 +0800</pubDate>
+      <title>Vibe XASR 2.0.0.3-beta</title>
+      <pubDate>Mon, 08 Jun 2026 21:00:00 +0800</pubDate>
       <link>https://github.com/Gilgamesh-J/X-ASR/releases/tag/vibe-v2.0</link>
       <description><![CDATA[
-        <h3>Vibe XASR 2.0.0.2-beta (Windows)</h3>
+        <h3>Vibe XASR 2.0.0.3-beta (Windows)</h3>
         <ul>
-          <li>全新界面:设置 / 历史 / 托盘弹窗 / 听写悬浮条全部重写 —— 深色细滚动条、毛玻璃卡片、内容居中,更精致统一。</li>
-          <li>桌面悬浮入口:常驻一个可拖动的小药丸(显示就绪 / 听写状态),随时找到并打开;点击弹出快捷菜单
-              (含「AI 润色」开关);可一键隐藏,「通用」里可再开。</li>
-          <li>模型来源可切换:CDN 加速链接(默认)/ ModelScope / HuggingFace。官方线路提供 int8 量化模型
-              (每档约 130 MB,内置 960ms 也已量化,安装体积砍半多);「模型管理」标注每档「已量化 / 未量化」;
-              下载可随时取消。</li>
-          <li>AI 润色优化:更强的默认提示词(防注入 + 改口纠正 + 轻量规整);修复「改口」被数字守卫误拒的问题
-              (说「八点…不对,是九点」现在能正确整理成「9 点」);预置一批编程热词到词典。</li>
-          <li>修复:切换界面语言后侧边栏与当前页实时刷新;长句听写时悬浮条显示最新的词;设置保存更稳定。</li>
+          <li>组合快捷键:触发键支持「修饰键 + 字母」及多修饰键组合(Ctrl/Alt/Shift/Win);触发方式新增
+              「按住说话」智能模式(长按即说、轻点锁定免持)与「单击切换」。</li>
+          <li>提示词工作室:独立窗口管理模板,可给每个模板单独绑定快捷键(带冲突检测);落字后「换模板重润色」
+              弹出模板菜单,选哪个就用原文重跑哪个。</li>
+          <li>输出转繁体 + 繁體中文界面;云端润色默认提示词随界面语言(中 / 英 / 日 / 韩);界面文案全面本地化。</li>
+          <li>记录页重做:内嵌到「设置 · 记录」,支持搜索、碎句聚合、日历热力图、多选合并、加标签、撤销、键盘操作。</li>
+          <li>其它:设置标签顺序对齐 macOS;悬浮条停留时长可调 + 悬停保持;词典 / 口令 导入导出;托盘可切换润色模板、
+              静音麦克风;切换界面语言时托盘菜单与已开窗口标题实时刷新。</li>
+          <li>修复:全局热键忽略程序自身注入的按键(长按说话不再中途打断);悬浮条在菜单 / 听写间切换时尺寸恢复正常。</li>
         </ul>
         <p>macOS is the primary development branch; the Windows build is compiled in sync and not yet fully tested (preview). Feedback welcome.<br/>
         macOS 为主开发分支,Windows 为同步编译,尚未充分测试(预览版)。欢迎反馈。</p>
       ]]></description>
       <enclosure
-        url="https://github.com/Gilgamesh-J/X-ASR/releases/download/vibe-v2.0/VibeXASR-2.0.0.2-windows-x64.msi"
+        url="https://github.com/Gilgamesh-J/X-ASR/releases/download/vibe-v2.0/VibeXASR-2.0.0.3-windows-x64.msi"
         sparkle:os="windows"
-        sparkle:version="2.0.0.2"
-        sparkle:shortVersionString="2.0.0.2-beta"
-        sparkle:edSignature="VRdNsPys2tnjVopgL/D9IvECXnxG0AnrVEiQCw5mSvDUAU8afcYPw4GaG5w3/EnNhQIbez0M6jqI27HJ22WqCw=="
-        length="211259392"
+        sparkle:version="2.0.0.3"
+        sparkle:shortVersionString="2.0.0.3-beta"
+        sparkle:edSignature="6h+XWR46XwwuLprDDthPUN/Dw1cjNib2tctwBgw1/Xnvq7GjZL4nFe8LdXbWAvHaH3qt4bQAd9O17I8/SZ5hAQ=="
+        length="211312640"
         type="application/octet-stream" />
     </item>
   </channel>
