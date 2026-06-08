@@ -32,7 +32,7 @@
         macOS 为主开发分支,Windows 为同步编译,尚未充分测试(预览版)。欢迎反馈。</p>
       ]]></description>
       <enclosure
-        url="https://github.com/Gilgamesh-J/X-ASR/releases/download/vibe-v2.0/VibeXASR-2.0.0.3-windows-x64.msi"
+        url="https://models.speech.wiki/app/VibeXASR-2.0.0.3-windows-x64.msi"
         sparkle:os="windows"
         sparkle:version="2.0.0.3"
         sparkle:shortVersionString="2.0.0.3-beta"

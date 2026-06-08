@@ -90,6 +90,8 @@ $r2env  = Join-Path $scripts ".env"
 if ((Test-Path $r2py) -and (Test-Path $r2env)) {
     Write-Host "Uploading MSI to Cloudflare R2 ..." -ForegroundColor Cyan
     try {
+        # Immutable, version-specific name — the appcast points HERE (CN-fast R2 download, skips GitHub).
+        & python $r2py $msiOut "app/VibeXASR-$Version-windows-x64.msi" "application/x-msi" "public, max-age=31536000, immutable"
         & python $r2py $msiOut "app/VibeXASR-$disp.msi" "application/x-msi" "public, max-age=600"
         & python $r2py $msiOut "app/VibeXASR.msi"       "application/x-msi" "public, max-age=300"
     } catch { Write-Host "  R2 upload failed (non-fatal): $_" -ForegroundColor Yellow }
