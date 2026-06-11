@@ -25,10 +25,10 @@ def get_parser():
     parser.add_argument("--host", type=str, default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8766)
 
-    parser.add_argument("--tokens", type=str, default="/root/shared-nvme/yuxiangzhao/chunk2s_model/tokens.txt")
-    parser.add_argument("--encoder", type=str, default="/root/shared-nvme/yuxiangzhao/chunk2s_model/encoder-iter-408000-avg-3-chunk-96-left-256.onnx")
-    parser.add_argument("--decoder", type=str, default="/root/shared-nvme/yuxiangzhao/chunk2s_model/decoder-iter-408000-avg-3-chunk-96-left-256.onnx")
-    parser.add_argument("--joiner", type=str, default="/root/shared-nvme/yuxiangzhao/chunk2s_model/joiner-iter-408000-avg-3-chunk-96-left-256.onnx")
+    parser.add_argument("--tokens", type=str, default="models/chunk-160ms-model/tokens.txt")
+    parser.add_argument("--encoder", type=str, default="models/chunk-160ms-model/encoder-160ms.onnx")
+    parser.add_argument("--decoder", type=str, default="models/chunk-160ms-model/decoder-160ms.onnx")
+    parser.add_argument("--joiner", type=str, default="models/chunk-160ms-model/joiner-160ms.onnx")
 
     parser.add_argument("--provider", type=str, default="cpu")
     parser.add_argument("--sample-rate", type=int, default=16000)
