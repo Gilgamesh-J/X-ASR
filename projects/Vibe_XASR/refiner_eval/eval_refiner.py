@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Qwen3-refiner-0.6B-MLX 离线质量评估  (Vibe XASR ·「大模型整理」Beta 的前置评估)
+CPM5-Refiner(MiniCPM-1B)离线质量评估  (Vibe XASR ·「大模型整理」Beta 的质量评估)
 =====================================================================
-目的:在 Apple Silicon 本地用 mlx-lm 跑 MuyuanJ/Qwen3-refiner-0.6B-MLX,验证三件事——
-      ① 去口癖/顺滑  ② 改口/自我纠正  ③ 列表/分段——0.6B 能不能稳,以及护栏能不能
-      拦住丢信息。据此决定是否值得集成进 Vibe XASR(macOS),并给 Swift 集成定稿 prompt + 护栏。
+目的:在 Apple Silicon 本地用 mlx-lm 跑 MuyuanJ/CPM5-Refiner-MLX-int4,验证三件事——
+      ① 去口癖/顺滑  ② 改口/自我纠正(模型自带 ITN)  ③ 不确定词列表能否解析。
+      注:CPM5 用纯 user 输入(--prompt-style plain),正文后自带「不确定列表」尾巴,app 端已剥离。
 
       —— 这是评估脚本,不属于 app,只在 macOS(Apple Silicon)跑。
 
@@ -27,7 +27,7 @@ import re
 import sys
 import time
 
-MODEL_ID = "MuyuanJ/Qwen3-refiner-0.6B-MLX"
+MODEL_ID = "MuyuanJ/CPM5-Refiner-MLX-int4"   # CPM5-Refiner(MiniCPM-1B);纯 user 输入(--prompt-style plain),正文后自带「不确定列表」尾巴
 
 PROMPT_STYLES = {
     # 不加 system,直接把原文当 user 输入(贴近纯 SFT 训练分布)

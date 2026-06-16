@@ -265,13 +265,13 @@ struct LLMTab: View {
             .background(RoundedRectangle(cornerRadius: 8).fill(Vibe.Palette.accentA))
     }
 
-    /// 「模型来源」一行 —— 标注上游开源模型(MuyuanJ 的 Qwen3-refiner);实际 GGUF 由作者
-    /// 镜像到自己的 HuggingFace 仓库后在线下载。
+    /// 「模型来源」一行 —— 标注上游开源模型(MuyuanJ 的 CPM5-Refiner,MiniCPM-1B based);
+    /// 实际 GGUF 由作者量化后经 R2 CDN 在线下载。
     private var refinerSourceLine: some View {
         HStack(spacing: 6) {
             Text(l10n.t("llm.local.source")).font(Vibe.Fonts.ui(11.5)).foregroundStyle(Vibe.Palette.textMuted(scheme).opacity(0.8))
-            Link(destination: URL(string: "https://modelscope.cn/models/MuyuanJ/Qwen3-refiner-0.6B-MLX")!) {
-                Text("Qwen3-refiner-0.6B · MuyuanJ").font(Vibe.Fonts.mono(11))
+            Link(destination: URL(string: "https://modelscope.cn/models/MuyuanJ/CPM5_refiner_v1")!) {
+                Text("CPM5-Refiner · MuyuanJ").font(Vibe.Fonts.mono(11))
                     .foregroundStyle(Color(red: 0.49, green: 0.63, blue: 1)).lineLimit(1).truncationMode(.middle)
             }
             Spacer(minLength: 0)

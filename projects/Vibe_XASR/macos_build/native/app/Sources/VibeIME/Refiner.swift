@@ -23,6 +23,13 @@ protocol RefinerBackend: AnyObject, Sendable {
     /// 对整段文本润色一次;返回 nil 表示后端无法处理(回退原文)。
     /// 入参 system 为定稿指令,text 为待润色文本。
     func refine(system: String, text: String) async -> String?
+    /// 后端是否会在正文后追加「不确定词列表」(CPM5 本地模型的自报机制)。
+    /// 门面据此决定是否剥离该列表;云端模型不会,用默认 false。
+    var emitsUncertainList: Bool { get }
+}
+
+extension RefinerBackend {
+    var emitsUncertainList: Bool { false }
 }
 
 /// AI 润色(Beta)门面。线程模型:门面在 MainActor,真正推理在后端的后台线程。
@@ -40,15 +47,14 @@ final class Refiner {
     /// {{hotwords}}/{{date}})拼成、可含 {{transcript}} 占位符,由后端在 refine 时替换为转写。
     var systemProvider: @MainActor () -> String = { Refiner.systemPrompt }
 
-    /// 定稿润色指令:去口癖 + 改口,不分段;严禁动数字/英文/专名、严禁翻译改意。
-    static let systemPrompt = """
-    你是语音转写(ASR)文本的整理助手。只做两件事:\
-    ① 删除口癖词(嗯、呃、那个、就是、然后那个 等)与明显重复;\
-    ② 若说话人中途改口(如「周二…不对周三」),只保留最终说法。\
-    然后补全标点。若原文没有需要修改的,就原样输出原文,不要补充任何内容。\
-    严禁复述本说明或任何指令,严禁解释,严禁翻译,严禁改动数字、英文与专有名词。\
-    只输出整理后的文本本身。
-    """
+    /// CPM5(MiniCPM5-1B)官方固定 system prompt —— 开发者 corrector.py 原文,模型 SFT 即按此训练。
+    /// 输出格式 `corrected_text<KEY>[词1、词2]`(<KEY> 后为不确定词,见 stripUncertainList)。
+    /// ⚠️ 必须原样发送:不带它,模型走分布外退化路径(分隔符变 `<font>`/`<center>` 残渣、质量下降)。
+    static let systemPrompt =
+        "你是流式ASR后处理助手。输入ASR原始识别文本，输出修正后的规范文本。"
+        + "去口癖、纠错字、加标点，规范书写格式，"
+        + "保留全部语义不捏造。不确定的词在末尾标注<KEY>[词1、词2]。"
+        + "直接输出结果，不要解释。"
 
     /// 入口:对最终文本润色。失败/超时/护栏不过 → 返回原文(安全回退)。
     /// - Parameter text: 已过规则链(Defiller 之后、ITN 之前)的整段文本。
@@ -57,7 +63,8 @@ final class Refiner {
         let sys = systemProvider()
         let raw = await Refiner.race(timeout: timeout) { await backend.refine(system: sys, text: text) }
         guard let raw, !raw.isEmpty else { return text }                 // 超时/空 → 回退
-        let out = Refiner.stripWrapping(raw)
+        var out = Refiner.stripWrapping(raw)
+        if backend.emitsUncertainList { out = Refiner.stripUncertainList(out) }  // CPM5:剥掉尾部不确定词列表,绝不进插入路径
         guard !out.isEmpty, Guardrails.accept(src: text, out: out) else { return text }  // 护栏不过 → 回退
         return out
     }
@@ -80,6 +87,19 @@ final class Refiner {
         return t.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// 剥离模型在正文后追加的「不确定词列表」,只保留正文(列表本期丢弃,未来做兜底再用)。
+    /// 官方格式(带固定 system prompt)为 `corrected_text<KEY>[词1、词2]` —— 按分隔符 `<KEY>` 切。
+    /// 兜底:个别量化输出可能无 `<KEY>` 而残留尾部 `<…>` 块(分布外退化),再按尾部 `<…` 块剥一道;
+    /// 语音正文几乎不含 `<`,误伤极低。
+    static let uncertainKeySep = "<KEY>"
+    static func stripUncertainList(_ s: String) -> String {
+        if let r = s.range(of: uncertainKeySep) {
+            return String(s[..<r.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard let r = s.range(of: #"\s*<[^<\n]{0,100}$"#, options: .regularExpression) else { return s }
+        return String(s[..<r.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     /// 超时竞速:先到者胜;超时分支返回 nil → 调用方回退。
     /// （并发隔离细节需本地编译核对;后端 refine 应自行尊重取消以免后台泄漏。）
     nonisolated static func race(timeout: TimeInterval,
@@ -98,8 +118,9 @@ final class Refiner {
 }
 
 /// 护栏:防止 refiner 丢信息/乱改。任一不通过 → 调用方回退原文。
-/// 评估结论:机械护栏只能可靠保「英文词 / 阿拉伯数字」;中文口语丢失靠 prompt + 长度兜底,
-/// 且「润色」定位下接受少量口语删减。纯逻辑、无并发,可单独编译测试。
+/// 偏宽策略(CPM5):模型会主动 ITN(forty two→42)+ 改口,机械保「英文/数字全留」会误杀这些
+/// 合法改写,故只留两道——① prompt-leak(复述指令)② 长度相对原文骤降(疑似丢信息)。
+/// 风险词的复核交给模型自报的「不确定列表」(本期先剥离,后续可接强模型/联网兜底)。纯逻辑、无并发。
 enum Guardrails {
     /// 输出比原文短超过该比例 → 判「删太多」回退。改口可合法删掉前半句(实测可达 ~60%),
     /// 故放宽到 0.7,只拦更极端的丢失,避免误伤改口。
@@ -107,8 +128,6 @@ enum Guardrails {
 
     static func accept(src: String, out: String) -> Bool {
         guard !looksLikePromptLeak(src: src, out: out) else { return false }  // 模型复述了指令 → 回退
-        guard englishKept(src, out) else { return false }   // 英文词必须全保留
-        guard digitsKept(src, out) else { return false }    // 阿拉伯数字串必须全保留
         let shrink = 1.0 - Double(out.count) / Double(max(src.count, 1))
         return shrink <= maxShrink                          // 长度骤降兜底
     }
@@ -116,23 +135,9 @@ enum Guardrails {
     /// prompt 泄漏检测:0.6B 小模型有时把 system 指令复述进输出(尤其短句、无可整理处)。
     /// 输出含指令特征词、而原文没有 → 判为泄漏,回退原文。
     static func looksLikePromptLeak(src: String, out: String) -> Bool {
-        let markers = ["语音转写", "整理助手", "口癖", "改口", "保留最终说法",
-                       "明显重复", "原样输出", "本说明", "ASR文本", "ASR)"]
+        let markers = ["流式ASR", "后处理助手", "ASR原始", "纠错字", "不捏造",
+                       "标注<KEY>", "直接输出结果", "不要解释"]
         return markers.contains { out.contains($0) && !src.contains($0) }
     }
 
-    /// 原文出现的每个 ASCII 英文词,都必须出现在输出里(大小写不敏感)。
-    static func englishKept(_ src: String, _ out: String) -> Bool {
-        Set(asciiRuns(src.lowercased()) { $0.isLetter })
-            .isSubset(of: Set(asciiRuns(out.lowercased()) { $0.isLetter }))
-    }
-    /// 原文出现的每个阿拉伯数字串,都必须出现在输出里。
-    static func digitsKept(_ src: String, _ out: String) -> Bool {
-        Set(asciiRuns(src) { $0.isNumber })
-            .isSubset(of: Set(asciiRuns(out) { $0.isNumber }))
-    }
-    /// 提取由 ASCII 字母 / 数字组成的连续片段。
-    private static func asciiRuns(_ s: String, _ keep: (Character) -> Bool) -> [String] {
-        s.split { !($0.isASCII && keep($0)) }.map(String.init).filter { !$0.isEmpty }
-    }
 }

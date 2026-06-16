@@ -27,6 +27,10 @@ final class LlamaRefiner: RefinerBackend, @unchecked Sendable {
     /// 构造成功即就绪;失败走 init? → nil → 门面 backend=nil → 安全 no-op。
     var isReady: Bool { true }
 
+    /// CPM5 训练自带「不确定词列表」尾巴(官方格式 `…<KEY>[词1、词2]`),门面 polish 需剥离它
+    /// 再插入(见 Refiner.stripUncertainList)。云端后端不产此列表,用协议默认 false。
+    var emitsUncertainList: Bool { true }
+
     init?(modelPath: String, threads: Int = 4, maxNewTokens: Int = 512) {
         guard FileManager.default.fileExists(atPath: modelPath) else { return nil }
         llama_backend_init()
@@ -108,10 +112,12 @@ final class LlamaRefiner: RefinerBackend, @unchecked Sendable {
 
     /// 用模型自带 chat template(Qwen3)拼 system+user,返回可直接 tokenize 的 prompt。
     private func buildPrompt(system: String, user: String) -> String? {
-        var msgs = [
-            llama_chat_message(role: strdup("system"), content: strdup(system)),
-            llama_chat_message(role: strdup("user"),   content: strdup(user)),
-        ]
+        // 带官方固定 system prompt(Refiner.systemPrompt)+ user 原文;system 为空才退化为只发 user。
+        var msgs = [llama_chat_message]()
+        if !system.isEmpty {
+            msgs.append(llama_chat_message(role: strdup("system"), content: strdup(system)))
+        }
+        msgs.append(llama_chat_message(role: strdup("user"), content: strdup(user)))
         defer {
             for m in msgs {
                 free(UnsafeMutableRawPointer(mutating: m.role))

@@ -45,6 +45,12 @@ enum ModelPaths {
 
     // MARK: AI 润色(Beta)GGUF — 在线下载,不打进 bundle
 
+    /// 当前 refiner GGUF 文件名(CPM5_refiner_v1 量化)。换名是关键:装过旧 Qwen 版的用户
+    /// refinerAvailable() 会判否 → 自动重新下载新模型(并由 ModelDownloader 清掉旧文件)。
+    static let refinerFileName = "refiner-cpm5-q4_k_m.gguf"
+    /// 旧版(Qwen3-0.6B)文件名,仅用于迁移时清理缓存。
+    static let legacyRefinerFileName = "refiner-q4_k_m.gguf"
+
     /// Application Support/VibeXASR/models/refiner — AI 润色 GGUF 的缓存目录。
     static func refinerDir() -> URL {
         appSupportDir()
@@ -54,10 +60,14 @@ enum ModelPaths {
     /// 量化 GGUF 的完整路径。优先用打进 bundle 的(内测内置);否则用 App Support 下载的(正式版)。
     static func refinerModelPath() -> String {
         if let res = resourcePath {
-            let bundled = (res as NSString).appendingPathComponent("refiner/refiner-q4_k_m.gguf")
+            let bundled = (res as NSString).appendingPathComponent("refiner/\(refinerFileName)")
             if FileManager.default.fileExists(atPath: bundled) { return bundled }
         }
-        return refinerDir().appendingPathComponent("refiner-q4_k_m.gguf").path
+        return refinerDir().appendingPathComponent(refinerFileName).path
+    }
+    /// 旧版 GGUF 的下载缓存路径(迁移时删除,释放 ~378MB)。
+    static func legacyRefinerCachePath() -> String {
+        refinerDir().appendingPathComponent(legacyRefinerFileName).path
     }
     /// GGUF 是否已下载就绪。
     static func refinerAvailable() -> Bool {

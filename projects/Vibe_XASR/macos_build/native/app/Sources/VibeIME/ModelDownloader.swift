@@ -174,23 +174,31 @@ final class ModelDownloader: NSObject, ObservableObject, ModelManagerBridge, Mod
 
     // MARK: AI 润色(Beta)GGUF — 单文件,用 async download(不走 tier 状态机/delegate)
 
-    private static let refinerFile = "refiner-q4_k_m.gguf"
+    private static let refinerFile = ModelPaths.refinerFileName
     private var refinerTryIndex = 0
-    /// AI 润色 GGUF 下载源,按序静默回退(UI 无任何提示):① 官方加速线路(R2)→
-    /// ② HuggingFace 作者部署仓库(taocode/Qwen3-refiner-deploy,上游 = MuyuanJ/Qwen3-refiner)。
+    /// AI 润色 GGUF 下载源,按序静默回退(UI 无任何提示):① 官方加速线路(R2 CDN)→
+    /// ② ModelScope 作者仓库(需把同名 GGUF 也传到 MuyuanJ/CPM5_refiner_v1 才命中,否则静默跳过)。
     private func refinerCandidates() -> [URL] {
         [URL(string: "\(r2Host)/refiner/\(Self.refinerFile)")!,
-         URL(string: "https://huggingface.co/taocode/Qwen3-refiner-deploy/resolve/main/\(Self.refinerFile)")!]
+         URL(string: "https://www.modelscope.cn/models/MuyuanJ/CPM5_refiner_v1/resolve/master/\(Self.refinerFile)")!]
     }
     /// 开始下载 refiner GGUF(若未就绪且未在下载)。走 delegate session(taskDescription
     /// "refiner")以获得逐字节进度。完成后 bump installsVersion + 广播,让 AppDelegate
     /// 重新初始化后端。各源都失败才 refinerFailed,Refiner 保持安全回退。
     func startRefinerDownload() {
         guard !ModelPaths.refinerAvailable(), refinerProgress == nil else { return }
+        Self.purgeLegacyRefiner()      // 迁移:删旧 Qwen 版 GGUF(~378MB),腾位给 CPM5 新模型
         refinerFailed = false
         refinerProgress = 0
         refinerTryIndex = 0
         startRefinerAttempt()
+    }
+    /// 删除旧版(Qwen3-0.6B)refiner GGUF 缓存。换模型后老用户本地仍留旧文件 → 清掉省空间。
+    private static func purgeLegacyRefiner() {
+        let legacy = ModelPaths.legacyRefinerCachePath()
+        if FileManager.default.fileExists(atPath: legacy) {
+            try? FileManager.default.removeItem(atPath: legacy)
+        }
     }
     /// 用当前候选源发起一次下载尝试。
     private func startRefinerAttempt() {

@@ -963,7 +963,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         #if VIBE_LLAMA && arch(arm64)
         if store.refinerEnabled {
             Refiner.shared.timeout = 4    // 本地 llama 快,4s 足够
-            Refiner.shared.systemProvider = { Refiner.systemPrompt }   // 本地用固定指令
+            Refiner.shared.systemProvider = { Refiner.systemPrompt }   // CPM5 官方固定 system prompt(开发者 corrector.py)
             if ModelPaths.refinerAvailable() {
                 if !(Refiner.shared.backend is LlamaRefiner) {
                     let path = ModelPaths.refinerModelPath()
