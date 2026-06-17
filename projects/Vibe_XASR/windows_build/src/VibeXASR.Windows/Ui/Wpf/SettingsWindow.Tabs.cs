@@ -583,8 +583,8 @@ public partial class SettingsWindow
             Row("", null, recheck));
     }
 
-    // ============================ AI 润色 (cloud LLM) ============================
-    // Full macOS CloudLLMTab parity (local-llama section intentionally omitted on Windows).
+    // ============================ AI 润色 (cloud + local LLM) ============================
+    // Full macOS CloudLLMTab parity (local-llama section + 本地 ⟂ 云端 互斥 + 仅「说完插入」).
 
     private bool _cloudShowKey;
     private (bool done, bool ok, int ping, string add, string msg) _cloudTest;
@@ -592,49 +592,178 @@ public partial class SettingsWindow
     private List<CloudCustomProvider> _cloudCustoms = new();
     private List<CloudProfile> _cloudProfiles = new();
 
+    /// <summary>AI 润色 (cloud OR local) is on. macOS polishOn — while on, dictation is locked to 说完插入
+    /// (the only mode polish runs in; 逐字 / 持续候机 stream live and can't be rewritten afterwards).</summary>
+    private bool PolishOn => S.CloudEnabled || S.LocalRefinerEnabled;
+
+    /// <summary>macOS requestEnable: AI 润色 only works in 说完插入. If the user enables polish (cloud/local) while
+    /// in another mode, confirm the switch first. Returns true to proceed (already 说完插入, or confirmed → switched);
+    /// false if the user declined (caller must NOT enable, and should rebuild so the toggle reverts).</summary>
+    private bool ConfirmPolishNeedsPaste()
+    {
+        if (S.Mode == DictationMode.Paste) return true;
+        bool ok = MessageBox.Show(
+            L10n.Loc("AI 润色仅在「说完插入」模式下可用。是否切换到该模式并开启?",
+                     "AI Polish only works in \"insert on finish\" mode. Switch to it and turn it on?",
+                     "AI 整形は「話し終えたら挿入」モードでのみ利用できます。このモードに切り替えてオンにしますか?",
+                     "AI 다듬기는 「말한 뒤 삽입」 모드에서만 사용할 수 있습니다. 해당 모드로 전환하고 켤까요?"),
+            L10n.Loc("需切换到「说完插入」", "Switch to \"insert on finish\"?", "「話し終えたら挿入」に切り替え", "「말한 뒤 삽입」으로 전환"),
+            MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
+        if (ok) _app.SetMode(DictationMode.Paste);
+        return ok;
+    }
+
     private void BuildCloud()
     {
         _cloudTemplates = CloudJson.Templates(S.CloudTemplatesJson);
         _cloudCustoms = CloudJson.CustomProviders(S.CloudCustomProvidersJson);
         _cloudProfiles = CloudJson.Profiles(S.CloudProfilesJson);
         CloudRequestLog.Shared.Enabled = S.CloudLogEnabled;
+        StopModelTimer(); _modelRowRefreshers.Clear();   // reuse the model poller for the local-LLM download progress
+
+        // 本地大模型 FIRST — macOS parity (CloudLLMTab: llm.sec.local then localCard at the top). The local
+        // polish toggle and the cloud toggle are MUTUALLY EXCLUSIVE: enabling one disables the other.
+        AddGroupTitle(L10n.Loc("本地大模型", "Local LLM", "ローカル LLM", "로컬 LLM"));
+        BuildCloudLocalCard();
 
         AddGroupTitle(L10n.Loc("云端大模型", "Cloud LLM", "クラウド LLM", "클라우드 LLM"));
         BuildCloudConfigCard();
 
-        if (!S.CloudEnabled) return;
+        if (S.CloudEnabled)
+        {
+            AddGroupTitle(L10n.Loc("最近请求 · 排查", "Recent requests · debug", "最近のリクエスト · デバッグ", "최근 요청 · 디버그"));
+            BuildCloudLogCard();
+            AddGroupTitle(L10n.Loc("润色处理项 · 自动拼成 Prompt", "Processing · builds the auto prompt", "整形処理 · 自動でプロンプトを生成", "정리 항목 · 자동 프롬프트 생성"));
+            AddCard(
+                Row(L10n.Loc("数字规整", "Numbers → digits", "数字の整形", "숫자 정규화"), L10n.Loc("一百二十三 → 123、三点半 → 3:30、百分之二十 → 20%。成语、计数词不动。", "Spoken numerals → digits.", "「一百二十三」→ 123、「三点半」→ 3:30、「百分之二十」→ 20%。慣用句・助数詞はそのまま。", "「一百二十三」→ 123, 「三点半」→ 3:30, 「百分之二十」→ 20%. 관용구·수량사는 유지."), Toggle(S.CloudNumbers, v => { S.CloudNumbers = v; _app.ApplyCloudSettings(); })),
+                Row(L10n.Loc("去口水词", "Remove fillers", "言いよどみ除去", "군더더기 제거"), L10n.Loc("去掉「嗯 / 呃 / 唉」和口吃重复(那个那个 → 那个)。叠词保留。", "Strip fillers + stutters.", "「えー / あの / うー」やどもりの重複(あのあの → あの)を除去。畳語は保持。", "「음 / 어 / 에」와 말더듬 반복(저기저기 → 저기)을 제거. 첩어는 유지."), Toggle(S.CloudFillers, v => { S.CloudFillers = v; _app.ApplyCloudSettings(); })),
+                Row(L10n.Loc("改口纠正", "Keep restatement", "言い直しの修正", "정정 반영"), L10n.Loc("说话中途自我更正时,只保留最终说法,删掉被改掉的前半句。", "Keep only the final wording on self-correction.", "話の途中で言い直したとき、最終的な表現だけを残し、訂正前の部分を削除します。", "말하는 도중 정정한 경우 최종 표현만 남기고 정정된 앞부분을 삭제합니다."), Toggle(S.CloudRestate, v => { S.CloudRestate = v; _app.ApplyCloudSettings(); })),
+                Row(L10n.Loc("热词修正", "Apply hotwords", "ホットワード修正", "핫워드 보정"), L10n.Loc("参照「词典」里的专有名词与术语,修正同音 / 近音误写。", "Fix homophones using the 词典 hotword list.", "「辞書」の固有名詞・専門用語を参照し、同音・類音の誤りを修正します。", "「사전」의 고유명사·전문 용어를 참조하여 동음·유음 오기를 보정합니다."), Toggle(S.CloudHotwords, v => { S.CloudHotwords = v; _app.ApplyCloudSettings(); })));
+            AddGroupTitle(L10n.Loc("提示词模板", "Prompt templates", "プロンプトテンプレート", "프롬프트 템플릿"));
+            BuildCloudPromptCard();
+        }
 
-        AddGroupTitle(L10n.Loc("最近请求 · 排查", "Recent requests · debug", "最近のリクエスト · デバッグ", "최근 요청 · 디버그"));
-        BuildCloudLogCard();
-        AddGroupTitle(L10n.Loc("润色处理项 · 自动拼成 Prompt", "Processing · builds the auto prompt", "整形処理 · 自動でプロンプトを生成", "정리 항목 · 자동 프롬프트 생성"));
-        AddCard(
-            Row(L10n.Loc("数字规整", "Numbers → digits", "数字の整形", "숫자 정규화"), L10n.Loc("一百二十三 → 123、三点半 → 3:30、百分之二十 → 20%。成语、计数词不动。", "Spoken numerals → digits.", "「一百二十三」→ 123、「三点半」→ 3:30、「百分之二十」→ 20%。慣用句・助数詞はそのまま。", "「一百二十三」→ 123, 「三点半」→ 3:30, 「百分之二十」→ 20%. 관용구·수량사는 유지."), Toggle(S.CloudNumbers, v => { S.CloudNumbers = v; _app.ApplyCloudSettings(); })),
-            Row(L10n.Loc("去口水词", "Remove fillers", "言いよどみ除去", "군더더기 제거"), L10n.Loc("去掉「嗯 / 呃 / 唉」和口吃重复(那个那个 → 那个)。叠词保留。", "Strip fillers + stutters.", "「えー / あの / うー」やどもりの重複(あのあの → あの)を除去。畳語は保持。", "「음 / 어 / 에」와 말더듬 반복(저기저기 → 저기)을 제거. 첩어는 유지."), Toggle(S.CloudFillers, v => { S.CloudFillers = v; _app.ApplyCloudSettings(); })),
-            Row(L10n.Loc("改口纠正", "Keep restatement", "言い直しの修正", "정정 반영"), L10n.Loc("说话中途自我更正时,只保留最终说法,删掉被改掉的前半句。", "Keep only the final wording on self-correction.", "話の途中で言い直したとき、最終的な表現だけを残し、訂正前の部分を削除します。", "말하는 도중 정정한 경우 최종 표현만 남기고 정정된 앞부분을 삭제합니다."), Toggle(S.CloudRestate, v => { S.CloudRestate = v; _app.ApplyCloudSettings(); })),
-            Row(L10n.Loc("热词修正", "Apply hotwords", "ホットワード修正", "핫워드 보정"), L10n.Loc("参照「词典」里的专有名词与术语,修正同音 / 近音误写。", "Fix homophones using the 词典 hotword list.", "「辞書」の固有名詞・専門用語を参照し、同音・類音の誤りを修正します。", "「사전」의 고유명사·전문 용어를 참조하여 동음·유음 오기를 보정합니다."), Toggle(S.CloudHotwords, v => { S.CloudHotwords = v; _app.ApplyCloudSettings(); })));
-        AddGroupTitle(L10n.Loc("提示词模板", "Prompt templates", "プロンプトテンプレート", "프롬프트 템플릿"));
-        BuildCloudPromptCard();
-
-        // local LLM — not supported on Windows: shown greyed/disabled (macOS parity, Win-disabled)
-        AddGroupTitle(L10n.Loc("本地大模型", "Local LLM", "ローカル LLM", "로컬 LLM"));
-        BuildCloudLocalCard();
+        StartModelTimer();
     }
 
     private void BuildCloudLocalCard()
     {
         var sp = new StackPanel { Margin = new Thickness(18, 12, 18, 14) };
+
+        // header: title + Beta badge + enable toggle (drives the on-demand download)
         var head = new Grid();
         head.ColumnDefinitions.Add(new ColumnDefinition());
         head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var titleRow = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-        titleRow.Children.Add(new TextBlock { Text = L10n.T("cloud.local.title"), Foreground = Br("TextMuted"), FontSize = 14, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
+        titleRow.Children.Add(new TextBlock { Text = L10n.Loc("AI 润色(本地)", "AI Polish (local)", "AI 整形(ローカル)", "AI 다듬기(로컬)"), Foreground = Br("Text"), FontSize = 14, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
         titleRow.Children.Add(new Border { Style = St("Badge"), Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, Child = new TextBlock { Text = "Beta", Foreground = Br("AccentA"), FontSize = 10, FontWeight = FontWeights.SemiBold } });
         Grid.SetColumn(titleRow, 0); head.Children.Add(titleRow);
-        var tog = new ToggleButton { Style = St("Toggle"), IsChecked = false, IsEnabled = false, HorizontalAlignment = HorizontalAlignment.Right };
+        var tog = new ToggleButton { Style = St("Toggle"), IsChecked = S.LocalRefinerEnabled, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
+        // Click = user-only (programmatic IsChecked in Refresh won't re-fire). macOS requestEnable: enabling polish
+        // confirms a switch to 说完插入 first (the only mode it runs in); SetLocalRefinerEnabled also turns cloud off
+        // (本地 ⟂ 云端). Rebuild so the cloud toggle + mode lock re-render.
+        tog.Click += (_, _) =>
+        {
+            var on = tog.IsChecked == true;
+            if (on && !ConfirmPolishNeedsPaste()) { SelectTab("cloud"); return; }   // user declined → leave off (toggle reverts)
+            _app.SetLocalRefinerEnabled(on);
+            SelectTab("cloud");
+        };
         Grid.SetColumn(tog, 1); head.Children.Add(tog);
         sp.Children.Add(head);
-        sp.Children.Add(new TextBlock { Text = L10n.T("cloud.local.desc"), Style = St("RowDesc"), Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap });
-        sp.Children.Add(new TextBlock { Text = "🚫 " + L10n.T("cloud.local.win"), Foreground = Br("Warn"), FontSize = 11.5, Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap });
+
+        sp.Children.Add(new TextBlock { Text = L10n.Loc(
+            "用本地大模型(CPM5)整理转写 —— 完全离线、隐私最佳。首次启用需下载约 656 MB 模型,之后在本机 CPU 上运行。",
+            "Clean up transcripts with a local LLM (CPM5) — fully offline, best privacy. First enable downloads a ~656 MB model, then runs on your CPU.",
+            "ローカル LLM(CPM5)で文字起こしを整形 —— 完全オフライン、プライバシー最優先。初回は約 656 MB のモデルをダウンロードし、以後は本機の CPU で動作します。",
+            "로컬 LLM(CPM5)으로 받아쓰기를 정리 —— 완전 오프라인, 프라이버시 최우선. 처음 활성화 시 약 656 MB 모델을 다운로드하고 이후 이 기기의 CPU에서 실행됩니다."),
+            Style = St("RowDesc"), Margin = new Thickness(0, 6, 0, 10), TextWrapping = TextWrapping.Wrap });
+
+        // status row: state text + progress track + contextual action button(s)
+        var statusGrid = new Grid();
+        statusGrid.ColumnDefinitions.Add(new ColumnDefinition());
+        statusGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var left = new StackPanel(); Grid.SetColumn(left, 0); statusGrid.Children.Add(left);
+        var state = new TextBlock { Style = St("RowDesc") };
+        left.Children.Add(state);
+        var track = new Border { Height = 5, CornerRadius = new CornerRadius(2.5), Background = Br("Field"), Margin = new Thickness(0, 7, 0, 0), Width = 240, HorizontalAlignment = HorizontalAlignment.Left, Visibility = Visibility.Collapsed };
+        var fill = new Border { Height = 5, CornerRadius = new CornerRadius(2.5), Background = Br("AccentA"), HorizontalAlignment = HorizontalAlignment.Left, Width = 0 };
+        track.Child = fill; left.Children.Add(track);
+        var btns = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right };
+        Grid.SetColumn(btns, 1); statusGrid.Children.Add(btns);
+        sp.Children.Add(statusGrid);
+
+        Button LocalBtn(string text, string style, Action onClick, bool danger = false)
+        {
+            var b = new Button { Style = St(style), Content = text, Margin = new Thickness(8, 0, 0, 0) };
+            if (danger) b.Foreground = Br("Danger");
+            b.Click += (_, _) => onClick();
+            return b;
+        }
+
+        string lastKey = "";
+        void Refresh()
+        {
+            double? prog = _app.LocalRefinerProgress;
+            bool present = _app.LocalRefinerModelPresent;
+            bool ready = _app.LocalRefinerReady;
+            bool failed = _app.LocalRefinerFailed;
+            bool enabled = S.LocalRefinerEnabled;
+            if (tog.IsChecked != enabled) tog.IsChecked = enabled;
+
+            if (prog is double p)
+            {
+                track.Visibility = Visibility.Visible;
+                fill.Width = Math.Max(0, (track.ActualWidth > 0 ? track.ActualWidth : 240) * p);
+                state.Text = L10n.Loc($"下载模型中 · {(int)(p * 100)}%", $"Downloading model · {(int)(p * 100)}%", $"モデルをダウンロード中 · {(int)(p * 100)}%", $"모델 다운로드 중 · {(int)(p * 100)}%");
+                state.Foreground = Br("AccentB");
+            }
+            else
+            {
+                track.Visibility = Visibility.Collapsed;
+                if (present && ready) { state.Text = L10n.Loc("已就绪 · 在本机离线运行", "Ready · runs offline on this device", "準備完了 · この端末でオフライン動作", "준비됨 · 이 기기에서 오프라인 실행"); state.Foreground = Br("Success"); }
+                else if (present && enabled) { state.Text = L10n.Loc("加载模型中…", "Loading model…", "モデルを読み込み中…", "모델 로드 중…"); state.Foreground = Br("AccentB"); }
+                else if (present) { state.Text = L10n.Loc("已下载 · 未启用", "Downloaded · not enabled", "ダウンロード済み · 未使用", "다운로드됨 · 미사용"); state.Foreground = Br("TextMuted"); }
+                else if (failed) { state.Text = L10n.Loc("下载失败 · 请重试", "Download failed · retry", "ダウンロード失敗 · 再試行", "다운로드 실패 · 재시도"); state.Foreground = Br("Danger"); }
+                else { state.Text = L10n.Loc("未下载 · 约 656 MB", "Not downloaded · ~656 MB", "未ダウンロード · 約 656 MB", "다운로드 안 됨 · 약 656 MB"); state.Foreground = Br("TextMuted"); }
+            }
+
+            string key = prog is double pp ? $"dl:{(int)(pp * 100)}" : $"{present}:{ready}:{failed}:{enabled}";
+            if (key != lastKey)
+            {
+                lastKey = key;
+                btns.Children.Clear();
+                if (prog is not null)
+                    btns.Children.Add(LocalBtn(L10n.T("cancel"), "Ghost", () => _app.CancelLocalRefinerDownload()));
+                else if (!present && failed)
+                    btns.Children.Add(LocalBtn(L10n.T("download"), "Solid", () => _app.StartLocalRefinerDownload()));
+                else if (!present)
+                    btns.Children.Add(LocalBtn(L10n.T("download"), "Solid", () => _app.StartLocalRefinerDownload()));
+                else // present
+                    btns.Children.Add(LocalBtn(L10n.T("delete"), "Ghost", () => _app.DeleteLocalRefiner(), danger: true));
+            }
+        }
+        Refresh();
+        _modelRowRefreshers.Add(Refresh);
+
+        sp.Children.Add(new TextBlock { Text = L10n.Loc(
+            "本地与云端润色二选一,开启本地会自动关闭云端。",
+            "Local and cloud polish are mutually exclusive — turning this on switches cloud off.",
+            "ローカルとクラウド整形は二者択一 —— 有効にするとクラウドは自動でオフになります。",
+            "로컬과 클라우드 다듬기는 택일 —— 켜면 클라우드가 자동으로 꺼집니다."),
+            Foreground = Br("TextMuted"), FontSize = 11, Margin = new Thickness(0, 12, 0, 0), TextWrapping = TextWrapping.Wrap });
+
+        // 模型来源 row (macOS refinerSourceLine): label + clickable link to the author's upstream repo on ModelScope
+        // (the model isn't on HuggingFace) — NOT the download CDN.
+        var srcRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 0) };
+        srcRow.Children.Add(new TextBlock { Text = L10n.Loc("模型来源", "Model source", "モデル提供元", "모델 출처") + "：", Foreground = Br("TextMuted"), FontSize = 11.5, VerticalAlignment = VerticalAlignment.Center });
+        var srcLink = Link("CPM5-Refiner · MuyuanJ", "https://modelscope.cn/models/MuyuanJ/CPM5_refiner_v1");
+        srcLink.FontSize = 11.5; srcLink.VerticalAlignment = VerticalAlignment.Center;
+        srcRow.Children.Add(srcLink);
+        sp.Children.Add(srcRow);
+        sp.Children.Add(new TextBlock { Text = L10n.Loc("量化 GGUF · 首次联网下载", "Quantized GGUF · downloaded on first use", "量子化 GGUF · 初回オンラインDL", "양자화 GGUF · 첫 사용 시 다운로드"),
+            Foreground = Br("TextMuted"), FontSize = 11, Opacity = 0.7, Margin = new Thickness(0, 4, 0, 0) });
+
         Content.Children.Add(new Border { Style = St("Card"), Child = sp });
     }
 
@@ -664,7 +793,14 @@ public partial class SettingsWindow
         titleRow.Children.Add(new TextBlock { Text = L10n.Loc("调用云端大模型", "Use a cloud LLM", "クラウド LLM を利用", "클라우드 LLM 사용"), Foreground = Br("Text"), FontSize = 15, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
         titleRow.Children.Add(new Border { Style = St("Badge"), Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, Child = new TextBlock { Text = L10n.T("badge.recommended"), Foreground = Br("AccentA"), FontSize = 10, FontWeight = FontWeights.SemiBold } });
         Grid.SetColumn(titleRow, 0); head.Children.Add(titleRow);
-        var enToggle = Toggle(S.CloudEnabled, v => { S.CloudEnabled = v; if (v && S.Mode != DictationMode.Paste) _app.SetMode(DictationMode.Paste); _app.ApplyCloudSettings(); SelectTab("cloud"); });
+        var enToggle = Toggle(S.CloudEnabled, v =>
+        {
+            if (v && !ConfirmPolishNeedsPaste()) { SelectTab("cloud"); return; }   // macOS requestEnable: confirm 说完插入 first
+            S.CloudEnabled = v;
+            if (v) S.LocalRefinerEnabled = false;   // 云端 ⟂ 本地
+            _app.ApplyCloudSettings();
+            SelectTab("cloud");
+        });
         Grid.SetColumn(enToggle, 1); head.Children.Add(enToggle);
         sp.Children.Add(head);
         sp.Children.Add(new TextBlock { Text = L10n.Loc("润色质量更高、速度更快,需联网并消耗服务商额度。API Key 仅加密存储在本机,不会上传。", "Higher quality + faster; needs the internet and uses your provider quota. The API key is encrypted on this machine only, never uploaded.", "整形品質が高く高速ですが、ネット接続とプロバイダーの利用枠を消費します。API キーはこの端末に暗号化して保存され、送信されません。", "정리 품질이 높고 빠르지만 인터넷 연결과 제공업체 사용량이 필요합니다. API 키는 이 기기에만 암호화 저장되며 업로드되지 않습니다."), Style = St("RowDesc"), Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap });

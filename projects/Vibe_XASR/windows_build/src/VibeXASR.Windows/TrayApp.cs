@@ -791,21 +791,123 @@ public sealed class TrayApp : IDisposable, IAppController
         });
     }
 
-    /// <summary>(Re)configure the AI refiner from settings: cloud backend when enabled + key/url/model
-    /// present, else off. Called on launch and whenever the 润色 settings change. No engine rebuild.</summary>
+    /// <summary>(Re)configure the AI refiner from settings. Cloud-priority backend selection (matches macOS
+    /// refreshRefiner: 云端优先,否则本地): CLOUD when enabled + key/url/model present → cloud backend; else LOCAL
+    /// (本地大模型) when enabled + the GGUF is downloaded → CPM5 llama.cpp backend; else off. In practice the two
+    /// toggles are MUTUALLY EXCLUSIVE (see <see cref="SetLocalRefinerEnabled"/> + the cloud toggle), so only one is
+    /// ever on. The local backend loads async — until ready Refiner.Active is false (safe passthrough), matching the
+    /// macOS "not ready → return input" contract.</summary>
     private void ConfigureRefiner()
     {
         CloudRequestLog.Shared.Enabled = _settings.CloudLogEnabled;
+
+        // Invariant (macOS forcePasteForPolish): AI 润色 (cloud OR local) only runs in 说完插入. If polish is enabled
+        // but the saved mode is 逐字 / 持续候机 (legacy or hand-edited state), lock it back to Paste.
+        if ((_settings.CloudEnabled || _settings.LocalRefinerEnabled) && _settings.Mode != DictationMode.Paste)
+        {
+            _settings.Mode = DictationMode.Paste;
+            _settings.Save();
+            if (_engine is not null) _engine.Mode = DictationMode.Paste;
+        }
+
         if (_settings.CloudEnabled && !string.IsNullOrWhiteSpace(_settings.CloudApiKey)
             && !string.IsNullOrWhiteSpace(_settings.CloudBaseURL) && !string.IsNullOrWhiteSpace(_settings.CloudModel))
         {
+            DisposeLocalRefiner();                             // free the local model's RAM when cloud is the backend
             Refiner.Backend = new CloudRefiner(_settings.CloudBaseURL, _settings.CloudModel, _settings.CloudApiKey,
                 _settings.CloudTemperature, _settings.CloudMaxTokens, _settings.CloudProvider);
             Refiner.TimeoutSeconds = 25;
             Refiner.SystemProvider = BuildCloudSystem;
             Diag.Log($"refiner: cloud ready provider={_settings.CloudProvider} model={_settings.CloudModel}");
+            return;
         }
-        else Refiner.Backend = null;
+
+        if (_settings.LocalRefinerEnabled && RefinerModel.Available())
+        {
+            if (_localRefiner is null) { _localRefiner = new LocalRefiner(RefinerModel.ResolvedPath); _ = _localRefiner.LoadAsync(); }
+            Refiner.Backend = _localRefiner;
+            Refiner.TimeoutSeconds = 30;                       // CPU inference is slower than cloud; generous timeout
+            Refiner.SystemProvider = () => Refiner.CpmSystemPrompt;   // CPM5 official fixed prompt (never the cloud builder)
+            Diag.Log($"refiner: local ready={_localRefiner.IsReady} model={RefinerModel.FileName}");
+            return;
+        }
+
+        DisposeLocalRefiner();
+        Refiner.Backend = null;
+    }
+
+    /// <summary>Unload the local CPM5 backend + free its ~1 GB RAM (when cloud / none becomes the active backend).</summary>
+    private void DisposeLocalRefiner()
+    {
+        if (_localRefiner is null) return;
+        if (ReferenceEquals(Refiner.Backend, _localRefiner)) Refiner.Backend = null;
+        _localRefiner.Dispose();
+        _localRefiner = null;
+    }
+
+    // ============================ AI 润色 · 本地大模型 (local LLM) ============================
+    // Lifecycle of the local CPM5 backend + its on-demand GGUF download. The model file (~656 MB) lives in
+    // %APPDATA%\VibeXASR\models\refiner; ConfigureRefiner() picks it up once downloaded.
+
+    private LocalRefiner? _localRefiner;
+    private CancellationTokenSource? _localDlCts;
+    private volatile bool _localDlFailed;
+    private double? _localDlProgress;   // null = not downloading; 0..1 = progress (read by the settings refresh tick)
+
+    /// <summary>Download progress of the refiner GGUF: null when idle, 0..1 while downloading. (IAppController)</summary>
+    public double? LocalRefinerProgress => _localDlProgress;
+    /// <summary>Whether the GGUF is on disk (downloaded or bundled). (IAppController)</summary>
+    public bool LocalRefinerModelPresent => RefinerModel.Available();
+    /// <summary>Whether the local backend is loaded + ready to polish. (IAppController)</summary>
+    public bool LocalRefinerReady => _localRefiner?.IsReady == true;
+    /// <summary>Whether the last download attempt OR the model load failed. (IAppController)</summary>
+    public bool LocalRefinerFailed => _localDlFailed || _localRefiner?.LoadFailed == true;
+
+    /// <summary>Toggle 本地大模型 on/off. Mutually exclusive with cloud (本地 ⟂ 云端) — enabling local disables cloud,
+    /// matching macOS applyRefiner. Turning on with no model yet kicks the download. (IAppController)</summary>
+    public void SetLocalRefinerEnabled(bool on)
+    {
+        _settings.LocalRefinerEnabled = on;
+        if (on) _settings.CloudEnabled = false;   // 本地 ⟂ 云端: 开本地 → 关云端
+        _settings.Save();
+        if (on && !RefinerModel.Available()) StartLocalRefinerDownload();
+        ConfigureRefiner();
+    }
+
+    /// <summary>Start downloading the refiner GGUF (no-op if present or already downloading). On success the model
+    /// is wired in via ConfigureRefiner(); on failure LocalRefinerFailed flips and the refiner stays a safe no-op. (IAppController)</summary>
+    public void StartLocalRefinerDownload()
+    {
+        if (RefinerModel.Available() || _localDlProgress is not null) return;
+        _localDlFailed = false;
+        _localDlProgress = 0;
+        _localDlCts = new CancellationTokenSource();
+        var ct = _localDlCts.Token;
+        var prog = new Progress<DownloadProgress>(p => _localDlProgress = p.Fraction ?? _localDlProgress);
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await RefinerModel.DownloadAsync(prog, ct).ConfigureAwait(false);
+                _localDlProgress = null;
+                RunOnUi(() => { if (_settings.LocalRefinerEnabled) ConfigureRefiner(); RefreshOpenWindows(); });
+            }
+            catch (OperationCanceledException) { _localDlProgress = null; }
+            catch (Exception ex) { _localDlFailed = true; _localDlProgress = null; Diag.Log("refiner download failed: " + ex.Message); }
+        });
+    }
+
+    /// <summary>Cancel an in-flight GGUF download. (IAppController)</summary>
+    public void CancelLocalRefinerDownload() { try { _localDlCts?.Cancel(); } catch { } _localDlProgress = null; }
+
+    /// <summary>Delete the downloaded GGUF (~656 MB) and unload the local backend. (IAppController)</summary>
+    public void DeleteLocalRefiner()
+    {
+        CancelLocalRefinerDownload();
+        DisposeLocalRefiner();
+        _localDlFailed = false;
+        RefinerModel.Delete();
+        ConfigureRefiner();
     }
 
     /// <summary>Cloud system prompt from the 4 toggles, with {{hotwords}}/{{date}} filled; {{transcript}}

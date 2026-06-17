@@ -236,6 +236,11 @@ public sealed class Settings
     /// <summary>Record recent requests (for troubleshooting). On by default.</summary>
     public bool CloudLogEnabled { get; set; } = true;
 
+    /// <summary>AI 润色(本地大模型): use the local CPM5 llama.cpp backend instead of the cloud. When on AND the
+    /// GGUF is downloaded + loaded, it becomes the active refiner (takes precedence over cloud). Off by default
+    /// — the model is a ~656 MB on-demand download. macOS uses Metal; Windows runs it CPU-only.</summary>
+    public bool LocalRefinerEnabled { get; set; } = false;
+
     /// <summary>API key — NEVER written to settings.json; stored DPAPI-encrypted (per-user) via SecretStore,
     /// mirroring macOS's Keychain handling ("encrypted on this machine only, never uploaded").</summary>
     [JsonIgnore]

@@ -33,6 +33,10 @@
             <Directory Id="TierFolder" Name="chunk-960ms-model" />
             <Directory Id="FireRedFolder" Name="firered" />
           </Directory>
+          <!-- llama.cpp natives for 本地大模型 (local AI-polish); LLamaSharp loads from runtimes\win-x64\native\<avx>\. -->
+          <Directory Id="RuntimesFolder" Name="runtimes">
+            <Directory Id="RuntimesRidFolder" Name="win-x64" />
+          </Directory>
         </Directory>
       </Directory>
     </StandardDirectory>
@@ -82,6 +86,13 @@
       </Component>
     </ComponentGroup>
 
+    <!-- llama.cpp native DLLs (local AI-polish). Harvested with <Files> — recreates the
+         native\<avx>\ tree (4 AVX variants × {llama,ggml,ggml-base,ggml-cpu,mtmd}.dll) under
+         runtimes\win-x64\. -->
+    <ComponentGroup Id="LlamaNatives" Directory="RuntimesRidFolder">
+      <Files Include="payload\runtimes\win-x64\**" />
+    </ComponentGroup>
+
     <!-- Start-Menu shortcut (HKCU keypath, correct for a per-user install). -->
     <Component Id="cmp_shortcut" Directory="ProgramMenuFolder" Guid="*">
       <Shortcut Id="StartMenuShortcut" Name="Vibe XASR"
@@ -105,6 +116,7 @@
 
     <Feature Id="Main" Title="Vibe XASR" Level="1">
       <ComponentGroupRef Id="AppFiles" />
+      <ComponentGroupRef Id="LlamaNatives" />
       <ComponentRef Id="cmp_shortcut" />
       <ComponentRef Id="cmp_desktop" />
     </Feature>

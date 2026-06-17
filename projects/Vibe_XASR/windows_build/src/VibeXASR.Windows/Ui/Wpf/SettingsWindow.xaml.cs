@@ -183,22 +183,25 @@ public partial class SettingsWindow : Window
             (DictationMode.Type,  L10n.T("dict.mode.type.title"),  L10n.T("dict.mode.type.desc"),  L10n.T("dict.mode.type.warn")),
             (DictationMode.OnCall, L10n.T("dict.mode.oncall.title"), L10n.T("dict.mode.oncall.desc"), null),
         };
+        bool polishOn = PolishOn;   // cloud OR local refiner — both lock dictation to 说完插入
         foreach (var (m, t, d, warn) in modes)
         {
-            var card = ModeCard(t, d, S.Mode == m, m == DictationMode.Paste && S.CloudEnabled, warn);
+            var card = ModeCard(t, d, S.Mode == m, m == DictationMode.Paste && polishOn, warn);
             var cm = m;
             card.MouseLeftButtonUp += (_, _) =>
             {
-                if (S.CloudEnabled && cm != DictationMode.Paste)
+                if (polishOn && cm != DictationMode.Paste)
                 {
                     if (MessageBox.Show(L10n.T("dict.mode.conflict.msg"), L10n.T("dict.mode.conflict.title"), MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
-                    S.CloudEnabled = false; _app.ApplyCloudSettings();
+                    if (S.CloudEnabled) S.CloudEnabled = false;            // 切换非「说完插入」→ 关闭 AI 润色(云端 + 本地)
+                    if (S.LocalRefinerEnabled) S.LocalRefinerEnabled = false;
+                    _app.ApplyCloudSettings();                            // persist both + reconfigure (disposes the local backend)
                 }
                 _app.SetMode(cm); SelectTab("general");
             };
             modeCard.Children.Add(card);
         }
-        if (S.CloudEnabled)
+        if (polishOn)
             modeCard.Children.Insert(1, new TextBlock { Text = L10n.T("dict.mode.lockedByPolish"), Foreground = Br("Warn"), FontSize = 11.5, Margin = new Thickness(2, 0, 0, 8), TextWrapping = TextWrapping.Wrap });
         return new Border { Style = St("Card"), Child = modeCard };
     }

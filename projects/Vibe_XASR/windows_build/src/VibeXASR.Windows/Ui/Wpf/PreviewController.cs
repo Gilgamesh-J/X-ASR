@@ -56,6 +56,16 @@ internal sealed class PreviewController : IAppController
 
     public void ApplyCloudSettings() { }
 
+    // AI 润色 · 本地大模型 — preview stubs (no real download / inference in the dev preview controller).
+    public void SetLocalRefinerEnabled(bool on) => Settings.LocalRefinerEnabled = on;
+    public void StartLocalRefinerDownload() { }
+    public void CancelLocalRefinerDownload() { }
+    public void DeleteLocalRefiner() { }
+    public double? LocalRefinerProgress => null;
+    public bool LocalRefinerModelPresent => false;
+    public bool LocalRefinerReady => false;
+    public bool LocalRefinerFailed => false;
+
     public bool MicGranted() => true;
     public void OpenMicPrivacy() { }
 

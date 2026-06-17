@@ -67,6 +67,16 @@ public interface IAppController
     // ----- AI 润色 (cloud LLM refinement) -----
     void ApplyCloudSettings();   // persist 润色 settings + reconfigure the refiner backend
 
+    // ----- AI 润色 · 本地大模型 (local LLM) — on-demand ~656 MB GGUF + CPU llama.cpp backend -----
+    void SetLocalRefinerEnabled(bool on);     // toggle local polish (downloads the model if missing)
+    void StartLocalRefinerDownload();         // begin / retry the GGUF download
+    void CancelLocalRefinerDownload();        // cancel an in-flight download
+    void DeleteLocalRefiner();                // delete the GGUF + unload the backend
+    double? LocalRefinerProgress { get; }     // null = idle; 0..1 = downloading
+    bool LocalRefinerModelPresent { get; }    // GGUF on disk
+    bool LocalRefinerReady { get; }           // backend loaded + ready
+    bool LocalRefinerFailed { get; }          // download or load failed
+
     // ----- permissions (Windows: microphone privacy) -----
     bool MicGranted();
     void OpenMicPrivacy();

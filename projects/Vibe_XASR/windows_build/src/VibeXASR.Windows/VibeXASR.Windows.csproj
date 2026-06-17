@@ -33,10 +33,10 @@
     <!-- Windows tracks the macOS base version (1.4.0) + a Windows patch suffix (.1), labelled
          "-beta". AssemblyVersion/FileVersion stay numeric (1.4.0.1) for WinSparkle + MSI version
          comparison; InformationalVersion carries the "-beta" shown on the About page. -->
-    <Version>2.0.0.3-beta</Version>
-    <FileVersion>2.0.0.3</FileVersion>
-    <AssemblyVersion>2.0.0.3</AssemblyVersion>
-    <InformationalVersion>2.0.0.3-beta</InformationalVersion>
+    <Version>2.0.0.4-beta</Version>
+    <FileVersion>2.0.0.4</FileVersion>
+    <AssemblyVersion>2.0.0.4</AssemblyVersion>
+    <InformationalVersion>2.0.0.4-beta</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 
@@ -50,7 +50,32 @@
 
     <!-- WASAPI mic capture + resampling helpers. -->
     <PackageReference Include="NAudio" Version="2.2.1" />
+
+    <!-- AI 润色(本地大模型 / local LLM): llama.cpp via LLamaSharp + the CPU backend (universal,
+         no GPU/driver requirement). Loads the CPM5 refiner GGUF (~656 MB, downloaded on demand to
+         %APPDATA%\VibeXASR\models\refiner — NOT bundled in the MSI). The backend package ships the
+         native llama/ggml DLLs under runtimes/win-x64/native/; PublishSingleFile extracts them at
+         runtime (IncludeNativeLibrariesForSelfExtract already set). macOS uses Metal; CPU is the
+         portable Windows equivalent (1B q4_k_m on a short utterance ≈ 1–3 s, within the safe-fallback timeout). -->
+    <PackageReference Include="LLamaSharp" Version="0.27.0" />
+    <PackageReference Include="LLamaSharp.Backend.Cpu" Version="0.27.0" />
   </ItemGroup>
+
+  <!-- Keep the LLamaSharp native DLLs (llama/ggml*/mtmd, copied by the backend's props under
+       runtimes\<rid>\native\<avx>\) LOOSE beside the single-file exe instead of embedding + self-extracting
+       them. LLamaSharp's native loader searches AppContext.BaseDirectory (the .exe dir for a single-file app)
+       for that runtimes\…\native tree, but does NOT look in the self-extract temp dir — so embedded copies are
+       never found. ExcludeFromSingleFile leaves the tree on disk next to the exe where the loader expects it
+       (and shrinks the exe). Matched by filename (llama/ggml*/mtmd) — unambiguously LLamaSharp; sherpa-onnx
+       ships onnxruntime/sherpa-onnx natives, which keep self-extracting as before. -->
+  <Target Name="_LlamaNativesLooseInSingleFile" BeforeTargets="_ComputeFilesToBundle">
+    <ItemGroup>
+      <ResolvedFileToPublish Condition="'%(Filename)' == 'llama' or '%(Filename)' == 'ggml' or $([System.String]::new('%(Filename)').StartsWith('ggml-')) or '%(Filename)' == 'mtmd'">
+        <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+    <Message Importance="high" Text="[VibeXASR] llama natives kept loose (excluded from single-file bundle)." />
+  </Target>
 
   <!-- WinSparkle (auto-update) native DLL, x64. Copied beside the exe in publish + install dir;
        loaded via a DllImportResolver from AppContext.BaseDirectory. MIT (third_party/winsparkle/COPYING). -->

@@ -130,7 +130,7 @@ public partial class TrayPopupWindow : Window
         polishLabel.Children.Add(new TextBlock { Text = "✨ " + L10n.T("tab.cloud"), Foreground = Br("Text"), FontSize = 13, VerticalAlignment = VerticalAlignment.Center });
         polishGrid.Children.Add(polishLabel);
         var polish = new System.Windows.Controls.Primitives.ToggleButton { Style = St("Toggle"), IsChecked = S.CloudEnabled, HorizontalAlignment = HorizontalAlignment.Right };
-        polish.Checked += (_, _) => { S.CloudEnabled = true; _app.SetMode(DictationMode.Paste); _app.ApplyCloudSettings(); };
+        polish.Checked += (_, _) => { S.CloudEnabled = true; S.LocalRefinerEnabled = false; /* 云端 ⟂ 本地 */ _app.SetMode(DictationMode.Paste); _app.ApplyCloudSettings(); };
         polish.Unchecked += (_, _) => { S.CloudEnabled = false; _app.ApplyCloudSettings(); };
         Grid.SetColumn(polish, 1); polishGrid.Children.Add(polish);
         Root.Children.Add(polishGrid);

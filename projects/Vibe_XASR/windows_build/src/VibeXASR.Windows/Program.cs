@@ -18,6 +18,50 @@ internal static class Program
         // csproj <Application*> properties (HighDpiMode = PerMonitorV2).
         ApplicationConfiguration.Initialize();
 
+        // Dev smoke test (headless): exercise the LOCAL AI-polish path end-to-end — load the CPM5 GGUF via
+        // LLamaSharp (proves the loose native DLLs load), run one greedy inference + the full facade
+        // (strip + guardrails). Result is written to %TEMP%\vx_refiner_test.txt. Set VIBEXASR_REFINER_TEST
+        // to override the input text. No UI; exits when done.
+        if (Environment.GetEnvironmentVariable("VIBEXASR_REFINER_TEST") is { } refinerTest)
+        {
+            var outFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "vx_refiner_test.txt");
+            var input = string.IsNullOrWhiteSpace(refinerTest) ? "嗯就是那个我们明天上午十点开会然后呃讨论一下下个季度的方案" : refinerTest;
+            var sb = new System.Text.StringBuilder();
+            try
+            {
+                sb.AppendLine($"model present: {Refine.RefinerModel.Available()}  path: {Refine.RefinerModel.ResolvedPath}");
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                var lr = new Refine.LocalRefiner(Refine.RefinerModel.ResolvedPath);
+                lr.LoadAsync().GetAwaiter().GetResult();
+                sb.AppendLine($"load: ready={lr.IsReady} failed={lr.LoadFailed} in {sw.ElapsedMilliseconds} ms");
+                if (lr.IsReady)
+                {
+                    sw.Restart();
+                    var raw = lr.RefineAsync(Refine.Refiner.CpmSystemPrompt, input, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+                    sb.AppendLine($"infer in {sw.ElapsedMilliseconds} ms");
+                    sb.AppendLine($"INPUT : {input}");
+                    sb.AppendLine($"RAW   : {raw}");
+                    Refine.Refiner.Backend = lr;
+                    Refine.Refiner.SystemProvider = () => Refine.Refiner.CpmSystemPrompt;
+                    var polished = Refine.Refiner.PolishAsync(input).GetAwaiter().GetResult();
+                    sb.AppendLine($"FINAL : {polished}");
+                }
+            }
+            catch (Exception ex) { sb.AppendLine("EXCEPTION: " + ex); }
+            try { System.IO.File.WriteAllText(outFile, sb.ToString()); } catch { }
+            return;
+        }
+
+        // Dev hook: run the GGUF pre-tokenizer patcher in-place on a given file (to verify byte-correctness
+        // against tools/patch_gguf_pre.py). VIBEXASR_GGUF_PATCH=<path>. Writes result to %TEMP%\vx_gguf_patch.txt.
+        if (Environment.GetEnvironmentVariable("VIBEXASR_GGUF_PATCH") is { } gpPath && !string.IsNullOrWhiteSpace(gpPath))
+        {
+            var ok = Refine.GgufPatcher.EnsureWindowsCompatible(gpPath);
+            try { System.IO.File.WriteAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "vx_gguf_patch.txt"),
+                $"ok={ok} size={new System.IO.FileInfo(gpPath).Length}"); } catch { }
+            return;
+        }
+
         // UI-redesign preview hook (dev only): show the WPF prototype window, nothing else.
         if (Environment.GetEnvironmentVariable("VIBEXASR_OPEN") == "wpf")
         {

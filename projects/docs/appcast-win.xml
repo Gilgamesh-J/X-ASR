@@ -12,32 +12,29 @@
     <description>Vibe XASR Windows auto-update feed</description>
     <language>zh</language>
     <item>
-      <title>Vibe XASR 2.0.0.3-beta</title>
-      <pubDate>Mon, 08 Jun 2026 21:00:00 +0800</pubDate>
+      <title>Vibe XASR 2.0.0.4-beta</title>
+      <pubDate>Thu, 18 Jun 2026 21:00:00 +0800</pubDate>
       <link>https://github.com/Gilgamesh-J/X-ASR/releases/tag/vibe-v2.0</link>
       <description><![CDATA[
-        <h3>Vibe XASR 2.0.0.3-beta (Windows)</h3>
+        <h3>Vibe XASR 2.0.0.4-beta (Windows)</h3>
         <ul>
-          <li>组合快捷键:触发键支持「修饰键 + 字母」及多修饰键组合(Ctrl/Alt/Shift/Win);触发方式新增
-              「按住说话」智能模式(长按即说、轻点锁定免持)与「单击切换」。</li>
-          <li>提示词工作室:独立窗口管理模板,可给每个模板单独绑定快捷键(带冲突检测);落字后「换模板重润色」
-              弹出模板菜单,选哪个就用原文重跑哪个。</li>
-          <li>输出转繁体 + 繁體中文界面;云端润色默认提示词随界面语言(中 / 英 / 日 / 韩);界面文案全面本地化。</li>
-          <li>记录页重做:内嵌到「设置 · 记录」,支持搜索、碎句聚合、日历热力图、多选合并、加标签、撤销、键盘操作。</li>
-          <li>其它:设置标签顺序对齐 macOS;悬浮条停留时长可调 + 悬停保持;词典 / 口令 导入导出;托盘可切换润色模板、
-              静音麦克风;切换界面语言时托盘菜单与已开窗口标题实时刷新。</li>
-          <li>修复:全局热键忽略程序自身注入的按键(长按说话不再中途打断);悬浮条在菜单 / 听写间切换时尺寸恢复正常。</li>
+          <li><b>本地大模型润色(完全离线)</b>:全新本地 CPM5 大模型润色 —— 去口癖、数字规整(ITN)、补标点、改口纠正,
+              全程在本机 CPU 上运行,不联网、不上传。首次开启自动下载约 656 MB 模型;在「设置 · AI 润色 · 本地大模型」
+              可开启 / 删除,模型来源链接到 ModelScope(CPM5_refiner_v1)。</li>
+          <li>本地与云端润色<b>二选一</b>(互斥):开启其一会自动关闭另一个。</li>
+          <li>AI 润色(本地 / 云端)<b>仅在「说完插入」模式下可用</b>:开启时听写模式锁为「说完插入」,
+              切到「逐字插入 / 持续候机」会先征询关闭润色。</li>
         </ul>
         <p>macOS is the primary development branch; the Windows build is compiled in sync and not yet fully tested (preview). Feedback welcome.<br/>
         macOS 为主开发分支,Windows 为同步编译,尚未充分测试(预览版)。欢迎反馈。</p>
       ]]></description>
       <enclosure
-        url="https://models.speech.wiki/app/VibeXASR-2.0.0.3-windows-x64.msi"
+        url="https://models.speech.wiki/app/VibeXASR-2.0.0.4-windows-x64.msi"
         sparkle:os="windows"
-        sparkle:version="2.0.0.3"
-        sparkle:shortVersionString="2.0.0.3-beta"
-        sparkle:edSignature="6h+XWR46XwwuLprDDthPUN/Dw1cjNib2tctwBgw1/Xnvq7GjZL4nFe8LdXbWAvHaH3qt4bQAd9O17I8/SZ5hAQ=="
-        length="211312640"
+        sparkle:version="2.0.0.4"
+        sparkle:shortVersionString="2.0.0.4-beta"
+        sparkle:edSignature="vmj/R3k4c/oxYDV0Xr7u8jwl1prIokougdyVdvSk2YUPw+j7aAP3ex36ntEjG4DG+wt9AuT/La3UT8n5PpYrCg=="
+        length="217477120"
         type="application/octet-stream" />
     </item>
   </channel>

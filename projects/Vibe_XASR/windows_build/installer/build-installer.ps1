@@ -42,6 +42,14 @@ New-Item -ItemType Directory -Force $tier | Out-Null
 Copy-Item "$repo\dist\$Rid\VibeXASR.exe" (Join-Path $payload "VibeXASR.exe") -Force
 # WinSparkle auto-update DLL - installs beside the exe; loaded from the app dir at runtime.
 Copy-Item "$repo\third_party\winsparkle\WinSparkle.dll" (Join-Path $payload "WinSparkle.dll") -Force
+# llama.cpp native DLLs for 本地大模型 (local AI-polish). The single-file publish keeps the
+# runtimes\win-x64\native\<avx>\ tree LOOSE beside the exe (csproj _LlamaNativesLooseInSingleFile target);
+# LLamaSharp loads the right AVX variant from the app dir. Bundle the whole tree (4 variants, ~17 MB).
+$rtSrc = Join-Path "$repo\dist\$Rid" "runtimes"
+$rtDst = Join-Path $payload "runtimes"
+if (-not (Test-Path (Join-Path $rtSrc "win-x64\native\avx2\llama.dll"))) { throw "llama natives missing in publish output ($rtSrc) — check the csproj _LlamaNativesLooseInSingleFile target." }
+if (Test-Path $rtDst) { Remove-Item $rtDst -Recurse -Force }
+Copy-Item $rtSrc $rtDst -Recurse -Force
 # FireRedVAD shim (default VAD) + its model (onnx + CMVN), sourced from macos_build (committed there).
 Copy-Item "$repo\third_party\firered\firered_vad.dll" (Join-Path $payload "firered_vad.dll") -Force
 $frm = Join-Path $payload "models\firered"
