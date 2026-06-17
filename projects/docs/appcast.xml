@@ -10,7 +10,7 @@
       <description><![CDATA[
 <h2>🔧 本次更新</h2>
 <ul>
-  <li><b>本地 AI 润色换新模型</b>:升级到全新 <b>CPM5-Refiner</b>(MiniCPM-1B)——去口癖、改口纠正、数字规整更准更稳;首次开启 AI 润色会自动下载新模型。</li>
+  <li><b>本地润色大模型(完全本地化)</b>:全新本地大模型润色 —— <b>顺滑去口癖</b>、<b>数字规整(ITN)</b>、<b>智能分段</b>、<b>改口纠正</b>,全程在本机运行、不联网不上传。首次开启 AI 润色会自动下载模型。</li>
 </ul>
 <hr>
 
@@ -48,7 +48,7 @@
 <hr>
 <h2>🔧 This build</h2>
 <ul>
-  <li><b>Local AI Polish — new model</b>: upgraded to the new <b>CPM5-Refiner</b> (MiniCPM-1B) for better filler removal, self-correction, and number normalization. The model auto-downloads the first time you enable AI Polish.</li>
+  <li><b>On-device AI Polish model (fully local)</b>: a new local large model — smooths fillers, normalizes numbers (ITN), segments long speech, and applies self-corrections — running entirely on your Mac, nothing uploaded. The model auto-downloads the first time you enable AI Polish.</li>
 </ul>
 <hr>
 
@@ -67,13 +67,13 @@
 <p>macOS is the primary development branch; the Windows build is compiled in sync and not yet fully tested (preview). Feedback welcome.<br>
 macOS 为主开发分支,Windows 为同步编译,尚未充分测试(预览版)。欢迎反馈。</p>
 ]]></description>
-      <sparkle:releaseNotesLink>https://models.speech.wiki/app/notes-207.html</sparkle:releaseNotesLink>
-      <pubDate>Tue, 16 Jun 2026 20:48:32 +0800</pubDate>
-      <sparkle:version>207</sparkle:version>
+      <sparkle:releaseNotesLink>https://models.speech.wiki/app/notes-208.html</sparkle:releaseNotesLink>
+      <pubDate>Wed, 17 Jun 2026 22:47:19 +0800</pubDate>
+      <sparkle:version>208</sparkle:version>
       <sparkle:shortVersionString>2.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
       <link>https://github.com/Gilgamesh-J/X-ASR/releases/tag/vibe-v2.0</link>
-      <enclosure url="https://models.speech.wiki/app/VibeXASR-2.0.zip?b=207" type="application/octet-stream" sparkle:edSignature="GEdSZwGtOqu3+t96bWYAAd7fPyhvgjiVBpC/POjfTE0eetkAhLpS0NY2I1SQx+fAxZM53iBcaGq8EBe2aVe5Aw==" length="166089849" />
+      <enclosure url="https://models.speech.wiki/app/VibeXASR-2.0.zip?b=208" type="application/octet-stream" sparkle:edSignature="oeBHQbzAwjd0qHFOuu+R1CowIIYQA7nnRV5LLgKnE9VUuSD0HhS1AWncJphK+y3aNYt6k79x5QdCOlOBpTA8Bg==" length="166083880" />
     </item>
   </channel>
 </rss>

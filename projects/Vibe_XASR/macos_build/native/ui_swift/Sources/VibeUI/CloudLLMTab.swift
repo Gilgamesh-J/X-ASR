@@ -138,6 +138,9 @@ struct LLMTab: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            Text(l10n.t("llm.sec.local")).sectionLabel(scheme)
+            localCard
+
             Text(l10n.t("llm.sec.cloud")).sectionLabel(scheme)
             cloudCard
 
@@ -149,9 +152,6 @@ struct LLMTab: View {
                 Text(l10n.t("llm.sec.templates")).sectionLabel(scheme)
                 PromptTemplateStudioView(s: s, l10n: l10n, embedded: true)
             }
-
-            Text(l10n.t("llm.sec.local")).sectionLabel(scheme)
-            localCard
         }
         .onChange(of: s.cloud) { _, newVal in   // 外部(如重置)同步进来
             if newVal != cfg {
@@ -291,14 +291,8 @@ struct LLMTab: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 8) {
-                        Text(l10n.t("llm.cloud.title")).font(Vibe.Fonts.ui(15.5, weight: .semibold))
-                            .foregroundStyle(Vibe.Palette.text(scheme))
-                        Text(l10n.t("badge.recommended")).font(Vibe.Fonts.ui(10.5, weight: .semibold))
-                            .foregroundStyle(Color(red: 0.70, green: 0.66, blue: 1))
-                            .padding(.horizontal, 8).padding(.vertical, 2)
-                            .background(Capsule().fill(Color(red: 0.55, green: 0.48, blue: 0.94).opacity(0.16)))
-                    }
+                    Text(l10n.t("llm.cloud.title")).font(Vibe.Fonts.ui(15.5, weight: .semibold))
+                        .foregroundStyle(Vibe.Palette.text(scheme))
                     Text(l10n.t("llm.cloud.desc"))
                         .font(Vibe.Fonts.ui(12.5)).foregroundStyle(Vibe.Palette.textMuted(scheme))
                 }
