@@ -63,9 +63,10 @@ final class HistoryStore: ObservableObject, HistoryBridge {
     /// memory only for `ephemeralTTL` seconds (shown with a countdown) then removed,
     /// and never written to disk — a grace buffer so a long unsaved dictation isn't
     /// lost the instant it ends.
-    func append(_ text: String, mode: String = "manual", ephemeral: Bool = false) {
+    @discardableResult
+    func append(_ text: String, mode: String = "manual", ephemeral: Bool = false) -> UUID? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty else { return nil }
         let expires = ephemeral ? Date().addingTimeInterval(Self.ephemeralTTL) : nil
         // Store the trimmed text — stray leading whitespace (common in ASR output)
         // would indent the row vs its timestamp.
@@ -81,6 +82,7 @@ final class HistoryStore: ObservableObject, HistoryBridge {
         } else {
             persistAsync()
         }
+        return item.id
     }
 
     /// Delete a single entry by id.

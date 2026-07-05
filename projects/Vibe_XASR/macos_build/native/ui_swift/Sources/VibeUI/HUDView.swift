@@ -259,55 +259,39 @@ public struct HUDView: View {
         Group {
             switch form {
             case .radical:  radicalBody
-            default:        capsuleBody   // compact + expanded share the capsule
+            default:        capsuleBody
             }
         }
         .opacity(model.phase.isVisible ? 1 : 0)
         .scaleEffect(model.phase.isVisible ? 1 : 0.98)
         .offset(y: model.phase.isVisible ? 0 : 10)
         .animation(Vibe.Motion.easeOut, value: model.phase.isVisible)
-        .animation(Vibe.Motion.spring, value: model.phase) // bounceIn on phase change
-        .onHover { model.onHoverChange?($0) }   // 悬浮时暂停自动消失,离开后再延迟收
+        .animation(Vibe.Motion.spring, value: model.phase)
     }
 
     // ----- compact / expanded capsule ---------------------------------
 
     private var capsuleBody: some View {
-        let isExpanded = form == .expanded
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: isExpanded ? .top : .center, spacing: Vibe.Space.s3) {
-                leftCluster
-                midText(expanded: isExpanded)
-                if !isExpanded { Spacer(minLength: 8) }
-                rightStatus
-            }
-            if model.phase == .polishing, let hint = model.polishHint {
-                Text(hint)
-                    .font(Vibe.Fonts.ui(11))
-                    .foregroundStyle(Vibe.Palette.textMuted(scheme))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            if isExpanded, model.phase != .error, !model.partialText.isEmpty {
-                expandedBar
-            }
-        }
-        .padding(.vertical, isExpanded ? 14 : 12)
-        .padding(.horizontal, isExpanded ? 18 : 16)
-        .frame(minWidth: 280, maxWidth: isExpanded ? 560 : 620, alignment: .leading)
-        .glassPanel(cornerRadius: isExpanded ? 22 : Vibe.Radius.pill,
-                    glow: model.phase == .cancel ? Vibe.Palette.error : nil,
-                    glowRadius: model.phase == .cancel ? 2 : 0,
-                    shadow: false)   // 浮窗只要圆角,不要阴影(用户要求)
-        // cancel form gets a 2px error ring (box-shadow ... 0 0 0 2px error)
-        .overlay(
-            Group {
-                if model.phase == .cancel {
-                    RoundedRectangle(cornerRadius: isExpanded ? 22 : Vibe.Radius.pill,
-                                     style: .continuous)
-                        .strokeBorder(Vibe.Palette.error, lineWidth: 2)
+        HStack(spacing: 12) {
+            leftCluster
+            VStack(alignment: .leading, spacing: 2) {
+                Text(statusTitle)
+                    .font(Vibe.Fonts.ui(13.5, weight: .semibold))
+                    .foregroundStyle(titleColor)
+                if let detail = statusDetail {
+                    Text(detail)
+                        .font(Vibe.Fonts.mono(11.5))
+                        .foregroundStyle(Vibe.Palette.textMuted(scheme))
                 }
             }
-        )
+        }
+        .padding(.vertical, 10)
+        .padding(.horizontal, 14)
+        .frame(minWidth: 132, maxWidth: 220, alignment: .leading)
+        .glassPanel(cornerRadius: Vibe.Radius.pill,
+                    glow: glowColor,
+                    glowRadius: glowColor == nil ? 0 : 14,
+                    shadow: false)
         .fixedSize(horizontal: false, vertical: true)
     }
 
@@ -326,144 +310,61 @@ public struct HUDView: View {
         .frame(width: 40, height: 40)
     }
 
-    /// Middle: error block, or the streaming monospaced line + caret/dots.
-    @ViewBuilder
-    private func midText(expanded: Bool) -> some View {
-        if model.phase == .error {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(model.errorInfo?.title ?? "")
-                    .font(Vibe.Fonts.ui(13.5, weight: .semibold))
-                    .foregroundStyle(Vibe.Palette.text(scheme))
-                Text(model.errorInfo?.reason ?? "")
-                    .font(Vibe.Fonts.ui(12))
-                    .foregroundStyle(Vibe.Palette.textMuted(scheme))
-            }
-            .frame(maxWidth: expanded ? .infinity : nil, alignment: .leading)
-        } else {
-            HStack(alignment: .firstTextBaseline, spacing: 1) {
-                streamingText
-                if model.phase == .speaking { BlinkingCaret() }
-                if model.phase == .pause {
-                    Text("…")
-                        .font(Vibe.Fonts.mono(14))
-                        .foregroundStyle(Vibe.Palette.textMuted(scheme))
-                        .tracking(2)
-                }
-            }
-            .lineLimit(expanded ? nil : 1)
-            .frame(maxWidth: expanded ? .infinity : 460, alignment: .leading)
-        }
-    }
-
-    private var streamingText: some View {
-        // .empty → listening placeholder in muted color.
-        let isPlaceholder = model.phase == .empty || model.partialText.isEmpty
-        let shown = model.phase == .empty ? l10n.t("hud.listening")
-                  : (model.partialText.isEmpty ? "" : model.partialText)
-        return Text(shown)
-            .font(Vibe.Fonts.mono(14))
-            .foregroundStyle(isPlaceholder
-                             ? Vibe.Palette.textMuted(scheme)
-                             : Vibe.Palette.text(scheme))
-            // Truncate from the HEAD so the NEWEST words stay visible as the line
-            // grows (the stream keeps flowing on the right instead of clipping it).
-            .truncationMode(.head)
-    }
-
-    /// Expanded action bar: copy-all + a hint line.
-    private var expandedBar: some View {
-        HStack(spacing: 12) {
-            Text(l10n.t("hud.copyAll"))
-                .font(Vibe.Fonts.ui(12))
-                .foregroundStyle(Vibe.Palette.text(scheme))
-                .padding(.vertical, 5).padding(.horizontal, 12)
-                .background(
-                    Capsule().fill(Vibe.Palette.surface2(scheme))
-                )
-                .overlay(Capsule().strokeBorder(Vibe.Palette.hairline(scheme), lineWidth: 1))
-            Text(model.phase == .done ? l10n.t("hud.insertedAt") : l10n.t("hud.releaseHint"))
-                .font(Vibe.Fonts.mono(11))
-                .foregroundStyle(Vibe.Palette.textMuted(scheme))
-        }
-        .padding(.leading, 0)
-    }
-
-    /// Right: timer / 已插入 / 已取消 / 去设置.
-    @ViewBuilder
-    private var rightStatus: some View {
+    private var statusTitle: String {
         switch model.phase {
         case .empty, .speaking, .pause:
-            Text(model.elapsed)
-                .font(Vibe.Fonts.mono(12.5))
-                .foregroundStyle(Vibe.Palette.textMuted(scheme))
-                .padding(.vertical, 4).padding(.horizontal, 9)
-                .background(Capsule().fill(Vibe.Palette.surface2(scheme)))
+            return l10n.t("hud.listening")
         case .finalizing:
-            Text(l10n.t("hud.inserted"))
-                .font(Vibe.Fonts.ui(12.5, weight: .semibold))
-                .foregroundStyle(Vibe.Palette.success)
-        case .done:
-            if model.canRevise {
-                HStack(spacing: 6) {
-                    Button { model.onUndo?() } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "arrow.uturn.backward").font(.system(size: 10, weight: .semibold))
-                            Text(l10n.t("hud.undo")).font(Vibe.Fonts.ui(12, weight: .semibold))
-                        }
-                        .foregroundStyle(Vibe.Palette.text(scheme))
-                        .padding(.vertical, 5).padding(.horizontal, 9)
-                        .background(Capsule().fill(Vibe.Palette.surface2(scheme)))
-                    }.buttonStyle(.plain)
-                    Menu {
-                        ForEach(model.reviseTemplates) { t in
-                            Button(t.name) { model.onRepolish?(t.id) }
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "wand.and.stars").font(.system(size: 10, weight: .semibold))
-                            Text(l10n.t("hud.repolish")).font(Vibe.Fonts.ui(12, weight: .semibold))
-                        }
-                        .foregroundStyle(.white)
-                        .padding(.vertical, 5).padding(.horizontal, 9)
-                        .background(Capsule().fill(Vibe.Palette.accentA))
-                    }
-                    .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-                }
-            } else {
-                Text(l10n.t("hud.inserted"))
-                    .font(Vibe.Fonts.ui(12.5, weight: .semibold))
-                    .foregroundStyle(Vibe.Palette.success)
-            }
+            return "处理中"
         case .polishing:
-            if model.polishSlow {
-                // 等久了:给「立即插入 ✓」——用规则版立即插入,不再等大模型。
-                Button { model.onInsertNow?() } label: {
-                    HStack(spacing: 5) {
-                        Text("✓").font(.system(size: 12, weight: .bold))
-                        Text("立即插入").font(Vibe.Fonts.ui(12.5, weight: .semibold))
-                    }
-                    .foregroundStyle(.white)
-                    .padding(.vertical, 6).padding(.horizontal, 12)
-                    .background(Capsule().fill(Vibe.Palette.accentA))
-                }
-                .buttonStyle(.plain)
-            } else {
-                Text("AI 润色中")
-                    .font(Vibe.Fonts.ui(12.5, weight: .semibold))
-                    .foregroundStyle(Vibe.Palette.accentB)
-            }
+            return "正在修正"
+        case .done:
+            return l10n.t("hud.inserted")
         case .cancel:
-            Text(l10n.t("hud.cancelled"))
-                .font(Vibe.Fonts.ui(12.5, weight: .semibold))
-                .foregroundStyle(Vibe.Palette.error)
+            return l10n.t("hud.cancelled")
         case .error:
-            Text(l10n.t("hud.goSettings"))
-                .font(Vibe.Fonts.ui(12.5, weight: .semibold))
-                .foregroundStyle(.white)
-                .padding(.vertical, 6).padding(.horizontal, 12)
-                .background(Capsule().fill(Vibe.Palette.error))
+            return model.errorInfo?.title ?? ""
         case .idle:
-            EmptyView()
+            return ""
+        }
+    }
+
+    private var statusDetail: String? {
+        switch model.phase {
+        case .empty, .speaking, .pause:
+            return model.elapsed
+        case .error:
+            return model.errorInfo?.reason
+        default:
+            return nil
+        }
+    }
+
+    private var titleColor: Color {
+        switch model.phase {
+        case .done, .finalizing:
+            return Vibe.Palette.success
+        case .cancel, .error:
+            return Vibe.Palette.error
+        case .polishing:
+            return Vibe.Palette.accentB
+        default:
+            return Vibe.Palette.text(scheme)
+        }
+    }
+
+    private var glowColor: Color? {
+        switch model.phase {
+        case .speaking:
+            return Vibe.Palette.accentA.opacity(0.18)
+        case .polishing:
+            return Vibe.Palette.accentB.opacity(0.18)
+        case .done, .finalizing:
+            return Vibe.Palette.success.opacity(0.18)
+        case .cancel, .error:
+            return Vibe.Palette.error.opacity(0.18)
+        default:
+            return nil
         }
     }
 
@@ -477,35 +378,17 @@ public struct HUDView: View {
             }
             .frame(width: 150, height: 150)
 
-            if model.phase == .error {
-                VStack(spacing: 2) {
-                    Text(model.errorInfo?.title ?? "")
-                        .font(Vibe.Fonts.ui(13.5, weight: .semibold))
-                        .foregroundStyle(Vibe.Palette.text(scheme))
-                    Text(model.errorInfo?.reason ?? "")
-                        .font(Vibe.Fonts.ui(12))
+            VStack(spacing: 4) {
+                Text(statusTitle)
+                    .font(Vibe.Fonts.ui(15, weight: .semibold))
+                    .foregroundStyle(titleColor)
+                if let detail = statusDetail {
+                    Text(detail)
+                        .font(Vibe.Fonts.mono(12))
                         .foregroundStyle(Vibe.Palette.textMuted(scheme))
-                }
-                .multilineTextAlignment(.center)
-            } else {
-                HStack(alignment: .firstTextBaseline, spacing: 2) {
-                    Text(model.phase == .empty ? l10n.t("hud.listening")
-                         : (model.partialText.isEmpty ? "" : model.partialText))
-                        .font(Vibe.Fonts.mono(16))
-                        .foregroundStyle(model.phase == .empty || model.partialText.isEmpty
-                                         ? Vibe.Palette.textMuted(scheme)
-                                         : Vibe.Palette.text(scheme))
                         .multilineTextAlignment(.center)
-                    if model.phase == .speaking { BlinkingCaret() }
-                    if model.phase == .pause {
-                        Text("…").foregroundStyle(Vibe.Palette.textMuted(scheme)).tracking(2)
-                    }
+                        .frame(maxWidth: 280)
                 }
-                .frame(maxWidth: 360)
-            }
-
-            if model.phase != .error {
-                rightStatus.frame(minHeight: 18)
             }
         }
         .padding(.vertical, 36)

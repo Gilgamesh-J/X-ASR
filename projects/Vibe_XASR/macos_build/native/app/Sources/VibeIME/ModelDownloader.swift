@@ -231,6 +231,16 @@ final class ModelDownloader: NSObject, ObservableObject, ModelManagerBridge, Mod
         refinerProgress = nil
     }
 
+    /// Cancel every in-flight download before a destructive cleanup.
+    func cancelAllDownloads() {
+        for task in tasks.values { task.cancel() }
+        tasks.removeAll()
+        jobs.removeAll()
+        active.removeAll()
+        progress.removeAll()
+        cancelRefinerDownload()
+    }
+
     /// 删除已下载的 refiner GGUF(释放 ~378 MB / 触发重新下载)。返回删除后是否确已不存在。
     @discardableResult
     func deleteRefiner() -> Bool {

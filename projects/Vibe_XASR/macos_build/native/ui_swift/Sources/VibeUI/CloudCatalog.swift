@@ -1,6 +1,6 @@
 import Foundation
 
-// 云端大模型内置目录:常见 OpenAI 兼容服务商 + 模型预设(23 家)。
+// 云端大模型内置目录:常见服务商 + 模型预设。
 // 用户选服务商即自动填好 BaseURL 与模型预设;也可在「AI 润色」页自定义增删服务商。
 public enum CloudCatalog {
     public static let providers: [CloudProviderUI] = [

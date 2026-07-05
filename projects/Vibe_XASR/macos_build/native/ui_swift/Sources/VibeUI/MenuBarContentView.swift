@@ -18,9 +18,9 @@ public final class MenuBarState: ObservableObject {
     @Published public var status: Status = .idle
     @Published public var enabled = true
     /// Last recognized line (shown when not actively listening).
-    @Published public var recent = "这个 component 再抽一个 hook 出来,叫 useAuth"
+    @Published public var recent = "明天下午三点和产品团队开会，地点改到二号会议室。"
     /// Live partial shown while listening.
-    @Published public var livePartial = "把这个 function 改成 async"
+    @Published public var livePartial = "请把这段整理成一条更清晰的会议提醒"
     /// Progress fraction (0...1) shown while working.
     @Published public var workProgress = 0.64
     public init() {}
@@ -40,13 +40,13 @@ public struct MenuBarContentView: View {
 
     private var statusText: String {
         switch state.status {
-        case .idle:      return "就绪"
-        case .listening: return "聆听中…"
-        case .working:   return "整理中"
+        case .idle:      return "准备就绪"
+        case .listening: return "正在聆听…"
+        case .working:   return "正在整理"
         }
     }
     private var subText: String {
-        state.status == .working ? "X-ASR large 加载中" : "FireRedVAD · CoreML"
+        state.status == .working ? "请稍候，文本正在完成整理" : "本地语音输入已就绪"
     }
 
     public var body: some View {
@@ -96,7 +96,7 @@ public struct MenuBarContentView: View {
 
     private var recentSection: some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text("最近一条")
+            Text("最近输入")
                 .font(Vibe.Fonts.mono(10.5)).tracking(0.8)
                 .textCase(.uppercase)
                 .foregroundStyle(Vibe.Palette.textMuted(scheme))
@@ -146,7 +146,7 @@ public struct MenuBarContentView: View {
 
     private var enableToggleRow: some View {
         HStack {
-            Text("启用听写")
+            Text("启用语音输入")
                 .font(Vibe.Fonts.ui(13))
                 .foregroundStyle(Vibe.Palette.text(scheme))
             Spacer()
@@ -160,8 +160,8 @@ public struct MenuBarContentView: View {
     private var entries: some View {
         VStack(spacing: 0) {
             MenuEntry(icon: "⚙", title: "设置…", shortcut: "⌘,")
-            MenuEntry(icon: "?", title: "帮助")
-            MenuEntry(icon: "⏻", title: "退出 Vibe XASR", shortcut: "⌘Q", destructive: true)
+            MenuEntry(icon: "?", title: "使用帮助")
+            MenuEntry(icon: "⏻", title: "退出", shortcut: "⌘Q", destructive: true)
         }
         .padding(6)
     }

@@ -97,17 +97,27 @@ public struct CloudProviderUI: Sendable {
     public let price: String
 }
 public enum CloudProvidersUI {
-    /// 内置目录(23 家 OpenAI 兼容服务商,见 CloudCatalog.swift)。
+    /// 内置目录(常见服务商,见 CloudCatalog.swift)。
     public static let all: [CloudProviderUI] = CloudCatalog.providers
-    public static func find(_ k: String) -> CloudProviderUI { all.first { $0.key == k } ?? all[0] }
-    public static func isBuiltin(_ k: String) -> Bool { all.contains { $0.key == k } }
+    public static func normalize(_ k: String) -> String {
+        k == "openai_compatible" ? "openai" : k
+    }
+    public static func find(_ k: String) -> CloudProviderUI {
+        let key = normalize(k)
+        return all.first { $0.key == key } ?? all[0]
+    }
+    public static func isBuiltin(_ k: String) -> Bool {
+        let key = normalize(k)
+        return all.contains { $0.key == key }
+    }
 
     /// 本地化显示名:中文界面(简/繁)用中文译名(品牌名如 OpenAI / Claude / Groq 不译,保持原名);
     /// 其它语言(en/ja/ko)统一用英文目录名。这些多为中国大陆厂商,繁体界面亦沿用其中文名。
     @MainActor public static func localizedLabel(_ k: String) -> String {
+        let key = normalize(k)
         let r = L10n.shared.resolved
-        if r == .zh || r == .zhHant, let zh = zhNames[k] { return zh }
-        return find(k).label
+        if r == .zh || r == .zhHant, let zh = zhNames[key] { return zh }
+        return find(key).label
     }
     private static let zhNames: [String: String] = [
         "qwen": "通义千问", "aliyun": "阿里云百炼", "doubao": "豆包 / 火山方舟",

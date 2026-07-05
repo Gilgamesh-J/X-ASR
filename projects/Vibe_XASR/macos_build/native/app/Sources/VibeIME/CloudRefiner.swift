@@ -3,7 +3,7 @@ import VibeUI
 
 // 云端大模型润色 —— 后端 + 数据 + prompt 拼接。
 // =========================================================================
-// 调 OpenAI / 火山方舟(Ark)兼容的 chat/completions 接口。设计来源:云端llm「大模型设置」。
+// 调常见云端大模型接口。设计来源:云端llm「大模型设置」。
 
 // MARK: - 服务商数据
 
@@ -115,29 +115,46 @@ final class CloudRefiner: RefinerBackend, @unchecked Sendable {
         let prompt = system.contains("{{transcript}}")
             ? system.replacingOccurrences(of: "{{transcript}}", with: text)
             : "\(system)\n\n原文：\(text)"
-        // 日志 input 用「原始 ASR」(引擎原始输出,不含任何规则);AppDelegate 在润色前已设好。
         let original = CloudRequestLog.shared.pendingOriginal
         let logInput = original.isEmpty ? text : original
-        // 内容超过 Max Tokens(输出上限)→ 不调用模型(否则会被截断),记一条并回退规则版。
-        let estIn = CloudRefiner.estimateTokens(text)
-        if estIn > maxTokens {
+        return await request(userPrompt: prompt, logInput: logInput)
+    }
+
+    /// 通用云端文本调用:整段润色与长文本整理共用。
+    func request(system: String, user: String, logInput: String) async -> String? {
+        await request(messages: [
+            ["role": "system", "content": system],
+            ["role": "user", "content": user],
+        ], promptForLog: "\(system)\n\n\(user)", logInput: logInput)
+    }
+
+    private func request(userPrompt prompt: String, logInput: String) async -> String? {
+        await request(messages: [["role": "user", "content": prompt]], promptForLog: prompt, logInput: logInput)
+    }
+
+    private func request(messages: [[String: String]], promptForLog: String, logInput: String) async -> String? {
+        // 日志 input 用「原始 ASR」(引擎原始输出,不含任何规则);AppDelegate 在润色前已设好。
+        let estIn = CloudRefiner.estimateTokens(promptForLog)
+        // `maxTokens` 是输出上限,不应拿来限制输入。这里只做一个宽松硬阈值,
+        // 防止异常超长内容把接口打爆,同时允许「长文本整段整理」正常工作。
+        if estIn > CloudRefiner.hardInputTokenLimit {
             CloudRequestLog.shared.record(provider: provider, baseURL: baseURL, model: model,
                 status: "skipped", ms: 0, input: logInput,
-                output: "内容约 \(estIn) token,超过 Max Tokens(\(maxTokens))。未调用模型,已回退规则版插入。请调大 Max Tokens,或缩短单次说话内容。",
-                prompt: prompt)
+                output: "内容约 \(estIn) token,超过安全输入上限(\(CloudRefiner.hardInputTokenLimit))。未调用模型,请缩短本次内容或拆分处理。",
+                prompt: promptForLog)
             return nil
         }
         let t0 = Date()
         do {
             let data = try await CloudRefiner.chat(
                 baseURL: baseURL, model: model, apiKey: apiKey,
-                messages: [["role": "user", "content": prompt]],
+                messages: messages,
                 maxTokens: maxTokens, temperature: temperature)
             let ms = Int(Date().timeIntervalSince(t0) * 1000)
             let out = CloudRefiner.extractContent(data)
             CloudRequestLog.shared.record(provider: provider, baseURL: baseURL, model: model,
                                           status: out == nil ? "error" : "ok", ms: ms,
-                                          input: logInput, output: out ?? "返回内容为空(无 choices/content)", prompt: prompt)
+                                          input: logInput, output: out ?? "返回内容为空(无 choices/content)", prompt: promptForLog)
             return out
         } catch {
             let ms = Int(Date().timeIntervalSince(t0) * 1000)
@@ -145,7 +162,7 @@ final class CloudRefiner: RefinerBackend, @unchecked Sendable {
             CloudRequestLog.shared.record(provider: provider, baseURL: baseURL, model: model,
                                           status: cancelled ? "timeout" : "error", ms: ms,
                                           input: logInput, output: cancelled ? "超时取消(>润色超时)" : error.localizedDescription,
-                                          prompt: prompt)
+                                          prompt: promptForLog)
             return nil
         }
     }
@@ -168,6 +185,8 @@ final class CloudRefiner: RefinerBackend, @unchecked Sendable {
         }
         return Int(t.rounded(.up))
     }
+
+    static let hardInputTokenLimit = 24_000
 
     static func chat(baseURL: String, model: String, apiKey: String,
                      messages: [[String: String]], maxTokens: Int, temperature: Double = 0) async throws -> Data {

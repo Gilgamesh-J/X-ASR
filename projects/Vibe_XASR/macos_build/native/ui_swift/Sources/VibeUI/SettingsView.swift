@@ -85,6 +85,10 @@ public protocol SettingsBridge: AnyObject {
     var snippetsJSON: String { get set }         // [{"t":trigger,"x":text}] (persist only)
     func applySnippets()
 
+    // ----- Default hotword domains -----
+    var hotwordDomainIDs: [String] { get set }
+    func applyHotwordDomains(_ ids: [String])
+
     // ----- Sub-bridge for the Model tab -----
     var modelManager: ModelManagerBridge? { get }
     /// Apply a tier selection: triggers a download if needed and swaps the engine
@@ -96,6 +100,8 @@ public protocol SettingsBridge: AnyObject {
     func accessibilityGranted() -> Bool
     func inputMonitoringGranted() -> Bool
     func openPermissionSettings(_ which: PermissionKind)
+    /// Remove the app bundle plus all local data (settings, cache, keychain).
+    func deleteAppAndData()
 
     // ----- Microphone input device -----
     /// Available input devices; first entry is the "system default" (uid "").
@@ -202,12 +208,15 @@ public extension SettingsBridge {
     var snippetsEnabled: Bool { get { true } set {} }
     var snippetsJSON: String { get { "[]" } set {} }
     func applySnippets() {}
+    var hotwordDomainIDs: [String] { get { [] } set {} }
+    func applyHotwordDomains(_ ids: [String]) {}
     var modelManager: ModelManagerBridge? { nil }
     func selectTier(_ tier: Int) {}
     func micGranted() -> Bool { true }
     func accessibilityGranted() -> Bool { false }
     func inputMonitoringGranted() -> Bool { false }
     func openPermissionSettings(_ which: PermissionKind) {}
+    func deleteAppAndData() {}
     func inputDevices() -> [(uid: String, name: String)] { [] }
     var inputDeviceUID: String { get { "" } set {} }
     var apiEnabled: Bool { get { false } set {} }
@@ -314,6 +323,7 @@ public final class SettingsState: ObservableObject {
     @Published public var apiEnabled = false
     @Published public var apiAllowLAN = false
     @Published public var apiKey = ""
+    @Published public var hotwordDomainIDs: [String] = []
 
     /// Host bridge; when set, controls read/write through it.
     public weak var bridge: SettingsBridge?
@@ -356,11 +366,10 @@ public final class SettingsState: ObservableObject {
         self.replacementsText = bridge.replacementsText
         self.snippetsEnabled = bridge.snippetsEnabled
         self.snippetsJSON = bridge.snippetsJSON
+        self.hotwordDomainIDs = bridge.hotwordDomainIDs
         self.apiEnabled = bridge.apiEnabled
         self.apiAllowLAN = bridge.apiAllowLAN
         self.apiKey = bridge.apiKey
-        // 不变式:AI 润色开启时听写只能是「说完插入」(兼容旧版遗留的冲突组合)。
-        if polishOn { forcePasteForPolish() }
     }
 
     // ---- write-throughs (bridge present) or local fallback (preview) -------
@@ -455,23 +464,20 @@ public final class SettingsState: ObservableObject {
     public func applyRefiner(_ on: Bool) {
         refiner = on
         bridge?.refinerEnabled = on
-        if on { forcePasteForPolish() }   // 本地润色开启 → 听写只支持「说完插入」
     }
     /// 写回云端配置(整包)。UI 改任意字段后调它持久化 + 触发后端刷新。
     public func applyCloud(_ c: CloudConfigDTO) {
         cloud = c
         bridge?.cloudConfig = c
-        if c.enabled { forcePasteForPolish() }   // 云端润色开启 → 听写只支持「说完插入」
     }
     /// 最新云端配置(直读 bridge → SettingsStore)。两个窗口各持一个 SettingsState 时,
     /// 提交前以此为基准合并、各自只覆盖自己负责的字段,避免跨窗口互相覆盖。preview 下为 nil。
     public var liveCloud: CloudConfigDTO? { bridge?.cloudConfig }
 
-    /// AI 润色(云端或本地任一)是否开启。开启时听写只支持「说完插入」(paste),
-    /// 逐字插入 / 持续候机 与逐句润色冲突,故置灰、需先关润色才能切换。
+    /// AI 润色(云端或本地任一)是否开启。
     public var polishOn: Bool { refiner || cloud.enabled }
-    /// 润色开启时把听写模式锁回「说完插入」。
-    private func forcePasteForPolish() { if insert != "paste" { applyInsert("paste") } }
+    /// Legacy no-op kept for older code paths.
+    private func forcePasteForPolish() {}
     public func testCloud() async -> CloudTestResult {
         await bridge?.testCloud(cloud) ?? .init(msg: "未连接")
     }
@@ -500,6 +506,10 @@ public final class SettingsState: ObservableObject {
         bridge?.snippetsJSON = json
         bridge?.applySnippets()
     }
+    public func applyHotwordDomains(_ ids: [String]) {
+        hotwordDomainIDs = ids
+        bridge?.applyHotwordDomains(ids)
+    }
     public func applyTier(_ tier: Int) {
         latency = tier
         bridge?.selectTier(tier)
@@ -511,6 +521,7 @@ public final class SettingsState: ObservableObject {
     public func a11yGranted() -> Bool { bridge?.accessibilityGranted() ?? false }
     public func inputGranted() -> Bool { bridge?.inputMonitoringGranted() ?? false }
     public func openPermission(_ kind: PermissionKind) { bridge?.openPermissionSettings(kind) }
+    public func deleteAppAndData() { bridge?.deleteAppAndData() }
 }
 
 // MARK: - Atomic controls
@@ -790,6 +801,14 @@ private struct GeneralTab: View {
 
             // Self-check · helps users who hit permission problems.
             SelfCheckView(s: s, l10n: l10n, onOpenPermissions: onOpenPermissions)
+
+            SettingsGroup(label: l10n.t("grp.uninstall")) {
+                SettingsRow(title: l10n.t("gen.deleteApp"), help: l10n.t("gen.deleteApp.help")) {
+                    MButton(title: l10n.t("gen.deleteApp.action"), kind: .danger) {
+                        s.deleteAppAndData()
+                    }
+                }
+            }
         }
     }
 }
@@ -880,23 +899,13 @@ private struct SelfCheckView: View {
     }
 }
 
-/// (听写模式 / Dictation mode) The three insert behaviours rendered as a
-/// radio-style vertical list inside the Dictation group. Each row carries a long
-/// description, so a segmented control won't fit. The whole row is the hit target;
-/// selecting writes through `s.applyInsert(value)`.
+/// Unified dictation mode. The old insert picker is replaced with a single flow:
+/// stream into the current caret; if no caret exists, keep syncing to clipboard;
+/// AI refine, when enabled, auto-segments and rewrites finalized chunks.
 private struct DictationModeList: View {
     @ObservedObject var s: SettingsState
     @ObservedObject var l10n: L10n
     @Environment(\.colorScheme) private var scheme
-    /// 非 nil = 用户点了与 AI 润色冲突的模式,弹窗征询是否切换(切换=关润色)。
-    @State private var pendingMode: String?
-
-    /// (value, titleKey, descKey) for the three modes.
-    private var modes: [(String, String, String)] {
-        [("paste",  "dict.mode.paste.title",  "dict.mode.paste.desc"),
-         ("type",   "dict.mode.type.title",   "dict.mode.type.desc"),
-         ("oncall", "dict.mode.oncall.title", "dict.mode.oncall.desc")]
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -905,125 +914,40 @@ private struct DictationModeList: View {
                 Text(l10n.t("dict.mode"))
                     .font(Vibe.Fonts.ui(13.5, weight: .medium))
                     .foregroundStyle(Vibe.Palette.text(scheme))
-                if s.polishOn {
-                    Text(l10n.t("dict.mode.lockedByPolish"))
-                        .font(Vibe.Fonts.ui(11.5))
-                        .foregroundStyle(Vibe.Palette.textMuted(scheme))
-                }
+                Text("单一模式：开始说话后，结果会持续写入当前输入位置；没有光标时自动落到剪贴板。")
+                    .font(Vibe.Fonts.ui(11.5))
+                    .foregroundStyle(Vibe.Palette.textMuted(scheme))
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, 13).padding(.bottom, 6).padding(.horizontal, 16)
+            .padding(.top, 13).padding(.bottom, 10).padding(.horizontal, 16)
 
-            VStack(spacing: 8) {
-                ForEach(modes, id: \.0) { mode in
-                    // AI 润色开启时,只有「说完插入」可选;另两个置灰、点击弹切换提示。
-                    let locked = s.polishOn && mode.0 != "paste"
-                    DictationModeRow(
-                        title: l10n.t(mode.1),
-                        desc: l10n.t(mode.2),
-                        badge: mode.0 == "paste" ? l10n.t("badge.recommended") : nil,
-                        locked: locked,
-                        selected: s.insert == mode.0
-                    ) {
-                        if locked { pendingMode = mode.0 } else { s.applyInsert(mode.0) }
-                    }
-                }
+            VStack(alignment: .leading, spacing: 8) {
+                InfoLine(text: "实时 partial 直接流式插入。")
+                InfoLine(text: "最终结果先按热词 / 纠错 / ITN 处理，再在 AI 模式下分段 refine。")
+                InfoLine(text: "如果没有文本光标，结果会持续写入剪贴板。")
             }
             .padding(.horizontal, 16).padding(.bottom, 13)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Vibe.Palette.surface(scheme))
-        .alert(l10n.t("dict.mode.conflict.title"),
-               isPresented: Binding(get: { pendingMode != nil },
-                                    set: { if !$0 { pendingMode = nil } })) {
-            Button(l10n.t("dict.mode.conflict.switch"), role: .destructive) {
-                if let m = pendingMode { switchOffPolish(then: m) }
-                pendingMode = nil
-            }
-            Button(l10n.t("llm.cancel"), role: .cancel) { pendingMode = nil }
-        } message: {
-            Text(l10n.t("dict.mode.conflict.msg"))
-        }
-    }
-
-    /// 关闭 AI 润色(云端 + 本地)后切到目标听写模式。
-    private func switchOffPolish(then mode: String) {
-        if s.cloud.enabled { var c = s.cloud; c.enabled = false; s.applyCloud(c) }
-        if s.refiner { s.applyRefiner(false) }
-        s.applyInsert(mode)
     }
 }
 
-/// One tappable dictation-mode option: title + long description, with a selected
-/// ring + checkmark. The whole row is the hit target.
-private struct DictationModeRow: View {
+private struct InfoLine: View {
     @Environment(\.colorScheme) private var scheme
-    var title: String
-    var desc: String
-    var badge: String? = nil
-    var locked: Bool = false
-    var selected: Bool
-    var action: () -> Void
+    var text: String
     var body: some View {
-        Button(action: action) {
-            HStack(alignment: .top, spacing: 11) {
-                // Radio dot.
-                ZStack {
-                    Circle()
-                        .strokeBorder(selected ? Vibe.Palette.accentA
-                                               : Vibe.Palette.hairline(scheme),
-                                      lineWidth: selected ? 5 : 1.5)
-                        .frame(width: 18, height: 18)
-                    if selected {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundStyle(.white)
-                    }
-                }
-                .padding(.top, 1)
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 7) {
-                        Text(title)
-                            .font(Vibe.Fonts.ui(13, weight: .semibold))
-                            .foregroundStyle(Vibe.Palette.text(scheme))
-                        if let badge {
-                            Text(badge).font(Vibe.Fonts.ui(10, weight: .semibold))
-                                .foregroundStyle(Color(red: 0.62, green: 0.58, blue: 1))
-                                .padding(.horizontal, 7).padding(.vertical, 2)
-                                .background(Capsule().fill(Color(red: 0.55, green: 0.48, blue: 0.94).opacity(0.16)))
-                        }
-                        if locked {
-                            Image(systemName: "lock.fill")
-                                .font(.system(size: 9.5))
-                                .foregroundStyle(Vibe.Palette.textMuted(scheme))
-                        }
-                    }
-                    Text(desc)
-                        .font(Vibe.Fonts.ui(11.5))
-                        .foregroundStyle(Vibe.Palette.textMuted(scheme))
-                        .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(.vertical, 11).padding(.horizontal, 12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(selected ? Vibe.Palette.accentSoft(scheme)
-                                   : Vibe.Palette.surface2(scheme))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .strokeBorder(selected ? Vibe.Palette.accentA
-                                           : Vibe.Palette.hairline(scheme),
-                                  lineWidth: selected ? 1.5 : 1)
-            )
-            .opacity(locked ? 0.5 : 1)
-            .contentShape(Rectangle())
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "checkmark.seal.fill")
+                .font(.system(size: 11))
+                .foregroundStyle(Vibe.Palette.accentA)
+                .padding(.top, 2)
+            Text(text)
+                .font(Vibe.Fonts.ui(12))
+                .foregroundStyle(Vibe.Palette.text(scheme))
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .buttonStyle(.plain)
     }
 }
 
@@ -1124,6 +1048,7 @@ private struct HotwordsTab: View {
     @State private var rRules: [ReplaceRow] = []  // replacement rules (table rows)
     @State private var rSaved = false
     @State private var swapping = false
+    @State private var domainIDs: Set<String> = []
     @State private var hwPage = 0          // hotword list page
     @State private var rPage = 0           // replacement list page
     private let pageSize = 5
@@ -1143,6 +1068,11 @@ private struct HotwordsTab: View {
     }
 
     private func pageCount(_ n: Int) -> Int { max(1, (n + pageSize - 1) / pageSize) }
+
+    private func toggleDomain(_ id: String) {
+        if domainIDs.contains(id) { domainIDs.remove(id) } else { domainIDs.insert(id) }
+        s.applyHotwordDomains(Array(domainIDs))
+    }
 
     /// ‹ 1 / N › pager, shown only when there's more than one page.
     @ViewBuilder
@@ -1177,6 +1107,7 @@ private struct HotwordsTab: View {
         rows.filter { !$0.word.isEmpty }.map { $0.word }.joined(separator: "\n")
     }
     private var hotwordCount: Int { hwRows.filter { !$0.word.isEmpty }.count }
+    private var domainCount: Int { domainIDs.count }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -1186,6 +1117,11 @@ private struct HotwordsTab: View {
                 SettingsRow(title: l10n.t("hw.enable"), help: l10n.t("hw.enable.help")) {
                     VibeToggle(on: Binding(get: { s.hotwordsEnabled },
                                            set: { s.applyHotwordsEnabled($0) }))
+                }
+                SettingsRow(title: "常用领域", help: "选择你最常说的场景，系统会按领域自动优化识别。") {
+                    DomainPills(selectedIDs: $domainIDs) { ids in
+                        s.applyHotwordDomains(ids)
+                    }
                 }
                 editor
                 SettingsRow(title: l10n.t("hw.score"), help: l10n.t("hw.score.help")) {
@@ -1214,6 +1150,7 @@ private struct HotwordsTab: View {
                 hwRows = HotwordsTab.parseHWRows(s.hotwordsText)
                 scoreTier = Self.tier(for: s.hotwordsScore)
                 rRules = HotwordsTab.parseRows(s.replacementsText)
+                domainIDs = Set(s.hotwordDomainIDs)
                 loaded = true
             }
             swapping = s.engineSwapping
@@ -1224,7 +1161,7 @@ private struct HotwordsTab: View {
         }
     }
 
-    /// Single-column table: one hotword per row, add/delete.
+    /// Compact hotword grid: multi-column cards instead of one-row-per-word.
     private var editor: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 3) {
@@ -1239,35 +1176,36 @@ private struct HotwordsTab: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, 13).padding(.bottom, 8).padding(.horizontal, 16)
 
-            VStack(spacing: 5) {
+            Group {
                 if hwRows.isEmpty {
                     Text(l10n.t("hw.empty.hint"))
                         .font(Vibe.Fonts.mono(11.5))
                         .foregroundStyle(Vibe.Palette.textMuted(scheme))
                         .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.horizontal, 16)
                         .padding(.vertical, 12)
                 } else {
-                    let pi = min(hwPage, pageCount(hwRows.count) - 1)
-                    let lo = pi * pageSize
-                    let hi = min(lo + pageSize, hwRows.count)
-                    ForEach(Array(lo..<hi), id: \.self) { i in
-                        HotwordRuleRow(row: $hwRows[i]) {
-                            hwRows.remove(at: i)
-                            hwPage = min(hwPage, pageCount(hwRows.count) - 1)
+                    let columns = [GridItem(.adaptive(minimum: 190, maximum: 260), spacing: 10)]
+                    ScrollView {
+                        LazyVGrid(columns: columns, alignment: .leading, spacing: 10) {
+                            ForEach(Array(hwRows.indices), id: \.self) { i in
+                                HotwordRuleRow(row: $hwRows[i], index: i + 1) {
+                                    hwRows.remove(at: i)
+                                }
+                            }
                         }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 4)
                     }
+                    .frame(minHeight: 120, maxHeight: 280)
                 }
             }
-            .padding(.horizontal, 16)
             .disabled(!s.hotwordsEnabled)
             .opacity(s.hotwordsEnabled ? 1 : 0.5)
-
-            pager($hwPage, count: hwRows.count)
 
             Button {
                 guard hwRows.count < maxWords else { return }
                 hwRows.append(HotwordRow())
-                hwPage = pageCount(hwRows.count) - 1
             } label: {
                 Label(hwRows.count >= maxWords ? l10n.t("hw.full") : l10n.t("hw.add"), systemImage: "plus.circle")
                     .font(Vibe.Fonts.ui(12.5))
@@ -1312,6 +1250,73 @@ private struct HotwordsTab: View {
         }
         .padding(.vertical, 13).padding(.horizontal, 16)
         .background(Vibe.Palette.surface(scheme))
+    }
+
+    private struct DomainPills: View {
+        @Environment(\.colorScheme) private var scheme
+        @Binding var selectedIDs: Set<String>
+        var onChange: ([String]) -> Void
+
+        var body: some View {
+            let columns = [GridItem(.adaptive(minimum: 148, maximum: 220), spacing: 10)]
+            LazyVGrid(columns: columns, alignment: .leading, spacing: 10) {
+                ForEach(HotwordDomainCatalog.all) { domain in
+                    chip(domain)
+                }
+            }
+            .frame(maxWidth: 560, alignment: .leading)
+        }
+
+        @ViewBuilder
+        private func chip(_ domain: HotwordDomain) -> some View {
+            let selected = selectedIDs.contains(domain.id)
+            Button {
+                var copy = selectedIDs
+                if selected { copy.remove(domain.id) } else { copy.insert(domain.id) }
+                selectedIDs = copy
+                onChange(Array(copy))
+            } label: {
+                VStack(alignment: .leading, spacing: 7) {
+                    HStack(alignment: .top, spacing: 8) {
+                        Text(domain.name)
+                            .font(Vibe.Fonts.ui(12.5, weight: .semibold))
+                            .foregroundStyle(selected ? .white : Vibe.Palette.text(scheme))
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                        Spacer(minLength: 6)
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .fill(selected ? .white.opacity(0.18) : Vibe.Palette.surface2(scheme))
+                            Image(systemName: selected ? "checkmark" : "plus")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(selected ? .white : Vibe.Palette.textMuted(scheme))
+                        }
+                        .frame(width: 20, height: 20)
+                    }
+
+                    Text(domain.summary)
+                        .font(Vibe.Fonts.ui(10.5))
+                        .foregroundStyle(selected ? .white.opacity(0.82) : Vibe.Palette.textMuted(scheme))
+                        .lineLimit(3)
+                        .multilineTextAlignment(.leading)
+                }
+                .frame(maxWidth: .infinity, minHeight: 84, alignment: .topLeading)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 11)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(selected ? AnyShapeStyle(Vibe.accentGradient)
+                                       : AnyShapeStyle(Vibe.Palette.surface2(scheme)))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(selected ? .clear : Vibe.Palette.hairline(scheme), lineWidth: 1)
+                )
+                .shadow(color: selected ? Vibe.Palette.accentA.opacity(0.18) : .clear,
+                        radius: 10, y: 4)
+            }
+            .buttonStyle(.plain)
+        }
     }
 
     /// Parse stored "from => to" text into table rows.
@@ -1621,9 +1626,23 @@ struct HotwordRow: Identifiable {
 private struct HotwordRuleRow: View {
     @Environment(\.colorScheme) private var scheme
     @Binding var row: HotwordRow
+    var index: Int
     var onDelete: () -> Void
     var body: some View {
-        HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text("#\(index)")
+                    .font(Vibe.Fonts.mono(10.5))
+                    .foregroundStyle(Vibe.Palette.textMuted(scheme))
+                Spacer(minLength: 0)
+                Button(action: onDelete) {
+                    Image(systemName: "minus.circle.fill")
+                        .font(.system(size: 17))
+                        .foregroundStyle(Vibe.Palette.error.opacity(0.85))
+                }
+                .buttonStyle(.plain)
+            }
+
             ZStack(alignment: .leading) {
                 if row.word.isEmpty {
                     Text(L10n.shared.t("hw.eg"))
@@ -1636,23 +1655,18 @@ private struct HotwordRuleRow: View {
                     .font(Vibe.Fonts.mono(12))
                     .foregroundStyle(Vibe.Palette.text(scheme))
                     .textFieldStyle(.plain)
-                    .padding(.vertical, 7).padding(.horizontal, 10)
+                    .padding(.vertical, 8).padding(.horizontal, 10)
             }
             .background(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(Vibe.Palette.surface2(scheme))
-                    .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous)
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Vibe.Palette.surface(scheme))
+                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .strokeBorder(Vibe.Palette.hairline(scheme), lineWidth: 1))
             )
-            .frame(maxWidth: .infinity)
-            Button(action: onDelete) {
-                Image(systemName: "minus.circle.fill")
-                    .font(.system(size: 17))
-                    .foregroundStyle(Vibe.Palette.error.opacity(0.85))
-            }
-            .buttonStyle(.plain)
-            .frame(width: 28)
         }
+        .padding(10)
+        .frame(maxWidth: .infinity, minHeight: 82, alignment: .topLeading)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Vibe.Palette.surface2(scheme)))
     }
 }
 
@@ -2531,17 +2545,10 @@ private struct XASRCredit: View {
                 .foregroundStyle(Vibe.Palette.text(scheme))
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 12) {
-                Link(destination: ghURL) {
-                    Text("github.com/Gilgamesh-J/X-ASR")
-                        .font(Vibe.Fonts.mono(11))
-                        .foregroundStyle(Vibe.Palette.accentB)
-                }
-                Link(destination: hfURL) {
-                    Text(l10n.t("about.xasr.repo"))
-                        .font(Vibe.Fonts.mono(11))
-                        .foregroundStyle(Vibe.Palette.accentB)
-                }
+            Link(destination: hfURL) {
+                Text(l10n.t("about.xasr.repo"))
+                    .font(Vibe.Fonts.mono(11))
+                    .foregroundStyle(Vibe.Palette.accentB)
             }
             .padding(.top, 2)
         }

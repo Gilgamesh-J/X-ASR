@@ -77,9 +77,19 @@ struct LLMTab: View {
     // 最近请求(排查)
     @State private var reqLog: [CloudReqLogEntry] = []
     @State private var copiedId: UUID?   // 刚复制成 Issue 的那条(短暂高亮)
-    // 非 nil = 用户想开启润色("cloud"/"local")但当前听写模式冲突,弹窗征询切换。
-    @State private var pendingEnable: String?
     private let logTimer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
+    private enum PolishMode { case off, local, cloud }
+    private struct APIConfigFile: Codable {
+        var version: Int = 1
+        var enabled: Bool
+        var provider: String
+        var baseURL: String
+        var model: String
+        var apiKey: String
+        var temperature: Double
+        var maxTokens: Int
+        var customProviders: [CloudCustomProvider]
+    }
 
     init(s: SettingsState, l10n: L10n, relay: ModelManagerRelay) {
         self.s = s; self.l10n = l10n
@@ -109,40 +119,49 @@ struct LLMTab: View {
         cfg.activeTemplate = live.activeTemplate
         s.applyCloud(cfg)
     }
-    private func setEnabled(_ on: Bool) {
+    private var polishMode: PolishMode {
+        if s.refiner { return .local }
+        if cfg.enabled { return .cloud }
+        return .off
+    }
+    private func setCloudEnabled(_ on: Bool) {
         cfg.enabled = on
-        if on, s.refiner { s.applyRefiner(false) }   // 云端 ⟂ 本地:开云端 → 关本地
         commit()
     }
-    /// 本地润色开启(含云端 ⟂ 本地互斥)。
-    private func enableLocal() {
-        if cfg.enabled { cfg.enabled = false; commit() }   // 开本地 → 关云端
-        s.applyRefiner(true)
+    private func setLocalEnabled(_ on: Bool) {
+        s.applyRefiner(on)
     }
-
-    // ===== 开启润色:若当前听写模式与「说完插入」冲突,先弹窗征询切换 =====
-    private func requestEnable(_ which: String) {
-        if s.insert == "paste" { doEnable(which) }   // 不冲突,直接开
-        else { pendingEnable = which }               // 冲突 → 弹窗
+    private func activateLocalMode() {
+        if cfg.enabled { setCloudEnabled(false) }
+        if !s.refiner { setLocalEnabled(true) }
     }
-    private func doEnable(_ which: String) {
-        if which == "cloud" { setEnabled(true) } else { enableLocal() }
+    private func activateCloudMode() {
+        if s.refiner { setLocalEnabled(false) }
+        if !cfg.enabled { setCloudEnabled(true) }
     }
-    /// 弹窗点「切换并开启」:先切到说完插入,再开启对应润色。
-    private func confirmPendingEnable() {
-        guard let which = pendingEnable else { return }
-        s.applyInsert("paste")
-        doEnable(which)
-        pendingEnable = nil
+    private func deactivateAllPolish() {
+        if s.refiner { setLocalEnabled(false) }
+        if cfg.enabled { setCloudEnabled(false) }
+    }
+    private func setEnhancementEnabled(_ on: Bool) {
+        guard s.refiner else { return }
+        setCloudEnabled(on)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(l10n.t("llm.sec.local")).sectionLabel(scheme)
-            localCard
+            Text("AI 润色模式").sectionLabel(scheme)
+            modeCard
 
-            Text(l10n.t("llm.sec.cloud")).sectionLabel(scheme)
-            cloudCard
+            if polishMode == .local {
+                Text("本地润色").sectionLabel(scheme)
+                localCard
+            }
+
+            if polishMode == .cloud || polishMode == .local {
+                Text(s.refiner ? "智能增强" : "AI 润色").sectionLabel(scheme)
+                cloudCard
+            }
 
             if cfg.enabled {
                 Text(l10n.t("llm.sec.requests")).sectionLabel(scheme)
@@ -162,14 +181,43 @@ struct LLMTab: View {
         }
         .onAppear { reqLog = s.cloudRecentRequests() }
         .onReceive(logTimer) { _ in if cfg.enabled { reqLog = s.cloudRecentRequests() } }
-        .alert(l10n.t("llm.enable.conflict.title"),
-               isPresented: Binding(get: { pendingEnable != nil },
-                                    set: { if !$0 { pendingEnable = nil } })) {
-            Button(l10n.t("llm.enable.conflict.switch")) { confirmPendingEnable() }
-            Button(l10n.t("llm.cancel"), role: .cancel) { pendingEnable = nil }
-        } message: {
-            Text(l10n.t("llm.enable.conflict.msg"))
+    }
+
+    private var modeCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                polishModeButton(
+                    title: "本地润色",
+                    help: nil,
+                    active: polishMode == .local
+                ) {
+                    polishMode == .local ? deactivateAllPolish() : activateLocalMode()
+                }
+                polishModeButton(
+                    title: "AI 润色",
+                    help: nil,
+                    active: polishMode == .cloud
+                ) {
+                    polishMode == .cloud ? deactivateAllPolish() : activateCloudMode()
+                }
+            }
+            if polishMode == .local {
+                HStack(alignment: .center, spacing: 10) {
+                    HStack(spacing: 8) {
+                        Text("智能增强")
+                            .font(Vibe.Fonts.ui(13.5, weight: .semibold))
+                            .foregroundStyle(Vibe.Palette.text(scheme))
+                        recommendationBadge
+                    }
+                    Spacer()
+                    VibeToggle(on: Binding(get: { cfg.enabled }, set: { setEnhancementEnabled($0) }))
+                }
+                .padding(.top, 2)
+            }
         }
+        .padding(20)
+        .background(RoundedRectangle(cornerRadius: 16).fill(Vibe.Palette.surface2(scheme))
+            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Vibe.Palette.hairline(scheme))))
     }
 
     // ===== 本地大模型卡(Beta + 在线下载)=====
@@ -182,30 +230,15 @@ struct LLMTab: View {
                             .foregroundStyle(Vibe.Palette.text(scheme))
                         betaBadge
                     }
-                    Text(l10n.t("llm.local.desc"))
-                        .font(Vibe.Fonts.ui(12.5)).foregroundStyle(Vibe.Palette.textMuted(scheme))
-                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer()
-                #if arch(arm64)
-                VibeToggle(on: Binding(get: { s.refiner }, set: { on in
-                    if on { requestEnable("local") } else { s.applyRefiner(false) }
-                }))
-                #else
-                // Intel 不支持本地润色 → 灰显不可开,引导用云端。
-                Text(l10n.t("llm.local.aschip"))
-                    .font(Vibe.Fonts.ui(11.5, weight: .medium)).foregroundStyle(Vibe.Palette.textMuted(scheme))
-                    .padding(.horizontal, 10).padding(.vertical, 5)
-                    .background(Capsule().fill(Color.white.opacity(0.06)))
-                #endif
+                statusPill("已作为主模式")
             }
 
             #if arch(arm64)
-            if s.refiner {
-                Rectangle().fill(Vibe.Palette.hairline(scheme)).frame(height: 1).padding(.top, 14)
-                localStatus.padding(.top, 14)
-                refinerSourceLine.padding(.top, 12)
-            }
+            Rectangle().fill(Vibe.Palette.hairline(scheme)).frame(height: 1).padding(.top, 14)
+            localStatus.padding(.top, 14)
+            refinerSourceLine.padding(.top, 12)
             #endif
         }
         .padding(20)
@@ -291,19 +324,18 @@ struct LLMTab: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(l10n.t("llm.cloud.title")).font(Vibe.Fonts.ui(15.5, weight: .semibold))
-                        .foregroundStyle(Vibe.Palette.text(scheme))
-                    Text(l10n.t("llm.cloud.desc"))
-                        .font(Vibe.Fonts.ui(12.5)).foregroundStyle(Vibe.Palette.textMuted(scheme))
+                    HStack(spacing: 8) {
+                        Text(s.refiner ? "智能增强" : "AI 润色").font(Vibe.Fonts.ui(15.5, weight: .semibold))
+                            .foregroundStyle(Vibe.Palette.text(scheme))
+                        if s.refiner { recommendationBadge }
+                    }
                 }
                 Spacer()
-                VibeToggle(on: Binding(get: { cfg.enabled }, set: { on in
-                    if on { requestEnable("cloud") } else { setEnabled(false) }
-                }))
+                statusPill(cfg.enabled ? "已开启" : "未开启")
             }
-            .padding(.bottom, cfg.enabled ? 14 : 0)
+            .padding(.bottom, 14)
 
-            if cfg.enabled {
+            if cfg.enabled || s.refiner {
                 profilesBar
                 // 服务商 + 模型
                 HStack(spacing: 16) {
@@ -431,8 +463,17 @@ struct LLMTab: View {
     // ===== 我的配置栏(保存/一键切换)=====
     private var profilesBar: some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text(l10n.t("llm.profiles.hint"))
-                .font(Vibe.Fonts.ui(12)).foregroundStyle(Vibe.Palette.textMuted(scheme))
+            HStack(spacing: 8) {
+                Button(l10n.t("io.export")) { exportAPIConfig() }
+                    .buttonStyle(.plain)
+                    .font(Vibe.Fonts.ui(12))
+                    .foregroundStyle(Color(red: 0.62, green: 0.58, blue: 1))
+                Button(l10n.t("io.import")) { importAPIConfig() }
+                    .buttonStyle(.plain)
+                    .font(Vibe.Fonts.ui(12))
+                    .foregroundStyle(Color(red: 0.62, green: 0.58, blue: 1))
+                Spacer()
+            }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(profiles) { p in profileChip(p) }
@@ -575,6 +616,54 @@ struct LLMTab: View {
         if CloudProvidersUI.isBuiltin(key) { return CloudProvidersUI.localizedLabel(key) }
         return customProviders.first { $0.id == key }?.label ?? (key.isEmpty ? l10n.t("llm.custom") : key)
     }
+    private func polishModeButton(title: String, help: String?, active: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Text(title)
+                        .font(Vibe.Fonts.ui(13.5, weight: .semibold))
+                        .foregroundStyle(active ? .white : Vibe.Palette.text(scheme))
+                    if active {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 15))
+                            .foregroundStyle(.white)
+                    }
+                }
+                if let help, !help.isEmpty {
+                    Text(help)
+                        .font(Vibe.Fonts.ui(11.5))
+                        .foregroundStyle(active ? .white.opacity(0.82) : Vibe.Palette.textMuted(scheme))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(.vertical, 12).padding(.horizontal, 14)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(active ? AnyShapeStyle(Vibe.accentGradient)
+                                 : AnyShapeStyle(Vibe.Palette.surface(scheme)))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(active ? .clear : Vibe.Palette.hairline(scheme), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+    private var recommendationBadge: some View {
+        Text("建议打开")
+            .font(Vibe.Fonts.ui(10.5, weight: .semibold))
+            .foregroundStyle(Color(red: 0.98, green: 0.74, blue: 0.36))
+            .padding(.horizontal, 8).padding(.vertical, 2)
+            .background(Capsule().fill(Color(red: 0.95, green: 0.66, blue: 0.24).opacity(0.16)))
+    }
+    private func statusPill(_ text: String) -> some View {
+        Text(text)
+            .font(Vibe.Fonts.ui(11, weight: .semibold))
+            .foregroundStyle(Vibe.Palette.textMuted(scheme))
+            .padding(.horizontal, 10).padding(.vertical, 5)
+            .background(Capsule().fill(Color.white.opacity(0.06)))
+    }
     /// 把一条请求拼成可直接贴去 issue 的 Markdown(含服务商/模型/输入输出/提示词)。
     private func issueMarkdown(_ e: CloudReqLogEntry) -> String {
         """
@@ -707,6 +796,34 @@ struct LLMTab: View {
         if editingProfileId == id { editingProfileId = nil }
         commit()
     }
+    private func exportAPIConfig() {
+        let file = APIConfigFile(enabled: cfg.enabled, provider: cfg.provider, baseURL: cfg.baseURL, model: cfg.model,
+                                 apiKey: cfg.apiKey, temperature: cfg.temperature, maxTokens: cfg.maxTokens,
+                                 customProviders: customProviders)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        guard let data = try? encoder.encode(file),
+              let text = String(data: data, encoding: .utf8) else { return }
+        LexiconIO.export(text, suggestedName: "vibe-api-config.json", json: true)
+    }
+    private func importAPIConfig() {
+        guard let text = LexiconIO.importText(json: true),
+              let data = text.data(using: .utf8),
+              let file = try? JSONDecoder().decode(APIConfigFile.self, from: data) else {
+            showConfigImportError()
+            return
+        }
+        customProviders = file.customProviders
+        cfg.enabled = file.enabled
+        cfg.provider = file.provider
+        cfg.baseURL = file.baseURL
+        cfg.model = file.model
+        cfg.apiKey = file.apiKey
+        cfg.temperature = file.temperature
+        cfg.maxTokens = file.maxTokens
+        test = nil
+        commit()
+    }
     private func runTest() {
         testing = true; test = nil
         let c = cfg
@@ -715,6 +832,13 @@ struct LLMTab: View {
             await MainActor.run { test = r; testing = false }
             _ = c
         }
+    }
+    private func showConfigImportError() {
+        let alert = NSAlert()
+        alert.messageText = "导入失败"
+        alert.informativeText = "这不是有效的 API 配置文件。"
+        alert.addButton(withTitle: l10n.t("llm.ok"))
+        alert.runModal()
     }
     // ===== 复用小组件 =====
     private func fieldCol<C: View>(_ label: String, @ViewBuilder _ content: () -> C) -> some View {

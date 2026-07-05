@@ -118,13 +118,16 @@ enum Paste {
 /// target apps coalesce/drop multi-character synthetic events, so only part of the
 /// recognized text landed. This posts ONE character per key event on a dedicated
 /// serial queue with a small inter-event delay, and tracks what has actually been
-/// typed (`committed`, mutated only on the queue) so each partial diffs against the
-/// real on-screen state: backspace the diverged tail, type the new tail. Converges
-/// to the final text even when partials revise.
+/// typed (`committed`, mutated only on the queue). Updates are applied as the
+/// smallest set of local patches we can safely perform with synthetic keys:
+/// preserve the common prefix/suffix, compute a minimal edit script inside the
+/// changed middle span, then apply each changed hunk independently while always
+/// restoring the caret to the end. This avoids deleting a huge middle block when
+/// refine only made several small edits in different places.
 final class StreamingInserter {
     private let q = DispatchQueue(label: "com.xasr.vibexasr.inserter")
     private let src = CGEventSource(stateID: .hidSystemState)
-    private let charDelay: useconds_t = 11_000   // 11 ms between events (reliability > speed)
+    private let keyDelay: useconds_t = 5_000
     private var committed: [Character] = []      // touched only on `q`
 
     /// Make the focused app's text match `text` (diff vs already-typed).
@@ -132,12 +135,23 @@ final class StreamingInserter {
         let target = Array(text)
         q.async { [weak self] in
             guard let self else { return }
-            var common = 0
-            let cap = min(self.committed.count, target.count)
-            while common < cap && self.committed[common] == target[common] { common += 1 }
-            let del = self.committed.count - common
-            if del > 0 { self.postBackspaces(del) }
-            if common < target.count { self.postChars(Array(target[common...])) }
+            let patch = Self.makePatch(from: self.committed, to: target)
+            self.apply(patch)
+            self.committed = target
+        }
+    }
+
+    /// Replace everything after a stable prefix in one shot: select the old tail,
+    /// then paste the new tail. Used by local refine window flushes to avoid
+    /// over-smart diffing when only the latest chunk window should be rewritten.
+    func replaceFromPrefixCount(_ prefixCount: Int, to text: String) {
+        let target = Array(text)
+        q.async { [weak self] in
+            guard let self else { return }
+            let keep = min(prefixCount, min(self.committed.count, target.count))
+            let oldTailCount = max(self.committed.count - keep, 0)
+            let newTail = keep < target.count ? String(target[keep...]) : ""
+            self.applyTailReplacement(deleteCount: oldTailCount, insertText: newTail)
             self.committed = target
         }
     }
@@ -147,11 +161,176 @@ final class StreamingInserter {
         q.async { [weak self] in self?.committed = [] }
     }
 
+    private struct Hunk {
+        let leftMoves: Int
+        let deleteCount: Int
+        let insertChars: [Character]
+        let rightMoves: Int
+    }
+
+    private struct Patch {
+        let hunks: [Hunk]
+    }
+
+    private enum DiffOp {
+        case keep
+        case delete
+        case insert(Character)
+    }
+
+    /// Build the smallest practical set of in-place edits. We still trim the
+    /// unchanged prefix/suffix first, but inside the changed middle region we use
+    /// an LCS-based diff so separated edits become separated hunks instead of one
+    /// giant replace.
+    private static func makePatch(from old: [Character], to new: [Character]) -> Patch {
+        var prefix = 0
+        let prefixCap = min(old.count, new.count)
+        while prefix < prefixCap && old[prefix] == new[prefix] { prefix += 1 }
+
+        var suffix = 0
+        let oldRemain = old.count - prefix
+        let newRemain = new.count - prefix
+        while suffix < oldRemain && suffix < newRemain &&
+              old[old.count - 1 - suffix] == new[new.count - 1 - suffix] {
+            suffix += 1
+        }
+
+        let oldMiddleEnd = old.count - suffix
+        let newMiddleEnd = new.count - suffix
+        let oldMiddle = prefix < oldMiddleEnd ? Array(old[prefix..<oldMiddleEnd]) : []
+        let newMiddle = prefix < newMiddleEnd ? Array(new[prefix..<newMiddleEnd]) : []
+        guard !oldMiddle.isEmpty || !newMiddle.isEmpty else { return Patch(hunks: []) }
+
+        let ops = diffOps(from: oldMiddle, to: newMiddle)
+        var hunks: [Hunk] = []
+        var oldPos = 0
+        var newPos = 0
+        var hunkOldStart: Int?
+        var hunkNewStart: Int?
+        var deleteCount = 0
+        var insertChars: [Character] = []
+
+        func flushHunk() {
+            guard let oldStart = hunkOldStart, let newStart = hunkNewStart else { return }
+            let globalNewEnd = prefix + newPos
+            let rightMoves = new.count - globalNewEnd
+            _ = oldStart
+            _ = newStart
+            hunks.append(Hunk(
+                leftMoves: rightMoves,
+                deleteCount: deleteCount,
+                insertChars: insertChars,
+                rightMoves: rightMoves
+            ))
+            hunkOldStart = nil
+            hunkNewStart = nil
+            deleteCount = 0
+            insertChars.removeAll(keepingCapacity: true)
+        }
+
+        for op in ops {
+            switch op {
+            case .keep:
+                flushHunk()
+                oldPos += 1
+                newPos += 1
+            case .delete:
+                if hunkOldStart == nil {
+                    hunkOldStart = oldPos
+                    hunkNewStart = newPos
+                }
+                oldPos += 1
+                deleteCount += 1
+            case .insert(let ch):
+                if hunkOldStart == nil {
+                    hunkOldStart = oldPos
+                    hunkNewStart = newPos
+                }
+                newPos += 1
+                insertChars.append(ch)
+            }
+        }
+        flushHunk()
+        return Patch(hunks: hunks)
+    }
+
+    private static func diffOps(from old: [Character], to new: [Character]) -> [DiffOp] {
+        let m = old.count
+        let n = new.count
+        if m == 0 { return new.map(DiffOp.insert) }
+        if n == 0 { return Array(repeating: .delete, count: m) }
+
+        var dp = Array(repeating: Array(repeating: 0, count: n + 1), count: m + 1)
+        var i = m - 1
+        while i >= 0 {
+            var j = n - 1
+            while j >= 0 {
+                if old[i] == new[j] {
+                    dp[i][j] = dp[i + 1][j + 1] + 1
+                } else {
+                    dp[i][j] = max(dp[i + 1][j], dp[i][j + 1])
+                }
+                j -= 1
+            }
+            if i == 0 { break }
+            i -= 1
+        }
+
+        var out: [DiffOp] = []
+        var oi = 0
+        var nj = 0
+        while oi < m && nj < n {
+            if old[oi] == new[nj] {
+                out.append(.keep)
+                oi += 1
+                nj += 1
+            } else if dp[oi + 1][nj] >= dp[oi][nj + 1] {
+                out.append(.delete)
+                oi += 1
+            } else {
+                out.append(.insert(new[nj]))
+                nj += 1
+            }
+        }
+        while oi < m {
+            out.append(.delete)
+            oi += 1
+        }
+        while nj < n {
+            out.append(.insert(new[nj]))
+            nj += 1
+        }
+        return out
+    }
+
     // CRITICAL: clear modifier flags on every synthesized event. Push-to-talk holds
     // a modifier hotkey (e.g. Right ⌘); without this, each char becomes ⌘+char (a
     // shortcut the app eats) instead of text — the "only part inserted" bug. Setting
     // flags=[] makes the unicode payload land as plain insertText regardless of what
     // modifier is physically held.
+    private func apply(_ patch: Patch) {
+        for hunk in patch.hunks.reversed() {
+            if hunk.leftMoves > 0 { postArrow(keyCode: 123, count: hunk.leftMoves) }
+            if hunk.deleteCount > 0 { postBackspaces(hunk.deleteCount) }
+            if !hunk.insertChars.isEmpty { postChars(hunk.insertChars) }
+            if hunk.rightMoves > 0 { postArrow(keyCode: 124, count: hunk.rightMoves) }
+        }
+    }
+
+    private func applyTailReplacement(deleteCount: Int, insertText: String) {
+        guard deleteCount > 0 || !insertText.isEmpty else { return }
+        if deleteCount > 0 {
+            postArrow(keyCode: 123, count: deleteCount, shift: true)
+            usleep(keyDelay * 2)
+            postDeleteSelection()
+            usleep(keyDelay * 2)
+        }
+        if !insertText.isEmpty {
+            Paste.insert(insertText, restore: true, restoreDelay: 0.2)
+            usleep(25_000)
+        }
+    }
+
     private func postBackspaces(_ n: Int) {
         for _ in 0..<n {
             if let d = CGEvent(keyboardEventSource: src, virtualKey: 51, keyDown: true) {
@@ -160,7 +339,7 @@ final class StreamingInserter {
             if let u = CGEvent(keyboardEventSource: src, virtualKey: 51, keyDown: false) {
                 u.flags = []; u.post(tap: .cghidEventTap)
             }
-            usleep(charDelay)
+            usleep(keyDelay)
         }
     }
 
@@ -177,7 +356,38 @@ final class StreamingInserter {
                 up.flags = []
                 up.post(tap: .cghidEventTap)
             }
-            usleep(charDelay)
+            usleep(keyDelay)
         }
+    }
+
+    private func postArrow(keyCode: CGKeyCode, count: Int) {
+        postArrow(keyCode: keyCode, count: count, shift: false)
+    }
+
+    private func postArrow(keyCode: CGKeyCode, count: Int, shift: Bool) {
+        guard count > 0 else { return }
+        for _ in 0..<count {
+            if let d = CGEvent(keyboardEventSource: src, virtualKey: keyCode, keyDown: true) {
+                d.flags = shift ? .maskShift : []
+                d.post(tap: .cghidEventTap)
+            }
+            if let u = CGEvent(keyboardEventSource: src, virtualKey: keyCode, keyDown: false) {
+                u.flags = shift ? .maskShift : []
+                u.post(tap: .cghidEventTap)
+            }
+            usleep(keyDelay)
+        }
+    }
+
+    private func postDeleteSelection() {
+        if let d = CGEvent(keyboardEventSource: src, virtualKey: 51, keyDown: true) {
+            d.flags = []
+            d.post(tap: .cghidEventTap)
+        }
+        if let u = CGEvent(keyboardEventSource: src, virtualKey: 51, keyDown: false) {
+            u.flags = []
+            u.post(tap: .cghidEventTap)
+        }
+        usleep(keyDelay)
     }
 }

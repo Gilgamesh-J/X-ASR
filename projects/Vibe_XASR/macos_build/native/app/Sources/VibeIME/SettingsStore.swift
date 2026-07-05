@@ -65,12 +65,14 @@ final class SettingsStore: L10nPersistence {
         static let hotwordsEnabled = "hotwordsEnabled"
         static let hotwordsText = "hotwordsText"
         static let hotwordsScore = "hotwordsScore"
+        static let hotwordDomainIDsCSV = "hotwordDomainIDsCSV"
         static let replacementsEnabled = "replacementsEnabled"
         static let replacementsText = "replacementsText"
         static let pinyinFuzzyEnabled = "pinyinFuzzyEnabled"
         static let itnEnabled = "itnEnabled"
         static let defillerEnabled = "defillerEnabled"
         static let refinerEnabled = "refinerEnabled"
+        static let refineChunkChars = "refineChunkChars"
         // 云端大模型
         static let cloudEnabled = "cloudEnabled"
         static let cloudProvider = "cloudProvider"
@@ -114,22 +116,23 @@ final class SettingsStore: L10nPersistence {
             Key.appLanguage: "auto",
             Key.padWriteEnabled: true,        // 听写写入便笺,默认开
             Key.historyEnabled: true,
-            Key.insertMethod: "paste",   // default to one-shot paste on release
+            Key.insertMethod: "type",    // unified mode: live stream into caret
             Key.clipboardOverwrite: false,
             Key.launchAtLogin: true,          // 开机自启,默认开
             Key.cueEnabled: true,             // subtle cue sound, ON by default
             Key.cueTheme: "chime",            // default timbre
             Key.cueVolume: "low",             // cue volume: low (default) | med | high
-            Key.hotwordsEnabled: false,       // hotword biasing OFF by default (zero regression)
-            // Pre-populated examples: common AI names/terms users can keep or swap out.
-            Key.hotwordsText: "贾扬清\n沈向洋\nPyTorch\nOpenAI\ntransformer\n向量数据库",
+            Key.hotwordsEnabled: true,        // default hotword biasing ON for domain packs
+            Key.hotwordsText: "",
             Key.hotwordsScore: 5.0,           // "mid" boost (CJK; English auto-capped ≤2.5)
+            Key.hotwordDomainIDsCSV: "",
             Key.replacementsEnabled: false,   // post-recognition corrections OFF by default
             Key.replacementsText: "",
             Key.pinyinFuzzyEnabled: true,     // homophone (pinyin) correction ON by default
             Key.itnEnabled: true,             // number normalization (ITN) ON by default
             Key.defillerEnabled: true,        // filler-word removal (嗯/呃/repeats) ON by default
             Key.refinerEnabled: false,        // AI 润色(Beta) OFF by default — zero regression until opted in
+            Key.refineChunkChars: 60,         // AI refine auto-segmentation threshold
             Key.cloudEnabled: false,          // 云端大模型 OFF by default(需用户配 Key)
             Key.cloudProvider: "openai",
             Key.cloudBaseURL: "https://api.openai.com/v1",
@@ -149,6 +152,10 @@ final class SettingsStore: L10nPersistence {
             Key.apiAllowLAN: false,           // localhost-only unless explicitly allowed
             Key.apiPort: 8473,                // default port for the local share API (uncommon → fewer conflicts)
         ])
+        let legacyMode = defaults.string(forKey: Key.insertMethod)
+        if legacyMode == "paste" || legacyMode == "oncall" {
+            defaults.set("type", forKey: Key.insertMethod)
+        }
     }
 
     // MARK: Dock icon
@@ -329,6 +336,24 @@ final class SettingsStore: L10nPersistence {
         set { defaults.set(newValue, forKey: Key.hotwordsScore) }
     }
 
+    /// Comma-separated selected default hotword domains.
+    var hotwordDomainIDsCSV: String {
+        get { defaults.string(forKey: Key.hotwordDomainIDsCSV) ?? "" }
+        set { defaults.set(newValue, forKey: Key.hotwordDomainIDsCSV); post(SettingsStore.changed) }
+    }
+
+    var hotwordDomainIDs: [String] {
+        get {
+            hotwordDomainIDsCSV
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
+        }
+        set {
+            hotwordDomainIDsCSV = newValue.joined(separator: ",")
+        }
+    }
+
     /// Commit the current hotword text + score and rebuild the engine so the new
     /// list takes effect. Call after editing the list ("Save & apply").
     func commitHotwords() { post(SettingsStore.engineConfigChanged) }
@@ -359,6 +384,18 @@ final class SettingsStore: L10nPersistence {
     var refinerEnabled: Bool {
         get { defaults.bool(forKey: Key.refinerEnabled) }
         set { defaults.set(newValue, forKey: Key.refinerEnabled); post(SettingsStore.changed) }
+    }
+
+    /// Auto-segment AI refine chunks when a finalized fragment grows too long.
+    var refineChunkChars: Int {
+        get {
+            let v = defaults.integer(forKey: Key.refineChunkChars)
+            return v > 0 ? v : 60
+        }
+        set {
+            defaults.set(max(20, newValue), forKey: Key.refineChunkChars)
+            post(SettingsStore.changed)
+        }
     }
 
     // MARK: 云端大模型(Cloud LLM)

@@ -31,6 +31,16 @@ B="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 APP_SRC="$B/native/app"
 DIST="$B/native/dist"
 APP="$DIST/Vibe XASR.app"
+LLAMA_INC="$B/native/llama/dist/include"
+LLAMA_LIB="$B/native/llama/dist/lib"
+
+# Local AI refiner is compiled in only when VIBE_LLAMA is set before SwiftPM
+# loads Package.swift. Auto-enable it when the staged llama dist exists, so the
+# app the user installs actually contains the local refiner backend.
+if [ -z "${VIBE_LLAMA:-}" ] && [ -f "$LLAMA_INC/llama.h" ] && [ -f "$LLAMA_LIB/libllama.0.dylib" ]; then
+  export VIBE_LLAMA=1
+  echo "   auto-enable local AI refiner (found native/llama/dist)"
+fi
 
 SHERPA_LIB="$B/native/sherpa/dist/sherpa-onnx-v1.13.2-osx-universal2-shared/lib"
 # libllama 已编为 universal(arm64 + x86_64,含 Metal),故无论是否 VIBE_LLAMA 都打 universal2。
@@ -72,7 +82,6 @@ ln -sf "libonnxruntime.1.24.4.dylib" "$APP/Contents/Frameworks/libonnxruntime.dy
 # AI 润色(Beta):libllama + ggml(versioned .0 — exec/libllama 依赖 @rpath/lib*.0.dylib;
 # install name 全是 @rpath,配合 exec 的 @executable_path/../Frameworks 即可解析)。
 if [ -n "${VIBE_LLAMA:-}" ]; then
-  LLAMA_LIB="$B/native/llama/dist/lib"
   for d in libllama.0 libggml.0 libggml-base.0 libggml-cpu.0 libggml-blas.0 libggml-metal.0; do
     cp "$LLAMA_LIB/$d.dylib" "$APP/Contents/Frameworks/" && echo "   + $d.dylib"
   done

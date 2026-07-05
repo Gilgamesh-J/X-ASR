@@ -48,7 +48,18 @@ final class PinyinNormalizer {
     /// Set the active dictionary words. Only multi-char, all-CJK words are used —
     /// English words and single chars are skipped. Empty list disables it.
     func setWords(_ raw: [String]) {
-        words = raw
+        words = preparedWords(raw)
+    }
+
+    /// One-shot normalization against a temporary word list. Used for the final
+    /// hotword pass so scenario defaults + custom words can still apply even when
+    /// the live pinyin toggle is off.
+    func normalize(_ text: String, withRawWords raw: [String]) -> String {
+        normalize(text, prepared: preparedWords(raw))
+    }
+
+    private func preparedWords(_ raw: [String]) -> [(word: [Character], reads: [Set<String>])] {
+        raw
             .map { Array($0) }
             .filter { chars in chars.count >= minLen && chars.allSatisfy { isCJK($0) } }
             .map { chars in (word: chars, reads: chars.map { self.fuzzySet($0) }) }
@@ -88,13 +99,18 @@ final class PinyinNormalizer {
     /// Rewrite homophone runs into their dictionary spelling.
     func normalize(_ text: String) -> String {
         guard isActive else { return text }
+        return normalize(text, prepared: words)
+    }
+
+    private func normalize(_ text: String, prepared: [(word: [Character], reads: [Set<String>])]) -> String {
+        guard loaded, !prepared.isEmpty else { return text }
         let chars = Array(text)
         var out: [Character] = []
         out.reserveCapacity(chars.count)
         var i = 0
         while i < chars.count {
             var matched = false
-            for (word, reads) in words {     // longest first
+            for (word, reads) in prepared {  // longest first
                 let L = word.count
                 guard i + L <= chars.count else { continue }
                 if word == Array(chars[i..<i+L]) { continue }   // already exact → leave it

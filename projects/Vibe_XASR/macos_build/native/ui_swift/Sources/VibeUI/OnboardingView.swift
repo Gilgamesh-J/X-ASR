@@ -1,9 +1,9 @@
 // ============================================================
 //  Vibe XASR — First-run onboarding wizard
 //  Faithful to design-requirements §5: dark-default stepped flow with a
-//  progress indicator + back/skip. Six steps:
-//    1 Welcome · 2 Microphone · 3 Accessibility · 4 Input Monitoring ·
-//    5 Choose hotkey · 6 Done.
+//  progress indicator + back/skip. Seven steps:
+//    1 Try it · 2 Domains · 3 Accessibility · 4 Input Monitoring ·
+//    5 Choose hotkey · 6 Cloud AI (optional) · 7 Done.
 //  Each step: icon + title + 1–2 lines + primary button + live ✓/✗ status.
 //
 //  Platform calls (request mic / accessibility / input-monitoring, open the
@@ -58,6 +58,11 @@ public protocol OnboardingBridge: AnyObject {
     var hotkeyModifierOnly: Bool { get }
     func setHotkey(keyCode: Int, modifierOnly: Bool)
 
+    // Default hotword domains.
+    var hotwordDomainIDs: [String] { get set }
+    func applyHotwordDomains(_ ids: [String])
+    var cloudConfig: CloudConfigDTO { get set }
+
     // Lifecycle. `onboardingWindowDidAppear/Disappear` let the host suspend the
     // global hotkey while the wizard is open (the try uses an on-screen button).
     func onboardingWindowDidAppear()
@@ -69,29 +74,36 @@ public extension OnboardingBridge {
     // Default no-ops so older hosts still compile; the real host overrides them.
     func onboardingWindowDidAppear() {}
     func onboardingWindowDidDisappear() {}
+    var hotwordDomainIDs: [String] { get { [] } set {} }
+    func applyHotwordDomains(_ ids: [String]) {}
+    var cloudConfig: CloudConfigDTO { get { .init() } set {} }
 }
 
 // MARK: - Step model
 
 private enum OnboStep: Int, CaseIterable {
     // try-first flow: taste the product (mic only) BEFORE the permission asks.
-    case tryIt, accessibility, input, hotkey, done
+    case tryIt, domains, accessibility, input, hotkey, cloud, done
 
     var title: String {
         switch self {
-        case .tryIt:         return "按住下面的按钮,说一句话试试"
-        case .accessibility: return "在任意 App 里用"
-        case .input:         return "输入监控权限"
-        case .hotkey:        return "选择触发键"
-        case .done:          return "全部就绪"
+        case .tryIt:         return "先试一句"
+        case .domains:       return "选择你的常用场景"
+        case .accessibility: return "允许写入任意应用"
+        case .input:         return "允许检测触发键"
+        case .hotkey:        return "设置语音输入热键"
+        case .cloud:         return "可选：接入云端 AI"
+        case .done:          return "准备开始"
         }
     }
     var icon: String {
         switch self {
         case .tryIt:         return "🎙"
+        case .domains:       return "📚"
         case .accessibility: return "♿️"
         case .input:         return "⌨️"
         case .hotkey:        return "⚡️"
+        case .cloud:         return "☁️"
         case .done:          return "🎉"
         }
     }
@@ -117,6 +129,9 @@ public struct OnboardingView: View {
     // Hotkey selection (seeded from the store via the bridge).
     @State private var hotkeyCode: Int = 54
     @State private var hotkeyIsModifier = true
+    @State private var selectedDomainIDs: Set<String>
+    @State private var cloudConfig: CloudConfigDTO
+    @State private var cloudError = ""
 
     /// 0.7 s poll while the window is open.
     private let pollTimer = Timer.publish(every: 0.7, on: .main, in: .common).autoconnect()
@@ -126,6 +141,8 @@ public struct OnboardingView: View {
         self.tryModel = bridge.tryModel
         _hotkeyCode = State(initialValue: bridge.hotkeyKeyCode)
         _hotkeyIsModifier = State(initialValue: bridge.hotkeyModifierOnly)
+        _selectedDomainIDs = State(initialValue: Set(bridge.hotwordDomainIDs))
+        _cloudConfig = State(initialValue: Self.seedCloudConfig(from: bridge.cloudConfig))
     }
 
     public var body: some View {
@@ -176,9 +193,11 @@ public struct OnboardingView: View {
     private var content: some View {
         switch step {
         case .tryIt:         tryStep
+        case .domains:       domainsStep
         case .accessibility: accessibilityStep
         case .input:         inputStep
         case .hotkey:        hotkeyStep
+        case .cloud:         cloudStep
         case .done:          doneStep
         }
     }
@@ -240,6 +259,45 @@ public struct OnboardingView: View {
         .frame(maxWidth: .infinity)
     }
 
+    private var domainsStep: some View {
+        VStack(spacing: 14) {
+            Spacer(minLength: 0)
+            Text("先选一个最常用的场景，Vibe XASR 会优先按你的使用领域优化识别结果。")
+                .font(Vibe.Fonts.ui(13))
+                .foregroundStyle(Vibe.Palette.textMuted(scheme))
+                .multilineTextAlignment(.center)
+            ScrollView {
+                let columns = [GridItem(.flexible(minimum: 0, maximum: .infinity), spacing: 10),
+                               GridItem(.flexible(minimum: 0, maximum: .infinity), spacing: 10)]
+                LazyVGrid(columns: columns, alignment: .leading, spacing: 10) {
+                    ForEach(HotwordDomainCatalog.all) { domain in
+                        DomainRow(
+                            name: domain.name,
+                            summary: domain.summary,
+                            selected: selectedDomainIDs.contains(domain.id)
+                        ) {
+                            toggleDomain(domain.id)
+                        }
+                    }
+                }
+                .padding(.horizontal, 2)
+                .padding(.vertical, 2)
+            }
+            .frame(maxWidth: 472, maxHeight: 220)
+            OnboPrimaryButton(title: "应用选择并继续") {
+                bridge.applyHotwordDomains(Array(selectedDomainIDs))
+                advance()
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity)
+        .onAppear {
+            if selectedDomainIDs.isEmpty, let first = HotwordDomainCatalog.all.first {
+                selectedDomainIDs = [first.id]
+            }
+        }
+    }
+
     /// Read-only streaming transcript: shows the placeholder, the live partial
     /// while holding, or the finalized text after release. A tiny waveform rides
     /// in the corner while listening.
@@ -260,7 +318,7 @@ public struct OnboardingView: View {
 
             ScrollView {
                 Text(hasText ? tryModel.partialText
-                             : (listening ? "在听…" : "松开按钮后,识别到的文字会留在这里"))
+                             : (listening ? "正在聆听…" : "松开按钮后，识别到的文字会显示在这里"))
                     .font(Vibe.Fonts.mono(15))
                     .foregroundStyle(hasText ? Vibe.Palette.text(scheme)
                                              : Vibe.Palette.textMuted(scheme))
@@ -287,7 +345,7 @@ public struct OnboardingView: View {
     /// so a 0-distance DragGesture is used: onChanged starts the try the first
     /// frame the finger is down; onEnded releases + finalizes.
     private var holdToTalkButton: some View {
-        let label = holding ? "正在听… 松开结束" : "按住说话"
+        let label = holding ? "正在聆听，松开结束" : "按住说话"
         return Text(label)
             .font(Vibe.Fonts.ui(16, weight: .semibold))
             .foregroundStyle(.white)
@@ -330,7 +388,7 @@ public struct OnboardingView: View {
         switch micState {
         case .denied:
             Button { bridge.openMicrophoneSettings() } label: {
-                Text("麦克风被拒,去开启 ›")
+                Text("麦克风未开启，去授权 ›")
                     .font(Vibe.Fonts.ui(12.5, weight: .semibold))
                     .foregroundStyle(Vibe.Palette.error)
             }
@@ -344,8 +402,8 @@ public struct OnboardingView: View {
     // 2 — Accessibility (frame: "to dictate into ANY app you need this")
     private var accessibilityStep: some View {
         stepScaffold(.accessibility,
-            lines: ["刚才的文字只留在本窗口。想把语音输入到任意 App,",
-                    "需要「辅助功能」权限,识别结果才能粘贴到当前输入框。"],
+            lines: ["刚才的试说内容只会留在这个窗口里。",
+                    "想把语音结果写进任意 App，需要开启「辅助功能」权限。"],
             status: { PermStatus(granted: a11yGranted) },
             action: {
                 if a11yGranted {
@@ -361,8 +419,8 @@ public struct OnboardingView: View {
     // 3 — Input Monitoring
     private var inputStep: some View {
         stepScaffold(.input,
-            lines: ["检测你按下的触发热键需要「输入监控」权限。",
-                    "授权后,按住热键即可随时开始说话。"],
+            lines: ["Vibe XASR 需要「输入监控」权限来识别你按下的热键。",
+                    "开启后，就可以在任意位置按住热键开始说话。"],
             status: { PermStatus(granted: inputGranted) },
             action: {
                 if inputGranted {
@@ -378,13 +436,14 @@ public struct OnboardingView: View {
     // 4 — Choose hotkey
     private var hotkeyStep: some View {
         stepScaffold(.hotkey,
-            lines: ["点「录制热键」,然后按下你想用来说话的键。",
-                    "默认是右 ⌘ —— 一个按住也不会误触的键。"],
+            lines: ["这里设置你的语音输入触发键。",
+                    "默认是右 ⌘，第一次使用时就可以直接改成自己顺手的按键。"],
             status: {
-                HStack(spacing: 8) {
-                    Text("当前:")
+                HStack(spacing: 10) {
+                    Text("语音输入")
                         .font(Vibe.Fonts.ui(12.5))
                         .foregroundStyle(Vibe.Palette.textMuted(scheme))
+                        .frame(width: 64, alignment: .leading)
                     HotkeyRecorder(keyCode: $hotkeyCode,
                                    isModifier: $hotkeyIsModifier) { code, mod in
                         bridge.setHotkey(keyCode: code, modifierOnly: mod)
@@ -393,9 +452,13 @@ public struct OnboardingView: View {
             },
             action: {
                 VStack(spacing: 8) {
-                    Text("试一下:按住「\(VibeKeycodes.name(hotkeyCode))」说一句话。")
+                    Text("试一下：按住「\(VibeKeycodes.name(hotkeyCode))」说一句话。")
                         .font(Vibe.Fonts.ui(12))
                         .foregroundStyle(Vibe.Palette.accentB)
+                    Text("后续你也可以在设置里随时修改这个热键。")
+                        .font(Vibe.Fonts.ui(11.5))
+                        .foregroundStyle(Vibe.Palette.textMuted(scheme))
+                        .multilineTextAlignment(.center)
                     OnboPrimaryButton(title: "下一步") {
                         bridge.setHotkey(keyCode: hotkeyCode, modifierOnly: hotkeyIsModifier)
                         advance()
@@ -404,17 +467,128 @@ public struct OnboardingView: View {
             })
     }
 
-    // 5 — Done
+    // 5 — Optional cloud AI setup
+    private var cloudStep: some View {
+        VStack(spacing: 14) {
+            Spacer(minLength: 0)
+            Text("如果你希望语音结果进一步整理得更自然、更完整，可以在这里先接入云端 AI。")
+                .font(Vibe.Fonts.ui(13))
+                .foregroundStyle(Vibe.Palette.textMuted(scheme))
+                .multilineTextAlignment(.center)
+            Text("这一步可以跳过。即使现在不配置，后面也能随时在设置里补上。")
+                .font(Vibe.Fonts.ui(12))
+                .foregroundStyle(Vibe.Palette.textMuted(scheme))
+                .multilineTextAlignment(.center)
+
+            VStack(alignment: .leading, spacing: 12) {
+                OnboardingCloudField("服务商") {
+                    Picker("", selection: Binding(
+                        get: { cloudConfig.provider },
+                        set: { applyProvider($0) })) {
+                        ForEach(CloudProvidersUI.all, id: \.key) { provider in
+                            Text(provider.label).tag(provider.key)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                }
+                OnboardingCloudField("Base URL") {
+                    TextField("https://your-proxy.example.com/v1",
+                              text: Binding(
+                                get: { cloudConfig.baseURL },
+                                set: { cloudConfig.baseURL = $0; cloudError = "" }))
+                        .textFieldStyle(.roundedBorder)
+                        .font(Vibe.Fonts.mono(12))
+                }
+                OnboardingCloudField("模型") {
+                    TextField("gpt-4o-mini",
+                              text: Binding(
+                                get: { cloudConfig.model },
+                                set: { cloudConfig.model = $0; cloudError = "" }))
+                        .textFieldStyle(.roundedBorder)
+                        .font(Vibe.Fonts.mono(12))
+                }
+                OnboardingCloudField("API Key") {
+                    SecureField("API Key",
+                                text: Binding(
+                                    get: { cloudConfig.apiKey },
+                                    set: { cloudConfig.apiKey = $0; cloudError = "" }))
+                        .textFieldStyle(.roundedBorder)
+                        .font(Vibe.Fonts.mono(12))
+                }
+            }
+            .frame(maxWidth: 460)
+
+            if !cloudError.isEmpty {
+                Text(cloudError)
+                    .font(Vibe.Fonts.ui(11.5))
+                    .foregroundStyle(Vibe.Palette.error)
+                    .frame(maxWidth: 460, alignment: .leading)
+            }
+
+            HStack(spacing: 10) {
+                OnboPrimaryButton(title: "跳过") {
+                    skipCloud()
+                }
+                OnboPrimaryButton(title: "启用并继续") {
+                    enableCloudAndContinue()
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
     private var doneStep: some View {
         stepScaffold(.done,
-            lines: ["按住「\(VibeKeycodes.name(hotkeyCode))」在任意 App 说话,松开就插入。",
-                    "随时可在菜单栏 →「设置…」里调整。"],
+            lines: ["现在开始，你可以在任意输入框按住「\(VibeKeycodes.name(hotkeyCode))」直接说话。",
+                    "词典、云端 AI 和更多输入设置都可以稍后慢慢完善。"],
             status: { EmptyView() },
             action: {
                 OnboPrimaryButton(title: "完成") {
                     bridge.finishOnboarding()
                 }
             })
+    }
+
+    private func toggleDomain(_ id: String) {
+        if selectedDomainIDs.contains(id) {
+            selectedDomainIDs.remove(id)
+        } else {
+            selectedDomainIDs.insert(id)
+        }
+    }
+
+    private func applyProvider(_ key: String) {
+        cloudError = ""
+        cloudConfig.provider = key
+        let provider = CloudProvidersUI.find(key)
+        cloudConfig.baseURL = provider.baseURL
+        cloudConfig.model = provider.defaultModel
+    }
+
+    private func skipCloud() {
+        cloudError = ""
+        cloudConfig.enabled = false
+        bridge.cloudConfig = cloudConfig
+        advance()
+    }
+
+    private func enableCloudAndContinue() {
+        let baseURL = cloudConfig.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let model = cloudConfig.model.trimmingCharacters(in: .whitespacesAndNewlines)
+        let apiKey = cloudConfig.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !baseURL.isEmpty, !model.isEmpty, !apiKey.isEmpty else {
+            cloudError = "要启用云端 AI，请先填写完整的 Base URL、模型和 API Key。"
+            return
+        }
+        cloudError = ""
+        cloudConfig.baseURL = baseURL
+        cloudConfig.model = model
+        cloudConfig.apiKey = apiKey
+        cloudConfig.enabled = true
+        bridge.cloudConfig = cloudConfig
+        advance()
     }
 
     // ----- footer: back / skip ----------------------------------------
@@ -441,7 +615,7 @@ public struct OnboardingView: View {
                 .buttonStyle(.plain)
             } else if step != .done {
                 Button(action: { bridge.finishOnboarding() }) {
-                    Text("跳过")
+                    Text("先跳过")
                         .font(Vibe.Fonts.ui(12.5))
                         .foregroundStyle(Vibe.Palette.textMuted(scheme))
                 }
@@ -498,6 +672,27 @@ public struct OnboardingView: View {
     }
 }
 
+private extension OnboardingView {
+    static func seedCloudConfig(from current: CloudConfigDTO) -> CloudConfigDTO {
+        var cfg = current
+        if cfg.provider.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || cfg.provider == "openai_compatible" {
+            cfg.provider = "openai"
+        }
+        let provider = CloudProvidersUI.find(cfg.provider)
+        if cfg.baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || cfg.baseURL == "https://api.openai.com/v1" {
+            cfg.baseURL = provider.baseURL
+        }
+        if cfg.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || cfg.model == "gpt-4o-mini" {
+            cfg.model = provider.defaultModel
+        }
+        cfg.enabled = false
+        return cfg
+    }
+}
+
 // MARK: - Small step pieces
 
 /// ✓ / ✕ / neutral status pill for a tri-state permission.
@@ -549,5 +744,69 @@ private struct OnboPrimaryButton: View {
         }
         .buttonStyle(.plain)
         .padding(.top, 4)
+    }
+}
+
+private struct OnboardingCloudField<Content: View>: View {
+    @Environment(\.colorScheme) private var scheme
+    var title: String
+    let content: Content
+
+    init(_ title: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(Vibe.Fonts.ui(11.5, weight: .semibold))
+                .foregroundStyle(Vibe.Palette.textMuted(scheme))
+            content
+        }
+    }
+}
+
+private struct DomainRow: View {
+    @Environment(\.colorScheme) private var scheme
+    var name: String
+    var summary: String
+    var selected: Bool
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .top, spacing: 8) {
+                    Text(name)
+                        .font(Vibe.Fonts.ui(13.5, weight: .semibold))
+                        .foregroundStyle(selected ? .white : Vibe.Palette.text(scheme))
+                        .lineLimit(2)
+                    Spacer(minLength: 4)
+                    Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 18))
+                        .foregroundStyle(selected ? .white : Vibe.Palette.textMuted(scheme))
+                        .padding(.top, 1)
+                }
+                Text(summary)
+                    .font(Vibe.Fonts.ui(11))
+                    .foregroundStyle(selected ? .white.opacity(0.82) : Vibe.Palette.textMuted(scheme))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(3)
+            }
+            .padding(.vertical, 11).padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, minHeight: 94, alignment: .topLeading)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(selected ? AnyShapeStyle(Vibe.accentGradient)
+                                   : AnyShapeStyle(Vibe.Palette.surface2(scheme)))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(selected ? .clear : Vibe.Palette.hairline(scheme),
+                                  lineWidth: selected ? 1.5 : 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 }

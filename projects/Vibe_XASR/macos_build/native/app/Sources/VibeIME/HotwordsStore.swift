@@ -10,6 +10,15 @@ import Foundation
 ///   * a trailing ` :2.5` on a line overrides the per-word boost.
 enum HotwordsStore {
 
+    static func mergedWords(defaults defaultWords: [String], customText: String) -> [String] {
+        var out: [String] = []
+        var seen = Set<String>()
+        for word in defaultWords + normalize(customText) where seen.insert(word).inserted {
+            out.append(word)
+        }
+        return out
+    }
+
     /// Split the raw editor text into normalized hotword lines.
     static func normalize(_ text: String) -> [String] {
         text.split(whereSeparator: \.isNewline)
@@ -104,5 +113,24 @@ enum HotwordsStore {
         guard let sz = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int
         else { return false }
         return sz > 0
+    }
+
+    @discardableResult
+    static func writeWords(_ words: [String], score: Double, to url: URL) -> Bool {
+        let lines = words.flatMap { expand($0, score: score) }
+        let fm = FileManager.default
+        guard !lines.isEmpty else {
+            try? fm.removeItem(at: url)
+            return false
+        }
+        let body = lines.joined(separator: "\n") + "\n"
+        do {
+            try body.write(to: url, atomically: true, encoding: .utf8)
+            return true
+        } catch {
+            FileHandle.standardError.write(
+                "[VibeIME] hotwords write failed: \(error)\n".data(using: .utf8)!)
+            return false
+        }
     }
 }

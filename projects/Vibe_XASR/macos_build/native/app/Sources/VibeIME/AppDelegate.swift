@@ -38,6 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private var currentSessionTemplateId: String?
     /// 是否有就绪的润色后端(云端或本地)。判定走异步润色路径,而非看本地开关(云端开关是 cloudEnabled)。
     private var refinerActive: Bool { Refiner.shared.backend?.isReady == true }
+    private let cloudLongFormThreshold = 100
     /// 单击切换模式下,当前是否正在听写(用于把第二次按键解读为「停止」)。
     private var toggleDictating = false
     /// 智能模式(按住说话 / 轻点锁定)的运行状态。
@@ -50,8 +51,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     /// 落字后「撤销 / 重润色」用:本次原始 ASR + 实际插入的文本(仅 paste 模式 + 润色过)。
     private var lastRawASR: String?
     private var lastInserted: String?
-    /// HUD 出现那一刻鼠标是否已停在其上(用于区分「一直停在那」与「事后移过来」)。
-    private var hudCursorParked = false
     private var settingsWindow: NSWindow?
     private var onboardingWindow: NSWindow?
     private var padWindow: NSWindow?
@@ -114,6 +113,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private var elapsedTimer: Timer?
     private var sessionStart: Date?
     private var hideWorkItem: DispatchWorkItem?
+
+    // MARK: Unified live insertion session
+
+    private struct SessionChunk {
+        let id: UUID
+        let raw: String
+        var display: String
+        var polishing: Bool
+        var sealed: Bool
+    }
+
+    private enum SessionSink {
+        case focusedInsert
+        case clipboardOnly
+    }
+
+    private var sessionChunks: [SessionChunk] = []
+    private var sessionPartial = ""
+    private var sessionSink: SessionSink = .focusedInsert
+    private var sessionStopped = false
+    private var sessionGeneration = 0
+    private var sessionHistoryID: UUID?
+    private var sessionLastClipboard = ""
+    private var sessionWindowPolishTask: Task<Void, Never>?
+    private var sessionWindowPolishToken = 0
+    private var sessionLongFormTask: Task<Void, Never>?
+    private var sessionLongFormMode = false
+    private var sessionRawLog: [String] = []
+    private var sessionFlushedRawChars = 0
+    private var sessionTailRaw = ""
+    private var sessionPendingSealCandidate: String?
+    private var sessionPendingSealSince: Date?
 
     // MARK: Onboarding "try it" state
     private var inTry = false
@@ -433,7 +464,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     @objc private func toggleAIPolish() {
         store.polishPaused.toggle()
         refreshRefiner()
-        aiPolishItem?.state = (!store.polishPaused && refinerActive) ? .on : .off
+        aiPolishItem?.state = polishRuntimeEnabled() ? .on : .off
     }
     @objc private func setActiveTemplate(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? String else { return }
@@ -471,7 +502,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     /// 菜单打开前刷新动态状态:AI 润色 / 静音勾选 + 重建模板子菜单(勾当前项)。
     func menuNeedsUpdate(_ menu: NSMenu) {
         guard menu === statusItem.menu else { return }   // 只刷顶层(子菜单单独重建)
-        aiPolishItem?.state = (!store.polishPaused && refinerActive) ? .on : .off
+        aiPolishItem?.state = polishRuntimeEnabled() ? .on : .off
         micMuteItem?.state = micMuted ? .on : .off
         rebuildTemplateSubmenu()
     }
@@ -662,7 +693,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     private func setupHUDPanel() {
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 640, height: 120),
+            contentRect: NSRect(x: 0, y: 0, width: 220, height: 64),
             styleMask: [.nonactivatingPanel, .borderless],
             backing: .buffered,
             defer: false
@@ -685,10 +716,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         panel.contentView = hosting
 
         hudPanel = panel
-        hudModel.onInsertNow = { [weak self] in self?.insertNowFromHUD() }
-        hudModel.onUndo = { [weak self] in self?.undoLastInsertion() }
-        hudModel.onRepolish = { [weak self] id in self?.repolishLast(templateId: id) }
-        hudModel.onHoverChange = { [weak self] hovering in self?.hudHover(hovering) }
         positionHUD()
     }
 
@@ -723,27 +750,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     /// 「已插入」结果的停留时长 = 用户设置,但有个 0.6s 渲染地板:
     /// 太短(尤其「立刻」=0)会在 SwiftUI 画出最终/润色文本前就 orderOut,导致「字没显示全就消失」。
-    private func doneStaySeconds() -> TimeInterval { max(store.hudStaySeconds, 0.6) }
-
-    /// HUD 出现时鼠标是否已落在其矩形内(屏幕坐标)。
-    private func hudPanelContainsCursor() -> Bool {
-        guard let p = hudPanel else { return false }
-        return p.frame.contains(NSEvent.mouseLocation)
-    }
-
-    /// 悬浮逻辑(只在可交互态 .done/.polishing 收到事件,其余状态面板忽略鼠标):
-    ///   * 进上去 + 一开始不在那(用户事后移过来)→ 暂停自动消失;
-    ///   * 进上去 + 一开始就停在那(parked)→ 不挽留,照常按计时器消失;
-    ///   * 离开 → 之后再进就算「移过来」;并很快(0.4s)收起。
-    private func hudHover(_ hovering: Bool) {
-        if hovering {
-            if hudCursorParked { return }       // 一直停在那 → 不保持
-            hideWorkItem?.cancel()              // 事后移过来 → 暂停消失
-        } else {
-            hudCursorParked = false
-            if hudModel.phase == .done || hudModel.phase == .polishing { hideHUD(after: 0.4) }
-        }
-    }
+    private func doneStaySeconds() -> TimeInterval { min(max(store.hudStaySeconds, 0.6), 1.2) }
 
     // ============================================================
     // Engine loading + live swap (background)
@@ -779,8 +786,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         // can load it; resolve the BPE vocab for English terms. When disabled,
         // remove the file so the engine stays on greedy_search (zero regression).
         let hwURL = ModelPaths.hotwordsFilePath()
+        let mergedHotwords = combinedHotwordWords()
         if store.hotwordsEnabled {
-            HotwordsStore.writeFile(text: store.hotwordsText, score: store.hotwordsScore, to: hwURL)
+            HotwordsStore.writeWords(mergedHotwords, score: store.hotwordsScore, to: hwURL)
         } else {
             try? FileManager.default.removeItem(at: hwURL)
         }
@@ -821,7 +829,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             let asr = SherpaASR(asrDir: asrDir, tier: resolvedTier,
                                 hotwordsFile: hwFile, hotwordsScore: hwScore,
                                 bpeVocab: bpeVocab)
-            let engine = DictationEngine(vad: vad, asr: asr, prerollSec: 1.0)
+            let engine = DictationEngine(vad: vad, asr: asr, prerollSec: 1.0, holdToTalk: true)
 
             DispatchQueue.main.async {
                 guard let self else { return }
@@ -937,8 +945,558 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private func refreshCorrections() {
         replacementRules = store.replacementsEnabled ? Replacements.parse(store.replacementsText) : []
         snippetRules = store.snippetsEnabled ? AppDelegate.parseSnippets(store.snippetsJSON) : []
-        PinyinNormalizer.shared.setWords(store.pinyinFuzzyEnabled ? HotwordsStore.normalize(store.hotwordsText) : [])
+        PinyinNormalizer.shared.setWords(store.pinyinFuzzyEnabled ? combinedHotwordWords() : [])
         refreshRefiner()
+    }
+
+    private func selectedHotwordDomains() -> [HotwordDomain] {
+        store.hotwordDomainIDs.compactMap(HotwordDomainCatalog.byID)
+    }
+
+    private func combinedHotwordWords() -> [String] {
+        HotwordsStore.mergedWords(
+            defaults: HotwordDomainCatalog.words(for: store.hotwordDomainIDs),
+            customText: store.hotwordsText
+        )
+    }
+
+    private func combinedHotwordsText() -> String {
+        combinedHotwordWords().joined(separator: "\n")
+    }
+
+    private func applyFinalHotwordReplacement(_ text: String) -> String {
+        let words = combinedHotwordWords()
+        guard !words.isEmpty else { return text }
+        let cjkNormalized = PinyinNormalizer.shared.normalize(text, withRawWords: words)
+        let aliases = HotwordDomainCatalog.aliasMap(for: store.hotwordDomainIDs)
+        return HotwordCanonicalizer.rewrite(cjkNormalized, canonicalWords: words, aliases: aliases)
+    }
+
+    private static func collapseASCIIInitialisms(_ text: String) -> String {
+        let pattern = #"(?<![A-Za-z0-9])(?:[A-Z0-9](?:\s+[A-Z0-9]){1,})(?![A-Za-z0-9])"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
+        let out = NSMutableString(string: text)
+        let matches = regex.matches(in: text, range: NSRange(location: 0, length: out.length))
+        for m in matches.reversed() {
+            let token = out.substring(with: m.range).replacingOccurrences(of: " ", with: "")
+            out.replaceCharacters(in: m.range, with: token)
+        }
+        return out as String
+    }
+
+    private func postProcessRefinedFinal(_ text: String) -> String {
+        let normalized = SherpaASR.normalizeCJK(text)
+        let collapsed = Self.collapseASCIIInitialisms(normalized)
+        return applyFinalHotwordReplacement(collapsed)
+    }
+
+    private func previewDisplayForDeferredCloud(_ text: String) -> String {
+        postProcessRefinedFinal(text)
+    }
+
+    private func configuredCloudRefiner() -> CloudRefiner? {
+        guard store.cloudEnabled else { return nil }
+        let cloud = CloudRefiner(baseURL: store.cloudBaseURL, model: store.cloudModel, apiKey: store.cloudApiKey,
+                                 temperature: store.cloudTemperature, maxTokens: store.cloudMaxTokens,
+                                 provider: store.cloudProvider)
+        return cloud.isReady ? cloud : nil
+    }
+
+    private func cloudOnlyPolishEnabled() -> Bool {
+        !store.polishPaused && !store.refinerEnabled && configuredCloudRefiner() != nil
+    }
+
+    private func rawSessionText() -> String {
+        let committed = sessionChunks.map(\.raw).joined()
+        return committed + sessionTailRaw
+    }
+
+    private func shouldUseDeferredCloudLongForm(_ rawText: String) -> Bool {
+        guard configuredCloudRefiner() != nil else { return false }
+        return rawText.trimmingCharacters(in: .whitespacesAndNewlines).count >= cloudLongFormThreshold
+    }
+
+    private func smartEnhancementEnabled() -> Bool {
+        !store.polishPaused && store.refinerEnabled && configuredCloudRefiner() != nil
+    }
+
+    private func shouldRunSessionWideCloudPass() -> Bool {
+        smartEnhancementEnabled() || cloudOnlyPolishEnabled()
+    }
+
+    private func polishRuntimeEnabled() -> Bool {
+        !store.polishPaused && (refinerActive || configuredCloudRefiner() != nil)
+    }
+
+    private func shouldRunDeferredCloudPass() -> Bool {
+        sessionLongFormMode
+    }
+
+    private func splitRefineChunks(_ text: String, limit: Int) -> [String] {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count > limit else { return trimmed.isEmpty ? [] : [trimmed] }
+        let chars = Array(trimmed)
+        let punct = Set<Character>(["。", "！", "？", "；", ".", "!", "?", ";", "\n"])
+        var out: [String] = []
+        var start = 0
+        while start < chars.count {
+            let end = min(start + limit, chars.count)
+            if end == chars.count {
+                let tail = String(chars[start..<end]).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !tail.isEmpty { out.append(tail) }
+                break
+            }
+            var split = end
+            var cursor = end - 1
+            while cursor > start {
+                if punct.contains(chars[cursor]) {
+                    split = cursor + 1
+                    break
+                }
+                cursor -= 1
+            }
+            if split == start { split = end }
+            let chunk = String(chars[start..<split]).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !chunk.isEmpty { out.append(chunk) }
+            start = split
+        }
+        return out
+    }
+
+    private func clearPendingSentenceSeal() {
+        sessionPendingSealCandidate = nil
+        sessionPendingSealSince = nil
+    }
+
+    private func sessionDisplayText() -> String {
+        sessionChunks.map(\.display).joined() + sessionPartial
+    }
+
+    private func rawSuffixAfterCommitted(_ text: String) -> String {
+        guard sessionFlushedRawChars > 0 else { return text }
+        let chars = Array(text)
+        guard !chars.isEmpty else { return "" }
+        let start = min(sessionFlushedRawChars, chars.count)
+        guard start < chars.count else { return "" }
+        return String(chars[start...])
+    }
+
+    private func takeReadyStreamingChunk(from text: String, limit: Int, allowUnstableSentenceSeal: Bool) -> String? {
+        let chars = Array(text)
+        guard !chars.isEmpty else { return nil }
+        let sentencePunct = Set<Character>(["。", "！", "？", "；", ".", "!", "?", ";", "\n"])
+        let softPunct = Set<Character>(["，", ",", "、", "：", ":"])
+        let shortProtectChars = 18
+        let settleMs: TimeInterval = 0.45
+
+        if let idx = chars.lastIndex(where: { sentencePunct.contains($0) }) {
+            let candidate = String(chars[...idx])
+            if allowUnstableSentenceSeal {
+                clearPendingSentenceSeal()
+                return candidate
+            }
+            let trimmedCount = candidate.trimmingCharacters(in: .whitespacesAndNewlines).count
+            let settleDelay = trimmedCount <= shortProtectChars ? settleMs : settleMs * 0.66
+            if sessionPendingSealCandidate != candidate {
+                sessionPendingSealCandidate = candidate
+                sessionPendingSealSince = Date()
+                return nil
+            }
+            if let since = sessionPendingSealSince, Date().timeIntervalSince(since) >= settleDelay {
+                clearPendingSentenceSeal()
+                return candidate
+            }
+            return nil
+        }
+        clearPendingSentenceSeal()
+        guard chars.count > limit else { return nil }
+        let softCap = min(limit, chars.count)
+        if let idx = chars[..<softCap].lastIndex(where: { softPunct.contains($0) }) {
+            return String(chars[...idx])
+        }
+        return String(chars[..<softCap])
+    }
+
+    @discardableResult
+    private func consumeReadyStreamingChunks(from rawText: String, generation: Int,
+                                             allowUnstableSentenceSeal: Bool) -> String {
+        var remainder = rawText
+        var appendedAny = false
+        let sessionWideCloud = shouldRunSessionWideCloudPass()
+        let deferredCloud = !sessionWideCloud && (sessionLongFormMode || shouldUseDeferredCloudLongForm(rawSessionText() + rawText))
+        if deferredCloud { sessionLongFormMode = true }
+        while let rawChunk = takeReadyStreamingChunk(from: remainder,
+                                                     limit: store.refineChunkChars,
+                                                     allowUnstableSentenceSeal: allowUnstableSentenceSeal) {
+            let trimmed = rawChunk.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty { break }
+            if refinerActive && !deferredCloud {
+                _ = appendChunk(raw: trimmed, display: trimmed, polishing: false, sealed: false)
+            } else {
+                let preview = (sessionWideCloud || deferredCloud) ? previewDisplayForDeferredCloud(trimmed) : corrected(trimmed)
+                _ = appendChunk(raw: trimmed, display: preview, polishing: false, sealed: true)
+            }
+            appendedAny = true
+            sessionFlushedRawChars += rawChunk.count
+            let chars = Array(remainder)
+            remainder = rawChunk.count < chars.count ? String(chars[rawChunk.count...]) : ""
+        }
+        if appendedAny && refinerActive && !deferredCloud {
+            scheduleEditableWindowPolish(generation: generation)
+        }
+        return remainder
+    }
+
+    private func flushReadyStreamingChunks(from rawText: String, generation: Int, isFinal: Bool) {
+        let remainder = consumeReadyStreamingChunks(from: rawSuffixAfterCommitted(rawText),
+                                                    generation: generation,
+                                                    allowUnstableSentenceSeal: isFinal)
+        sessionTailRaw = remainder
+        if refinerActive {
+            sessionPartial = remainder
+        } else if shouldRunSessionWideCloudPass() || sessionLongFormMode {
+            sessionPartial = previewDisplayForDeferredCloud(remainder)
+        } else {
+            sessionPartial = corrected(remainder, isFinal: false)
+        }
+    }
+
+    private func anyChunkPolishing() -> Bool {
+        sessionChunks.contains(where: \.polishing)
+    }
+
+    private func updateHistoryForSession(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        if let id = sessionHistoryID {
+            history.update(id: id, text: trimmed)
+        } else {
+            sessionHistoryID = history.append(trimmed, ephemeral: !store.historyEnabled)
+        }
+    }
+
+    private func renderSessionText(replaceFromChunkIndex: Int? = nil) {
+        let text = store.outputTraditional ? Hant.s2t(sessionDisplayText()) : sessionDisplayText()
+        hudModel.partialText = text
+        switch sessionSink {
+        case .focusedInsert:
+            if let replaceFromChunkIndex {
+                let safeIndex = min(max(replaceFromChunkIndex, 0), sessionChunks.count)
+                let stablePrefix = sessionChunks[..<safeIndex].map(\.display).joined()
+                let stableText = store.outputTraditional ? Hant.s2t(stablePrefix) : stablePrefix
+                inserter.replaceFromPrefixCount(stableText.count, to: text)
+            } else {
+                inserter.update(text)
+            }
+            if store.clipboardOverwrite, !text.isEmpty { Paste.setClipboard(text) }
+        case .clipboardOnly:
+            if text != sessionLastClipboard, !text.isEmpty {
+                Paste.setClipboard(text)
+                sessionLastClipboard = text
+            }
+        }
+        if sessionStopped {
+            if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                hudModel.reset()
+                hideHUD(after: 0)
+                setStatusIcon(engineReady ? "🎙" : "⏳")
+                return
+            }
+            updateHistoryForSession(text)
+            if anyChunkPolishing() {
+                hudModel.phase = .polishing
+            } else {
+                hudModel.phase = .done
+                setStatusIcon(engineReady ? "🎙" : "⏳")
+                hideHUD(after: doneStaySeconds())
+            }
+        } else if text.isEmpty {
+            hudModel.phase = .empty
+        } else {
+            hudModel.phase = .speaking
+        }
+    }
+
+    private func cancelSessionPolishTasks() {
+        sessionWindowPolishTask?.cancel()
+        sessionWindowPolishTask = nil
+        sessionLongFormTask?.cancel()
+        sessionLongFormTask = nil
+        sessionWindowPolishToken += 1
+        for idx in sessionChunks.indices { sessionChunks[idx].polishing = false }
+    }
+
+    private func resetSessionState() {
+        cancelSessionPolishTasks()
+        sessionChunks.removeAll()
+        sessionPartial = ""
+        sessionStopped = false
+        sessionHistoryID = nil
+        sessionLastClipboard = ""
+        sessionRawLog.removeAll()
+        sessionFlushedRawChars = 0
+        sessionTailRaw = ""
+        sessionLongFormMode = false
+        clearPendingSentenceSeal()
+    }
+
+    private func appendChunk(raw: String, display: String, polishing: Bool, sealed: Bool) -> UUID {
+        let id = UUID()
+        sessionChunks.append(SessionChunk(id: id, raw: raw, display: display, polishing: polishing, sealed: sealed))
+        return id
+    }
+
+    private func updateChunk(id: UUID, display: String, polishing: Bool) {
+        guard let idx = sessionChunks.firstIndex(where: { $0.id == id }) else { return }
+        sessionChunks[idx].display = display
+        sessionChunks[idx].polishing = polishing
+    }
+
+    private func editableWindowStartIndex() -> Int {
+        max(sessionChunks.count - 3, 0)
+    }
+
+    private func scheduleEditableWindowPolish(generation: Int) {
+        guard refinerActive, !sessionChunks.isEmpty else { return }
+        let start = editableWindowStartIndex()
+        for idx in sessionChunks.indices {
+            let sealed = idx < start
+            sessionChunks[idx].sealed = sealed
+            if sealed { sessionChunks[idx].polishing = false }
+        }
+
+        sessionWindowPolishTask?.cancel()
+        sessionWindowPolishToken += 1
+        let token = sessionWindowPolishToken
+        let window = Array(sessionChunks[start...])
+        let ids = window.map(\.id)
+        let rawSegments = window.map(\.raw)
+        for id in ids {
+            if let idx = sessionChunks.firstIndex(where: { $0.id == id }) {
+                sessionChunks[idx].polishing = true
+            }
+        }
+
+        sessionWindowPolishTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            let polished = await self.correctedFinalAsync(rawSegments.joined())
+            guard !Task.isCancelled,
+                  self.sessionGeneration == generation,
+                  self.sessionWindowPolishToken == token else { return }
+            let pieces = self.splitRefinedWindow(polished, rawSegments: rawSegments)
+            guard pieces.count == ids.count else { return }
+            for (id, piece) in zip(ids, pieces) {
+                self.updateChunk(id: id, display: piece, polishing: false)
+            }
+            self.sessionWindowPolishTask = nil
+            self.renderSessionText(replaceFromChunkIndex: start)
+        }
+    }
+
+    private func splitRefinedWindow(_ refined: String, rawSegments: [String]) -> [String] {
+        let text = refined.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return rawSegments }
+        guard rawSegments.count > 1 else { return [text] }
+        let chars = Array(text)
+        let count = rawSegments.count
+        guard chars.count >= count else { return rawSegments.dropLast() + [text] }
+
+        let sentencePunct = Set<Character>(["。", "！", "？", "；", ".", "!", "?", ";", "\n"])
+        let softPunct = Set<Character>(["，", ",", "、", "：", ":"])
+        let weights = rawSegments.map { max($0.count, 1) }
+        let totalWeight = max(weights.reduce(0, +), 1)
+
+        func boundaryPenalty(_ split: Int) -> Double {
+            guard split > 0, split < chars.count else { return 8.0 }
+            let left = chars[split - 1]
+            if sentencePunct.contains(left) { return 0.0 }
+            if softPunct.contains(left) { return 0.25 }
+            return 1.0
+        }
+
+        func ratioScore(_ boundaries: [Int]) -> Double {
+            var score = 0.0
+            var weightPrefix = 0
+            for (idx, boundary) in boundaries.enumerated() {
+                weightPrefix += weights[idx]
+                let expected = Double(weightPrefix) / Double(totalWeight)
+                let actual = Double(boundary) / Double(chars.count)
+                score += abs(actual - expected) * 12.0
+                score += boundaryPenalty(boundary)
+            }
+            return score
+        }
+
+        let boundaries: [Int]
+        if count == 2 {
+            var bestSplit = 1
+            var bestScore = Double.greatestFiniteMagnitude
+            for split in 1..<chars.count {
+                let score = ratioScore([split])
+                if score < bestScore {
+                    bestScore = score
+                    bestSplit = split
+                }
+            }
+            boundaries = [bestSplit]
+        } else {
+            var bestPair = [1, max(2, chars.count - 1)]
+            var bestScore = Double.greatestFiniteMagnitude
+            for first in 1..<(chars.count - 1) {
+                for second in (first + 1)..<chars.count {
+                    let score = ratioScore([first, second])
+                    if score < bestScore {
+                        bestScore = score
+                        bestPair = [first, second]
+                    }
+                }
+            }
+            boundaries = bestPair
+        }
+
+        var pieces: [String] = []
+        var start = 0
+        for boundary in boundaries {
+            pieces.append(String(chars[start..<boundary]))
+            start = boundary
+        }
+        pieces.append(String(chars[start...]))
+        return pieces
+    }
+
+    private func scheduleDeferredCloudLongForm(generation: Int) {
+        guard shouldRunDeferredCloudPass(), let cloud = configuredCloudRefiner() else { return }
+        let raw = rawSessionText().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { return }
+        let localPreview = sessionDisplayText().trimmingCharacters(in: .whitespacesAndNewlines)
+
+        sessionLongFormTask?.cancel()
+        for idx in sessionChunks.indices { sessionChunks[idx].polishing = true }
+        renderSessionText()
+
+        let system = buildCloudLongFormSystem()
+        let user = """
+请把这段较长的语音转写作为一个整体做二次 refine。
+
+原始 ASR：
+\(raw)
+
+当前本地结果（可能已做过局部 refine / 热词 / 格式修正，可作为参考）：
+\(localPreview.isEmpty ? "(空)" : localPreview)
+"""
+
+        sessionLongFormTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            CloudRequestLog.shared.pendingOriginal = raw
+            let polished = await cloud.request(system: system, user: user, logInput: raw)
+            guard !Task.isCancelled, self.sessionGeneration == generation else { return }
+            let final = polished.map(self.postProcessRefinedFinal) ?? self.previewDisplayForDeferredCloud(raw)
+            self.sessionChunks = [SessionChunk(id: UUID(), raw: raw, display: final, polishing: false, sealed: true)]
+            self.sessionPartial = ""
+            self.sessionTailRaw = ""
+            self.sessionLongFormTask = nil
+            self.renderSessionText()
+        }
+    }
+
+    private func scheduleSessionWideCloudPolish(generation: Int) {
+        guard shouldRunSessionWideCloudPass(), let cloud = configuredCloudRefiner() else { return }
+        let raw = rawSessionText().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { return }
+        let current = sessionDisplayText().trimmingCharacters(in: .whitespacesAndNewlines)
+
+        sessionLongFormTask?.cancel()
+        for idx in sessionChunks.indices { sessionChunks[idx].polishing = true }
+        renderSessionText()
+
+        let system = store.refinerEnabled ? buildSmartEnhancementSystem() : buildCloudLongFormSystem()
+        let currentLabel = store.refinerEnabled
+            ? "当前本地润色完整结果（可参考其中已经修正正确的部分）"
+            : "当前整段预览结果（仅供参考）"
+        let user = """
+请把这次从按下热键开始到结束的一整段语音输入作为整体做最终 refine。
+
+原始 ASR：
+\(raw)
+
+\(currentLabel)：
+\(current.isEmpty ? "(空)" : current)
+"""
+
+        sessionLongFormTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            CloudRequestLog.shared.pendingOriginal = raw
+            let polished = await cloud.request(system: system, user: user, logInput: raw)
+            guard !Task.isCancelled, self.sessionGeneration == generation else { return }
+            let fallback = current.isEmpty ? self.previewDisplayForDeferredCloud(raw) : current
+            let final = polished.map(self.postProcessRefinedFinal) ?? fallback
+            self.sessionChunks = [SessionChunk(id: UUID(), raw: raw, display: final, polishing: false, sealed: true)]
+            self.sessionPartial = ""
+            self.sessionTailRaw = ""
+            self.sessionLongFormTask = nil
+            self.renderSessionText()
+        }
+    }
+
+    private func finalizePendingSessionTail(generation: Int) {
+        guard sessionGeneration == generation else { return }
+        let rawTail = sessionTailRaw.isEmpty ? sessionPartial : sessionTailRaw
+        let trimmed = rawTail.trimmingCharacters(in: .whitespacesAndNewlines)
+        sessionTailRaw = ""
+        sessionPartial = ""
+        guard !trimmed.isEmpty else { return }
+        if refinerActive && !sessionLongFormMode {
+            _ = appendChunk(raw: trimmed, display: trimmed, polishing: false, sealed: false)
+            scheduleEditableWindowPolish(generation: generation)
+        } else {
+            let preview = (shouldRunSessionWideCloudPass() || sessionLongFormMode)
+                ? previewDisplayForDeferredCloud(trimmed)
+                : corrected(trimmed)
+            _ = appendChunk(raw: trimmed, display: preview, polishing: false, sealed: true)
+        }
+    }
+
+    private func armFinalizeFallback() {
+        finalizeFallbackWork?.cancel()
+        let generation = sessionGeneration
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            guard self.sessionGeneration == generation, self.sessionStopped else { return }
+            self.finalizePendingSessionTail(generation: generation)
+            if self.shouldRunSessionWideCloudPass() {
+                self.scheduleSessionWideCloudPolish(generation: generation)
+            } else if self.shouldRunDeferredCloudPass() {
+                self.scheduleDeferredCloudLongForm(generation: generation)
+            }
+            self.renderSessionText()
+        }
+        finalizeFallbackWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: work)
+    }
+
+    private func armEmptyFinalizeFallback() {
+        finalizeFallbackWork?.cancel()
+        let generation = sessionGeneration
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            guard self.sessionGeneration == generation, self.sessionStopped else { return }
+            let hasOutput = !self.sessionDisplayText().trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            if !hasOutput {
+                self.hudModel.reset()
+                self.hideHUD(after: 0)
+                self.setStatusIcon(self.engineReady ? "🎙" : "⏳")
+                return
+            }
+            self.finalizePendingSessionTail(generation: generation)
+            if self.shouldRunSessionWideCloudPass() {
+                self.scheduleSessionWideCloudPolish(generation: generation)
+            } else if self.shouldRunDeferredCloudPass() {
+                self.scheduleDeferredCloudLongForm(generation: generation)
+            }
+            self.renderSessionText()
+        }
+        finalizeFallbackWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: work)
     }
 
     /// 配置 AI 润色(Beta)后端:开启 + 模型就绪 → 异步加载 LlamaRefiner;否则 backend=nil(no-op),
@@ -947,18 +1505,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         CloudRequestLog.shared.enabled = store.cloudLogEnabled   // 同步「记录请求」开关
         // 菜单栏快捷开关「暂停 AI 润色」:总开关,置 true 时直接 no-op(保留云端/本地配置不动)。
         if store.polishPaused { Refiner.shared.backend = nil; return }
-        // 云端优先(开 + Key/URL/模型就绪);否则本地;都不行 → nil(安全 no-op)。
-        if store.cloudEnabled {
-            let cloud = CloudRefiner(baseURL: store.cloudBaseURL, model: store.cloudModel, apiKey: store.cloudApiKey,
-                                     temperature: store.cloudTemperature, maxTokens: store.cloudMaxTokens,
-                                     provider: store.cloudProvider)
-            if cloud.isReady {
-                Refiner.shared.backend = cloud
-                Refiner.shared.timeout = 25   // 云端比本地慢得多(网络+生成);本地 0.5s,云端常 3~8s,4s 会误超时回退
-                Refiner.shared.systemProvider = { [weak self] in self?.buildCloudSystem(overrideTemplateId: self?.currentSessionTemplateId) ?? "" }
-                return
-            }
-        }
+        // 常规二次 refine 的优先级:
+        // 1) 本地开了 → 仅本地参与逐段 chunk refine
+        // 2) 云端模式/智能增强 → 改为会话结束后的整段 refine,不挂到 Refiner.shared 上逐段执行
+        // 3) 都不可用 → no-op
         // 本地 llama 润色仅 Apple Silicon(arm64)启用;Intel(x86_64 切片)走云端,本地灰显不可开。
         #if VIBE_LLAMA && arch(arm64)
         if store.refinerEnabled {
@@ -998,8 +1548,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             tpl = buildAutoPrompt(store.cloudMods, lang: lang)
         }
         let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd"
-        return PromptFill.staticTokens(tpl, hotwords: store.hotwordsText, date: df.string(from: Date()),
+        return PromptFill.staticTokens(tpl, hotwords: combinedHotwordsText(), date: df.string(from: Date()),
                                        changes: currentRuleChanges)
+    }
+
+    private func buildCloudLongFormSystem() -> String {
+        let base = buildCloudSystem()
+        return """
+\(base)
+
+补充要求:
+- 当前输入较长,请先通读全文,再做整段级二次 refine,不要只看局部。
+- 你会同时收到两份输入:「原始 ASR」和「当前本地结果」。
+- 请以「原始 ASR」为主判断真实内容,以「当前本地结果」为辅做参考,吸收其中已经修正正确的部分。
+- 这不是摘要任务,不要压缩成总结,不要明显缩短内容,不要改写成另一种表达风格。
+- 允许做的事只有:修正转写错误、消除口语赘余、处理自我回改、捋顺局部逻辑、补全标点、合理分段和格式化。
+- 专有名词、技术名词和领域词按热词规范统一。
+- 如果内容天然适合条目化,可以整理成分段、项目符号或编号列表,但不要丢信息。
+- 只输出最终文本,不要解释。
+"""
+    }
+
+    private func buildSmartEnhancementSystem() -> String {
+        let base = buildCloudSystem()
+        return """
+\(base)
+
+补充要求:
+- 这是一次“智能增强”任务,目标是把整次语音输入整理成说话人最终真正想表达的文本。
+- 你会同时收到两份输入:「原始 ASR」和「当前本地结果」。
+- 请以「原始 ASR」为主判断真实内容,以「当前本地结果」为辅吸收其中已经修正正确的部分。
+- 必须先删除口水词、语气词、结巴重复和无意义重复,但不要误删真实信息。
+- 如果 ASR 中有识别错误、同音误写、上下文不通顺的词,请结合完整语境修正成最合理的正确说法。
+- 如果说话人中途自我修正或改口,例如“麦当劳,不对,肯德基”,必须删除被推翻的旧说法,只保留最终正确版本。
+- 输出应该体现“最终想表达的内容”,不要保留犹豫、撤回、试探和修正痕迹。
+- 做合理格式化:补全标点,整理段落;如果内容天然适合条目化,可以转成项目符号或编号列表。
+- 做规范书写:数字、时间、金额、百分比、英文术语、专有名词大小写等尽量规范统一。
+- 专有名词、技术名词和领域词按热词规范统一。
+- 不要总结、不要明显缩短内容、不要改写成另一种表达风格、不要添加原文没有的新事实。
+- 只输出最终文本,不要解释。
+"""
+    }
+
+    private func showSimpleAlert(title: String, info: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = info
+        alert.addButton(withTitle: "好")
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
     }
     /// 解析模板内容:锁定内置「口语转书面」(t1)随 UI 语言实时生成;自定义模板读用户存储原文。
     private func templateContent(id: String, lang: Lang) -> String? {
@@ -1032,27 +1629,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             if store.defillerEnabled { s = Defiller.clean(s) }   // strip fillers first
             if store.itnEnabled { s = ChineseITN.normalize(s) }  // then normalize numbers
             if !snippetRules.isEmpty { s = Replacements.expand(s, snippetRules) }  // expand snippets last (space-tolerant trigger, eats trailing 。)
+            s = applyFinalHotwordReplacement(s)
         }
         return s
     }
 
-    /// 与 `corrected(isFinal: true)` 同序,但在 Defiller 之后、ITN 之前插入 AI 润色(Beta,异步)。
-    /// 顺序原因(见 refiner_eval 评估):refiner 会擅自改数字且不稳,故必须排在规则 ITN 之前,
-    /// 让数字最终由可靠的 ChineseITN 负责。`Refiner.polish` 内部未就绪/超时/护栏不过 → 原样返回。
+    /// AI 路径:原始 ASR → Refiner → CJK 去空格 / ASCII 首字母词并写 / final hotword。
+    /// 不再先跑本地 replacement / 拼音 / ITN / Defiller / snippet。
+    /// `Refiner.polish` 内部未就绪/超时/护栏不过 → 原样返回,随后仍会走最终热词规范化。
     private func correctedFinalAsync(_ t: String) async -> String {
         let raw = t
-        var s = PinyinNormalizer.shared.normalize(t)
-        let afterPinyin = s
-        if !replacementRules.isEmpty { s = Replacements.apply(s, replacementRules) }
-        let afterRepl = s
-        // 记录本地规则(同音字 / 替换)对识别文本的改动,注入 {{changes}} 让大模型复核(本地可能弄错)。
-        currentRuleChanges = AppDelegate.describeRuleChanges(raw: raw, afterPinyin: afterPinyin, afterRepl: afterRepl)
+        currentRuleChanges = "(无,AI 路径未应用本地规则)"
         // 请求日志的 input 用「原始 ASR」(引擎原始输出 raw,不含任何规则)。
         CloudRequestLog.shared.pendingOriginal = raw
-        // AI 润色接管「去口水词 + 数字规整」→ 与听写的 Defiller/ITN 互斥,这里都不再跑规则版(UI 已置灰)。
-        s = await Refiner.shared.polish(s)                       // ★ AI 润色
-        if !snippetRules.isEmpty { s = Replacements.expand(s, snippetRules) }
-        return s
+        let polished = await Refiner.shared.polish(raw)
+        return postProcessRefinedFinal(polished)
     }
     /// 描述本地规则对识别文本做的改动,供 {{changes}} 注入提示词,让大模型复核纠错。
     static func describeRuleChanges(raw: String, afterPinyin: String, afterRepl: String) -> String {
@@ -1094,25 +1685,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         finalizeFallbackWork?.cancel(); finalizeFallbackWork = nil
         cancelPolishSlow()
         hudModel.polishSlow = false; hudModel.polishHint = nil
-        hudPanel?.ignoresMouseEvents = true
         finishFinal(rawText: raw, final: final)
         if store.insertMethod != "type" {
-            // 经过 AI 润色(refinerActive)→ 落字后给「撤销 / 换模板重润色」窗口(可点、多停留几秒)。
             if refinerActive {
                 lastRawASR = raw
-                lastInserted = store.outputTraditional ? Hant.s2t(final) : final   // 与实际插入一致(撤销按字数回删)
-                hudModel.reviseTemplates = makeReviseTemplates()
-                hudModel.canRevise = true
-                hudModel.phase = .done
-                hudPanel?.ignoresMouseEvents = false   // 可点(撤销/重润色)
-                hudCursorParked = hudPanelContainsCursor()
-                // 按用户设置消失;但结果至少显示 doneFloor 秒,保证润色结果能渲染出来 / 看得见。
-                hideHUD(after: doneStaySeconds())
-            } else {
-                hudModel.canRevise = false
-                hudModel.phase = .done
-                hideHUD(after: store.hudStaySeconds)
+                lastInserted = store.outputTraditional ? Hant.s2t(final) : final
             }
+            hudModel.canRevise = false
+            hudModel.phase = .done
+            hideHUD(after: doneStaySeconds())
         }
         setStatusIcon(engineReady ? "🎙" : "⏳")
     }
@@ -1144,7 +1725,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         Paste.backspace(old.count)
         hudModel.canRevise = false
         hudModel.phase = .polishing
-        hudPanel?.ignoresMouseEvents = false
         currentSessionTemplateId = templateId
         polishTask?.cancel()
         polishTask = Task { @MainActor [weak self] in
@@ -1156,11 +1736,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             Paste.insert(final, restore: !self.store.clipboardOverwrite)
             self.lastInserted = final
             self.hudModel.partialText = final
-            self.hudModel.reviseTemplates = self.makeReviseTemplates()
-            self.hudModel.canRevise = true
+            self.hudModel.canRevise = false
             self.hudModel.phase = .done
-            self.hudPanel?.ignoresMouseEvents = false
-            self.hudCursorParked = self.hudPanelContainsCursor()
             self.hideHUD(after: self.doneStaySeconds())
         }
     }
@@ -1177,7 +1754,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         let w = DispatchWorkItem { [weak self] in
             guard let self, self.pendingPolishRaw != nil else { return }
             self.hudModel.polishSlow = true
-            self.hudPanel?.ignoresMouseEvents = false
             self.hudModel.polishHint = "AI 大模型润色过慢，建议更换大模型服务商"
         }
         slowWork = w
@@ -1190,63 +1766,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         guard !micMuted else { toggleDictating = false; return }   // 临时静音:忽略本次触发
         guard engineReady, let engine else { return }
         lastRawASR = nil; lastInserted = nil   // 新一段开始 → 作废上一段的「撤销 / 重润色」
-        // 上一段润色还没返回就又开始 → 先把上一段用规则版立即插入,避免丢字 / HUD 错乱。
-        if pendingPolishRaw != nil, let rule = pendingPolishRule { finalizePolish(final: rule) }
+        cancelSessionPolishTasks()
+        pendingPolishRaw = nil; pendingPolishRule = nil
         finalizeFallbackWork?.cancel(); finalizeFallbackWork = nil
         inserter.reset()
+        sessionGeneration += 1
+        resetSessionState()
+        sessionSink = Permissions.hasTextInputFocus() ? .focusedInsert : .clipboardOnly
 
         engine.onPartial = { [weak self] text in
             DispatchQueue.main.async {
                 guard let self else { return }
-                let text = self.corrected(text, isFinal: false)
-                self.hudModel.partialText = text
-                self.hudModel.phase = .speaking
-                // Streaming insertion: type the recognized text into the focused app
-                // AS IT ARRIVES (diff vs what we've already typed). "type" path only —
-                // "paste" inserts the whole final once on release.
-                if self.store.insertMethod == "type" { self.inserter.update(text) }
+                self.finalizeFallbackWork?.cancel()
+                self.flushReadyStreamingChunks(from: text, generation: self.sessionGeneration, isFinal: false)
+                self.renderSessionText()
             }
         }
         engine.onFinal = { [weak self] text in
             DispatchQueue.main.async {
                 guard let self else { return }
-                // 无就绪润色后端(云端或本地)→ 原同步路径(零回归)。
-                // 注:此前误用本地开关 store.refinerEnabled 判定 → 云端只开 cloudEnabled 时被跳过、从不调用;
-                //     改用 refinerActive(后端就绪即可)。
-                if !self.refinerActive {
-                    self.finishFinal(rawText: text, final: self.corrected(text))
-                    return
+                self.finalizeFallbackWork?.cancel()
+                let generation = self.sessionGeneration
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    self.sessionRawLog.append(text)
+                    self.flushReadyStreamingChunks(from: text, generation: generation, isFinal: true)
                 }
-                // 没识别到内容(空点一下)→ 不润色、不显示,静默收掉(不出现「已插入」「AI 润色中」)。
-                if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    self.finalizeFallbackWork?.cancel(); self.finalizeFallbackWork = nil
-                    self.hudModel.reset()
-                    self.hideHUD(after: 0)
-                    return
+                self.finalizePendingSessionTail(generation: generation)
+                if self.sessionStopped {
+                    if self.shouldRunSessionWideCloudPass() {
+                        self.scheduleSessionWideCloudPolish(generation: generation)
+                    } else if self.shouldRunDeferredCloudPass() {
+                        self.scheduleDeferredCloudLongForm(generation: generation)
+                    }
                 }
-                // 润色开(云端/本地):先备好规则版(超时回退 / 「立即插入」用),HUD 进「润色中」,
-                // 异步等润色返回再替换插入。Refiner 内部超时/护栏不过会安全回退规则版,绝不卡死或丢字。
-                let rule = self.corrected(text)
-                self.pendingPolishRaw = text
-                self.pendingPolishRule = rule
-                self.hudModel.partialText = self.corrected(text, isFinal: false)
-                if self.store.insertMethod != "type" {     // 仅 paste 模式有 HUD
-                    self.hudModel.phase = .polishing
-                    self.armPolishSlow()
-                }
-                self.polishTask?.cancel()
-                self.polishTask = Task { @MainActor [weak self] in
-                    guard let self else { return }
-                    let final = await self.correctedFinalAsync(text)
-                    if Task.isCancelled { return }
-                    self.finalizePolish(final: final)
-                }
+                self.renderSessionText()
             }
         }
 
         hudModel.reset()
         hudModel.phase = .empty
         hudModel.elapsed = "0:00"
+        if case .clipboardOnly = sessionSink {
+            hudModel.polishHint = "当前没有可写入光标，结果会持续写入剪贴板"
+        } else {
+            hudModel.polishHint = nil
+        }
         sessionStart = Date()
         startElapsedTimer()
         // 悬浮条对所有模式都显示——逐字模式也需要它做「在听 / 已锁定」的反馈(否则轻点/单击
@@ -1276,40 +1841,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         guard engineReady else { return }
         mic.stop()
         stopElapsedTimer()
-        setStatusIcon("✍️")
-        hudModel.phase = .finalizing
+        sessionStopped = true
+        setStatusIcon(anyChunkPolishing() ? "✍️" : "🎙")
+        hudModel.phase = anyChunkPolishing() ? .polishing : .finalizing
 
         // endSession() finalizes the utterance and fires onFinal on the main queue,
         // which performs the insert (streamed or one-shot paste) AND records history.
         // Do NOT read a buffer synchronously here — onFinal hasn't run yet (that race
         // was the "shows text but never inserts / history empty" bug).
         engine?.endSession()
-        if store.cueEnabled { CueSound.shared.play(theme: store.cueTheme, start: false) }
-        // 润色开(paste):释放后异步等大模型 —— onFinal 会把 HUD 切到 .polishing、润色完成再 .done。
-        // 这里不能立刻 .done/隐藏,否则 HUD 早早消失而文本几秒后才真正插入。
-        if refinerActive && store.insertMethod != "type" {
-            if hudModel.partialText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                // 空点一下、没识别到任何内容 → 不显示任何收尾态(「已插入」「AI 润色中」都不要),
-                // 同步置 idle 避免闪屏,然后直接收掉面板。
-                hudModel.reset()
-                hideHUD(after: 0)
-            } else {
-                // 说了话才进「润色中」(转圈);等润色返回再插入。
-                hudModel.phase = .polishing
-                // 兜底:万一 onFinal 不触发,0.7s 后若仍在 .polishing 且没真正启动润色 → 静默收掉。
-                finalizeFallbackWork?.cancel()
-                let fb = DispatchWorkItem { [weak self] in
-                    guard let self, self.hudModel.phase == .polishing, self.pendingPolishRaw == nil else { return }
-                    self.hideHUD(after: 0)
-                }
-                finalizeFallbackWork = fb
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.7, execute: fb)
-            }
+        if sessionDisplayText().trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            armEmptyFinalizeFallback()
         } else {
-            hudModel.phase = .done
-            hideHUD(after: doneStaySeconds())
+            armFinalizeFallback()
         }
-        setStatusIcon(engineReady ? "🎙" : "⏳")
+        if store.cueEnabled { CueSound.shared.play(theme: store.cueTheme, start: false) }
     }
 
     /// Append a final to history (if enabled) + the Pad (if enabled).
@@ -1328,8 +1874,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     /// Start/stop the always-on OnCall session to match the selected mode. Called
     /// when the engine becomes ready and whenever the dictation mode changes.
     private func applyDictationMode() {
-        guard engineReady else { return }
-        if store.insertMethod == "oncall" { startOnCall() } else { stopOnCall() }
+        stopOnCall()
     }
 
     private var onCallPanel: NSPanel?
@@ -1634,6 +2179,60 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         LaunchAtLogin.setEnabled(store.launchAtLogin)
     }
 
+    /// Remove all local data and move the app bundle to Trash.
+    private func performFullUninstall() {
+        if inTry { stopTrySession() }
+        polishTask?.cancel()
+        slowWork?.cancel()
+        finalizeFallbackWork?.cancel()
+        cancelSessionPolishTasks()
+
+        downloader.cancelAllDownloads()
+        history.clearAll()
+        pad.clear()
+
+        store.launchAtLogin = false
+        applyLaunchAtLogin()
+
+        KeychainStore.delete("cloudApiKey")
+        KeychainStore.delete("cloudProfiles")
+
+        if let bundleID = Bundle.main.bundleIdentifier {
+            UserDefaults.standard.removePersistentDomain(forName: bundleID)
+        }
+        UserDefaults.standard.synchronize()
+
+        let supportDir = ModelPaths.appSupportDir()
+        try? FileManager.default.removeItem(at: supportDir)
+
+        let bundleURL = Bundle.main.bundleURL
+        var trashedURL: NSURL?
+        do {
+            try FileManager.default.trashItem(at: bundleURL, resultingItemURL: &trashedURL)
+            NSApp.terminate(nil)
+        } catch {
+            let alert = NSAlert()
+            alert.alertStyle = .critical
+            alert.messageText = L10n.shared.t("gen.deleteApp.failTitle")
+            alert.informativeText = "\(L10n.shared.t("gen.deleteApp.fail"))\n\(bundleURL.path)"
+            alert.addButton(withTitle: L10n.shared.t("ok"))
+            alert.runModal()
+        }
+    }
+
+    /// Confirm before the destructive uninstall flow.
+    private func confirmAndDeleteAppAndData() {
+        let alert = NSAlert()
+        alert.alertStyle = .critical
+        alert.messageText = L10n.shared.t("gen.deleteApp.confirmTitle")
+        alert.informativeText = L10n.shared.t("gen.deleteApp.confirm")
+        alert.addButton(withTitle: L10n.shared.t("gen.deleteApp.action"))
+        alert.addButton(withTitle: L10n.shared.t("cancel"))
+        if alert.runModal() == .alertFirstButtonReturn {
+            performFullUninstall()
+        }
+    }
+
     // MARK: helpers
 
     nonisolated static func rmsLevel(_ samples: [Float]) -> Double {
@@ -1746,6 +2345,15 @@ extension AppDelegate: SettingsBridge {
     }
     /// Commit the edited list + score and rebuild the engine so it takes effect.
     func applyHotwords() { store.commitHotwords() }
+    var hotwordDomainIDs: [String] {
+        get { store.hotwordDomainIDs }
+        set { store.hotwordDomainIDs = newValue }
+    }
+    func applyHotwordDomains(_ ids: [String]) {
+        store.hotwordDomainIDs = ids
+        refreshCorrections()
+        rebuildEngineForConfig()
+    }
 
     // Replacements (post-recognition corrections)
     var replacementsEnabled: Bool {
@@ -1792,31 +2400,49 @@ extension AppDelegate: SettingsBridge {
     // 云端大模型:整包配置在 store/Keychain ↔ UI DTO 之间映射。
     var cloudConfig: CloudConfigDTO {
         get {
-            CloudConfigDTO(enabled: store.cloudEnabled, provider: store.cloudProvider,
-                           baseURL: store.cloudBaseURL, model: store.cloudModel,
-                           numbers: store.cloudModNumbers, fillers: store.cloudModFillers,
-                           restate: store.cloudModRestate, hotwords: store.cloudModHotwords,
-                           apiKey: store.cloudApiKey, templatesJSON: store.cloudTemplatesJSON,
-                           activeTemplate: store.cloudActiveTemplate, autoOverride: store.cloudAutoOverride,
-                           customProvidersJSON: store.cloudCustomProvidersJSON,
-                           temperature: store.cloudTemperature, maxTokens: store.cloudMaxTokens,
-                           logEnabled: store.cloudLogEnabled, profilesJSON: store.cloudProfilesJSON,
-                           templateHotkeysJSON: store.cloudTemplateHotkeysJSON)
+            normalizedCloudConfig(
+                CloudConfigDTO(enabled: store.cloudEnabled, provider: store.cloudProvider,
+                               baseURL: store.cloudBaseURL, model: store.cloudModel,
+                               numbers: store.cloudModNumbers, fillers: store.cloudModFillers,
+                               restate: store.cloudModRestate, hotwords: store.cloudModHotwords,
+                               apiKey: store.cloudApiKey, templatesJSON: store.cloudTemplatesJSON,
+                               activeTemplate: store.cloudActiveTemplate, autoOverride: store.cloudAutoOverride,
+                               customProvidersJSON: store.cloudCustomProvidersJSON,
+                               temperature: store.cloudTemperature, maxTokens: store.cloudMaxTokens,
+                               logEnabled: store.cloudLogEnabled, profilesJSON: store.cloudProfilesJSON,
+                               templateHotkeysJSON: store.cloudTemplateHotkeysJSON)
+            )
         }
         set {
-            store.cloudProvider = newValue.provider; store.cloudBaseURL = newValue.baseURL
-            store.cloudModel = newValue.model
-            store.cloudModNumbers = newValue.numbers; store.cloudModFillers = newValue.fillers
-            store.cloudModRestate = newValue.restate; store.cloudModHotwords = newValue.hotwords
-            store.cloudApiKey = newValue.apiKey; store.cloudTemplatesJSON = newValue.templatesJSON
-            store.cloudActiveTemplate = newValue.activeTemplate; store.cloudAutoOverride = newValue.autoOverride
-            store.cloudCustomProvidersJSON = newValue.customProvidersJSON
-            store.cloudTemperature = newValue.temperature; store.cloudMaxTokens = newValue.maxTokens
-            store.cloudLogEnabled = newValue.logEnabled
-            store.cloudProfilesJSON = newValue.profilesJSON
-            store.cloudTemplateHotkeysJSON = newValue.templateHotkeysJSON   // 改动 post hotkeyChanged → 重建快捷键
-            store.cloudEnabled = newValue.enabled   // 最后置 enabled,触发一次 refreshRefiner
+            let normalized = normalizedCloudConfig(newValue)
+            store.cloudProvider = normalized.provider; store.cloudBaseURL = normalized.baseURL
+            store.cloudModel = normalized.model
+            store.cloudModNumbers = normalized.numbers; store.cloudModFillers = normalized.fillers
+            store.cloudModRestate = normalized.restate; store.cloudModHotwords = normalized.hotwords
+            store.cloudApiKey = normalized.apiKey; store.cloudTemplatesJSON = normalized.templatesJSON
+            store.cloudActiveTemplate = normalized.activeTemplate; store.cloudAutoOverride = normalized.autoOverride
+            store.cloudCustomProvidersJSON = normalized.customProvidersJSON
+            store.cloudTemperature = normalized.temperature; store.cloudMaxTokens = normalized.maxTokens
+            store.cloudLogEnabled = normalized.logEnabled
+            store.cloudProfilesJSON = normalized.profilesJSON
+            store.cloudTemplateHotkeysJSON = normalized.templateHotkeysJSON   // 改动 post hotkeyChanged → 重建快捷键
+            store.cloudEnabled = normalized.enabled   // 最后置 enabled,触发一次 refreshRefiner
         }
+    }
+    private func normalizedCloudConfig(_ config: CloudConfigDTO) -> CloudConfigDTO {
+        var normalized = config
+        guard normalized.provider == "openai_compatible" else { return normalized }
+        let openAI = CloudProvidersUI.find("openai")
+        normalized.provider = openAI.key
+        let trimmedBaseURL = normalized.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedBaseURL.isEmpty || trimmedBaseURL == "https://your-proxy.example.com/v1" {
+            normalized.baseURL = openAI.baseURL
+        }
+        let trimmedModel = normalized.model.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedModel.isEmpty || trimmedModel == "gpt-4o-mini" {
+            normalized.model = openAI.defaultModel
+        }
+        return normalized
     }
     func testCloud(_ cfg: CloudConfigDTO) async -> CloudTestResult {
         let r = await CloudRefiner.testConnection(baseURL: cfg.baseURL, model: cfg.model, apiKey: cfg.apiKey)
@@ -1900,6 +2526,10 @@ extension AppDelegate: SettingsBridge {
         }
     }
 
+    func deleteAppAndData() {
+        confirmAndDeleteAppAndData()
+    }
+
     /// SettingsBridge: the About tab's "检查更新" button → Sparkle's user-initiated check.
     func checkForUpdates() {
         // Bring the app forward so Sparkle's progress/alert windows are visible
@@ -1937,6 +2567,9 @@ extension AppDelegate: OnboardingBridge {
     }
 
     func finishOnboarding() {
+        if store.hotwordDomainIDs.isEmpty {
+            applyHotwordDomains(["vibe_coding"])
+        }
         store.didCompleteOnboarding = true
         closeOnboarding()
     }

@@ -11,6 +11,9 @@ macos_build/native/dist/
 # local-only eval tools (not shipped)
 tools/
 
+# Colleague's parallel macOS copy — local reference only, never commit.
+macos_build_other_teammate/
+
 # ASR model payload on Windows is fetched / staged at build time, never committed.
 # Anchored to the payload dir on purpose: a bare `**/models/` also matches the C# source
 # directory windows_build/src/VibeXASR.Windows/Models/ and would drop ModelPaths.cs etc.
