@@ -26,13 +26,13 @@
 <p>macOS is the primary development branch; the Windows build is compiled in sync and not yet fully tested (preview). Feedback welcome.<br>
 macOS 为主开发分支,Windows 为同步编译,尚未充分测试(预览版)。欢迎反馈。</p>
 ]]></description>
-      <sparkle:releaseNotesLink>https://models.speech.wiki/app/notes-209.html</sparkle:releaseNotesLink>
-      <pubDate>Sun, 05 Jul 2026 23:08:39 +0800</pubDate>
-      <sparkle:version>209</sparkle:version>
+      <sparkle:releaseNotesLink>https://models.speech.wiki/app/notes-210.html</sparkle:releaseNotesLink>
+      <pubDate>Mon, 06 Jul 2026 13:04:04 +0800</pubDate>
+      <sparkle:version>210</sparkle:version>
       <sparkle:shortVersionString>2.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
       <link>https://github.com/Gilgamesh-J/X-ASR/releases/tag/vibe-v2.0</link>
-      <enclosure url="https://models.speech.wiki/app/VibeXASR-2.0.zip?b=209" type="application/octet-stream" sparkle:edSignature="WE7oizcVilQwcETKFDba9r4e1PjyCAi6TigtvQIP/IVP56OAEtjacin77eFs1k0m8Vzebf+5vs16GUgfmVbmCw==" length="166240674" />
+      <enclosure url="https://models.speech.wiki/app/VibeXASR-2.0.zip?b=210" type="application/octet-stream" sparkle:edSignature="YDsPWXbTF1g7FlQtwuX8OwMokQ4/ikZARSCVTomvnw82kj7TgbDUiRTT6+SAMA4WnnfhoQwT/tjyaZkcC2aOCA==" length="166243771" />
     </item>
   </channel>
 </rss>

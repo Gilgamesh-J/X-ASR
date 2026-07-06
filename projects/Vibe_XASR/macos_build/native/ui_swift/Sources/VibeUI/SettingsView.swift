@@ -1118,11 +1118,7 @@ private struct HotwordsTab: View {
                     VibeToggle(on: Binding(get: { s.hotwordsEnabled },
                                            set: { s.applyHotwordsEnabled($0) }))
                 }
-                SettingsRow(title: "常用领域", help: "选择你最常说的场景，系统会按领域自动优化识别。") {
-                    DomainPills(selectedIDs: $domainIDs) { ids in
-                        s.applyHotwordDomains(ids)
-                    }
-                }
+                domainPicker
                 editor
                 SettingsRow(title: l10n.t("hw.score"), help: l10n.t("hw.score.help")) {
                     VibeSegmented(value: $scoreTier,
@@ -1159,6 +1155,29 @@ private struct HotwordsTab: View {
             let now = s.engineSwapping
             if now != swapping { withAnimation(Vibe.Motion.easeOut) { swapping = now } }
         }
+    }
+
+    /// Full-width domain picker: header stacked above a responsive multi-column
+    /// card grid. (Placed inside a SettingsRow, the grid gets squeezed into the
+    /// narrow right control column and collapses to one tall column.)
+    private var domainPicker: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("常用领域")
+                    .font(Vibe.Fonts.ui(13.5, weight: .medium))
+                    .foregroundStyle(Vibe.Palette.text(scheme))
+                Text("选择你最常说的场景，系统会按领域自动优化识别。")
+                    .font(Vibe.Fonts.ui(11.5))
+                    .foregroundStyle(Vibe.Palette.textMuted(scheme))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            DomainPills(selectedIDs: $domainIDs) { ids in
+                s.applyHotwordDomains(ids)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 13).padding(.horizontal, 16)
+        .background(Vibe.Palette.surface(scheme))
     }
 
     /// Compact hotword grid: multi-column cards instead of one-row-per-word.
@@ -1258,13 +1277,13 @@ private struct HotwordsTab: View {
         var onChange: ([String]) -> Void
 
         var body: some View {
-            let columns = [GridItem(.adaptive(minimum: 148, maximum: 220), spacing: 10)]
+            let columns = [GridItem(.adaptive(minimum: 150, maximum: 240), spacing: 10)]
             LazyVGrid(columns: columns, alignment: .leading, spacing: 10) {
                 ForEach(HotwordDomainCatalog.all) { domain in
                     chip(domain)
                 }
             }
-            .frame(maxWidth: 560, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
 
         @ViewBuilder
@@ -1297,10 +1316,10 @@ private struct HotwordsTab: View {
                     Text(domain.summary)
                         .font(Vibe.Fonts.ui(10.5))
                         .foregroundStyle(selected ? .white.opacity(0.82) : Vibe.Palette.textMuted(scheme))
-                        .lineLimit(3)
+                        .lineLimit(2)
                         .multilineTextAlignment(.leading)
                 }
-                .frame(maxWidth: .infinity, minHeight: 84, alignment: .topLeading)
+                .frame(maxWidth: .infinity, minHeight: 64, alignment: .topLeading)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 11)
                 .background(
