@@ -1165,6 +1165,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         sessionChunks.contains(where: \.polishing)
     }
 
+    private func anySessionPolishing() -> Bool {
+        anyChunkPolishing() || sessionWindowPolishTask != nil || sessionLongFormTask != nil
+    }
+
+    private func cancelWindowPolishForWholeSessionPass() {
+        sessionWindowPolishTask?.cancel()
+        sessionWindowPolishTask = nil
+        sessionWindowPolishToken += 1
+        for idx in sessionChunks.indices { sessionChunks[idx].polishing = false }
+    }
+
     private func updateHistoryForSession(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -1203,7 +1214,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 return
             }
             updateHistoryForSession(text)
-            if anyChunkPolishing() {
+            if anySessionPolishing() {
                 hudModel.phase = .polishing
             } else {
                 hudModel.phase = .done
@@ -1246,10 +1257,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         return id
     }
 
-    private func updateChunk(id: UUID, display: String, polishing: Bool) {
-        guard let idx = sessionChunks.firstIndex(where: { $0.id == id }) else { return }
-        sessionChunks[idx].display = display
-        sessionChunks[idx].polishing = polishing
+    @discardableResult
+    private func replaceChunkRange(_ range: Range<Int>, raw: String, display: String,
+                                   polishing: Bool, sealed: Bool) -> Int {
+        let lower = min(max(range.lowerBound, 0), sessionChunks.count)
+        let upper = min(max(range.upperBound, lower), sessionChunks.count)
+        let replacement = SessionChunk(id: UUID(), raw: raw, display: display, polishing: polishing, sealed: sealed)
+        sessionChunks.replaceSubrange(lower..<upper, with: [replacement])
+        return lower
     }
 
     private func editableWindowStartIndex() -> Int {
@@ -1268,100 +1283,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         sessionWindowPolishTask?.cancel()
         sessionWindowPolishToken += 1
         let token = sessionWindowPolishToken
-        let window = Array(sessionChunks[start...])
-        let ids = window.map(\.id)
-        let rawSegments = window.map(\.raw)
-        for id in ids {
-            if let idx = sessionChunks.firstIndex(where: { $0.id == id }) {
-                sessionChunks[idx].polishing = true
-            }
+        let end = sessionChunks.count
+        let window = Array(sessionChunks[start..<end])
+        let rawSpan = window.map(\.raw).joined()
+        for idx in start..<end {
+            sessionChunks[idx].polishing = true
         }
 
         sessionWindowPolishTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            let polished = await self.correctedFinalAsync(rawSegments.joined())
+            let polished = await self.correctedFinalAsync(rawSpan)
             guard !Task.isCancelled,
                   self.sessionGeneration == generation,
                   self.sessionWindowPolishToken == token else { return }
-            let pieces = self.splitRefinedWindow(polished, rawSegments: rawSegments)
-            guard pieces.count == ids.count else { return }
-            for (id, piece) in zip(ids, pieces) {
-                self.updateChunk(id: id, display: piece, polishing: false)
-            }
+            let final = polished.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? self.postProcessRefinedFinal(rawSpan)
+                : polished
+            _ = self.replaceChunkRange(start..<end, raw: rawSpan, display: final, polishing: false, sealed: false)
             self.sessionWindowPolishTask = nil
             self.renderSessionText(replaceFromChunkIndex: start)
         }
-    }
-
-    private func splitRefinedWindow(_ refined: String, rawSegments: [String]) -> [String] {
-        let text = refined.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return rawSegments }
-        guard rawSegments.count > 1 else { return [text] }
-        let chars = Array(text)
-        let count = rawSegments.count
-        guard chars.count >= count else { return rawSegments.dropLast() + [text] }
-
-        let sentencePunct = Set<Character>(["。", "！", "？", "；", ".", "!", "?", ";", "\n"])
-        let softPunct = Set<Character>(["，", ",", "、", "：", ":"])
-        let weights = rawSegments.map { max($0.count, 1) }
-        let totalWeight = max(weights.reduce(0, +), 1)
-
-        func boundaryPenalty(_ split: Int) -> Double {
-            guard split > 0, split < chars.count else { return 8.0 }
-            let left = chars[split - 1]
-            if sentencePunct.contains(left) { return 0.0 }
-            if softPunct.contains(left) { return 0.25 }
-            return 1.0
-        }
-
-        func ratioScore(_ boundaries: [Int]) -> Double {
-            var score = 0.0
-            var weightPrefix = 0
-            for (idx, boundary) in boundaries.enumerated() {
-                weightPrefix += weights[idx]
-                let expected = Double(weightPrefix) / Double(totalWeight)
-                let actual = Double(boundary) / Double(chars.count)
-                score += abs(actual - expected) * 12.0
-                score += boundaryPenalty(boundary)
-            }
-            return score
-        }
-
-        let boundaries: [Int]
-        if count == 2 {
-            var bestSplit = 1
-            var bestScore = Double.greatestFiniteMagnitude
-            for split in 1..<chars.count {
-                let score = ratioScore([split])
-                if score < bestScore {
-                    bestScore = score
-                    bestSplit = split
-                }
-            }
-            boundaries = [bestSplit]
-        } else {
-            var bestPair = [1, max(2, chars.count - 1)]
-            var bestScore = Double.greatestFiniteMagnitude
-            for first in 1..<(chars.count - 1) {
-                for second in (first + 1)..<chars.count {
-                    let score = ratioScore([first, second])
-                    if score < bestScore {
-                        bestScore = score
-                        bestPair = [first, second]
-                    }
-                }
-            }
-            boundaries = bestPair
-        }
-
-        var pieces: [String] = []
-        var start = 0
-        for boundary in boundaries {
-            pieces.append(String(chars[start..<boundary]))
-            start = boundary
-        }
-        pieces.append(String(chars[start...]))
-        return pieces
     }
 
     private func scheduleDeferredCloudLongForm(generation: Int) {
@@ -1370,20 +1311,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         guard !raw.isEmpty else { return }
         let localPreview = sessionDisplayText().trimmingCharacters(in: .whitespacesAndNewlines)
 
+        cancelWindowPolishForWholeSessionPass()
         sessionLongFormTask?.cancel()
         for idx in sessionChunks.indices { sessionChunks[idx].polishing = true }
         renderSessionText()
 
         let system = buildCloudLongFormSystem()
-        let user = """
-请把这段较长的语音转写作为一个整体做二次 refine。
-
-原始 ASR：
-\(raw)
-
-当前本地结果（可能已做过局部 refine / 热词 / 格式修正，可作为参考）：
-\(localPreview.isEmpty ? "(空)" : localPreview)
-"""
+        let user = buildCloudComparisonUserPrompt(
+            task: "请把下面这一整段输入作为一个整体做最终 refine，并用返回结果直接替换这整段输入。",
+            raw: raw,
+            localPreview: localPreview
+        )
 
         sessionLongFormTask = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -1391,11 +1329,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             let polished = await cloud.request(system: system, user: user, logInput: raw)
             guard !Task.isCancelled, self.sessionGeneration == generation else { return }
             let final = polished.map(self.postProcessRefinedFinal) ?? self.previewDisplayForDeferredCloud(raw)
-            self.sessionChunks = [SessionChunk(id: UUID(), raw: raw, display: final, polishing: false, sealed: true)]
+            _ = self.replaceChunkRange(0..<self.sessionChunks.count, raw: raw, display: final, polishing: false, sealed: true)
             self.sessionPartial = ""
             self.sessionTailRaw = ""
             self.sessionLongFormTask = nil
-            self.renderSessionText()
+            self.renderSessionText(replaceFromChunkIndex: 0)
         }
     }
 
@@ -1405,23 +1343,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         guard !raw.isEmpty else { return }
         let current = sessionDisplayText().trimmingCharacters(in: .whitespacesAndNewlines)
 
+        cancelWindowPolishForWholeSessionPass()
         sessionLongFormTask?.cancel()
         for idx in sessionChunks.indices { sessionChunks[idx].polishing = true }
         renderSessionText()
 
         let system = store.refinerEnabled ? buildSmartEnhancementSystem() : buildCloudLongFormSystem()
-        let currentLabel = store.refinerEnabled
-            ? "当前本地润色完整结果（可参考其中已经修正正确的部分）"
-            : "当前整段预览结果（仅供参考）"
-        let user = """
-请把这次从按下热键开始到结束的一整段语音输入作为整体做最终 refine。
-
-原始 ASR：
-\(raw)
-
-\(currentLabel)：
-\(current.isEmpty ? "(空)" : current)
-"""
+        let user = buildCloudComparisonUserPrompt(
+            task: "请把这次从按下热键开始到结束的整段输入作为一个整体做最终 refine，并用返回结果直接替换这整段输入。",
+            raw: raw,
+            localPreview: current
+        )
 
         sessionLongFormTask = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -1430,11 +1362,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             guard !Task.isCancelled, self.sessionGeneration == generation else { return }
             let fallback = current.isEmpty ? self.previewDisplayForDeferredCloud(raw) : current
             let final = polished.map(self.postProcessRefinedFinal) ?? fallback
-            self.sessionChunks = [SessionChunk(id: UUID(), raw: raw, display: final, polishing: false, sealed: true)]
+            _ = self.replaceChunkRange(0..<self.sessionChunks.count, raw: raw, display: final, polishing: false, sealed: true)
             self.sessionPartial = ""
             self.sessionTailRaw = ""
             self.sessionLongFormTask = nil
-            self.renderSessionText()
+            self.renderSessionText(replaceFromChunkIndex: 0)
         }
     }
 
@@ -1569,24 +1501,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 """
     }
 
-    private func buildSmartEnhancementSystem() -> String {
-        let base = buildCloudSystem()
-        return """
-\(base)
+    private func buildCloudComparisonUserPrompt(task: String, raw: String, localPreview: String) -> String {
+        """
+\(task)
 
-补充要求:
-- 这是一次“智能增强”任务,目标是把整次语音输入整理成说话人最终真正想表达的文本。
-- 你会同时收到两份输入:「原始 ASR」和「当前本地结果」。
-- 请以「原始 ASR」为主判断真实内容,以「当前本地结果」为辅吸收其中已经修正正确的部分。
-- 必须先删除口水词、语气词、结巴重复和无意义重复,但不要误删真实信息。
-- 如果 ASR 中有识别错误、同音误写、上下文不通顺的词,请结合完整语境修正成最合理的正确说法。
-- 如果说话人中途自我修正或改口,例如“麦当劳,不对,肯德基”,必须删除被推翻的旧说法,只保留最终正确版本。
-- 输出应该体现“最终想表达的内容”,不要保留犹豫、撤回、试探和修正痕迹。
-- 做合理格式化:补全标点,整理段落;如果内容天然适合条目化,可以转成项目符号或编号列表。
-- 做规范书写:数字、时间、金额、百分比、英文术语、专有名词大小写等尽量规范统一。
-- 专有名词、技术名词和领域词按热词规范统一。
-- 不要总结、不要明显缩短内容、不要改写成另一种表达风格、不要添加原文没有的新事实。
-- 只输出最终文本,不要解释。
+<raw_asr>
+\(raw)
+</raw_asr>
+
+<local_result>
+\(localPreview.isEmpty ? "(空)" : localPreview)
+</local_result>
+"""
+    }
+
+    private func buildSmartEnhancementSystem() -> String {
+        return """
+你现在执行的是一个文本优化任务。
+
+你会收到两段文本：
+1. `<raw_asr>`：原始语音输入的识别结果。它通常信息最全，但可能很乱，包含错字、重复、口语词、改口、解释性补充和不完整表达。
+2. `<local_result>`：对同一段内容做过初步 refine 后的结果。它通常更清楚、更顺，但可能丢失信息，尤其可能漏掉改口、补充说明、解释性描述，以及某些专有名词修正线索。
+
+你的目标是：
+- 先结合 `<local_result>` 理解用户大致真正想表达的意思。
+- 再回到 `<raw_asr>`，基于其中更完整的信息做最终 refine。
+- 最终输出应当是用户真正想说、逻辑通顺、书写明确的最终文本。
+
+工作要求：
+- 以 `<raw_asr>` 为信息主源，以 `<local_result>` 为理解辅助。
+- 如果两者冲突，优先保留 `<raw_asr>` 中更完整、更能解释上下文的信息，同时吸收 `<local_result>` 中已经明确正确的表达。
+- 删除 filler words、语气词、口头禅、结巴重复和无意义重复。
+- 做 ITN：把数字、日期、时间、金额、百分比、英文缩写、大小写等整理成自然书写形式。
+- 修正识别错误、同音误写、断句错误和上下文不通顺的词句，得到最合理的最终写法。
+- 正确处理改口和自我修正：如果后文推翻、替换或修正了前文，必须同步改写前文，只保留最终成立的版本。
+- 正确处理解释性说明：如果说话人在解释某个词、名字或术语怎么写，必须先理解这段解释是在指代前后文中的哪个词，然后把那个词改成正确写法，而不是机械保留解释原话。
+- 解释性说明本身也可能被识别错，所以不能只按字面替换；要结合上下文理解说话人到底在解释哪个词、想确定什么写法。
+- 对于指代不清的“那个字”“前面那个词”“就是这个写法”“X的X”这类表达，要结合整段上下文把被解释对象补全并明确写出来。
+- 如果解释性说明只是为了纠正写法，最终文本里通常不应保留这段解释过程；只保留修正后的结果。只有当这段解释本身就是内容的一部分时，才保留。
+- 可以补标点、理顺句子、整理段落；如果内容天然适合列表，可以整理成列表，但不要丢信息。
+
+输出要求：
+- 不要总结。
+- 不要明显缩短内容。
+- 不要改写成另一种风格。
+- 不要添加原文没有的新事实。
+- 只输出最终文本，不要解释。
 """
     }
 
@@ -1842,8 +1802,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         mic.stop()
         stopElapsedTimer()
         sessionStopped = true
-        setStatusIcon(anyChunkPolishing() ? "✍️" : "🎙")
-        hudModel.phase = anyChunkPolishing() ? .polishing : .finalizing
+        setStatusIcon(anySessionPolishing() ? "✍️" : "🎙")
+        hudModel.phase = anySessionPolishing() ? .polishing : .finalizing
 
         // endSession() finalizes the utterance and fires onFinal on the main queue,
         // which performs the insert (streamed or one-shot paste) AND records history.

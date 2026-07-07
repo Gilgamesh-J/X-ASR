@@ -65,6 +65,7 @@ final class Refiner {
         guard let raw, !raw.isEmpty else { return text }                 // 超时/空 → 回退
         var out = Refiner.stripWrapping(raw)
         if backend.emitsUncertainList { out = Refiner.stripUncertainList(out) }  // CPM5:剥掉尾部不确定词列表,绝不进插入路径
+        out = Refiner.collapseExactDoubleEcho(out, relativeTo: text)     // 短句偶发「整段重复两遍」→ 折回一遍
         guard !out.isEmpty, Guardrails.accept(src: text, out: out) else { return text }  // 护栏不过 → 回退
         return out
     }
@@ -98,6 +99,19 @@ final class Refiner {
         }
         guard let r = s.range(of: #"\s*<[^<\n]{0,100}$"#, options: .regularExpression) else { return s }
         return String(s[..<r.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// 某些短句在 1 个 chunk 的局部 refine 中会偶发产出「A+A」式整段回声。
+    /// 仅当输出可被精确拆成相同两半,且单半本身能通过护栏时,才折回单半。
+    static func collapseExactDoubleEcho(_ out: String, relativeTo src: String) -> String {
+        let trimmed = out.trimmingCharacters(in: .whitespacesAndNewlines)
+        let chars = Array(trimmed)
+        guard chars.count >= 2, chars.count.isMultiple(of: 2) else { return trimmed }
+        let mid = chars.count / 2
+        let first = String(chars[..<mid]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let second = String(chars[mid...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !first.isEmpty, first == second else { return trimmed }
+        return Guardrails.accept(src: src, out: first) ? first : trimmed
     }
 
     /// 超时竞速:先到者胜;超时分支返回 nil → 调用方回退。

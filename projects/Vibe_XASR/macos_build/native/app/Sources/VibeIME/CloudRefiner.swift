@@ -91,6 +91,8 @@ enum PromptSeeds {
 
 /// 云端后端:调 OpenAI/Ark 兼容 chat/completions。无可变共享状态(全 let),线程安全。
 final class CloudRefiner: RefinerBackend, @unchecked Sendable {
+    private static let requestTimeout: TimeInterval = 60
+    private static let testTimeout: TimeInterval = 15
     let baseURL: String
     let model: String
     let apiKey: String
@@ -149,7 +151,7 @@ final class CloudRefiner: RefinerBackend, @unchecked Sendable {
             let data = try await CloudRefiner.chat(
                 baseURL: baseURL, model: model, apiKey: apiKey,
                 messages: messages,
-                maxTokens: maxTokens, temperature: temperature)
+                maxTokens: maxTokens, temperature: temperature, timeout: Self.requestTimeout)
             let ms = Int(Date().timeIntervalSince(t0) * 1000)
             let out = CloudRefiner.extractContent(data)
             CloudRequestLog.shared.record(provider: provider, baseURL: baseURL, model: model,
@@ -158,10 +160,12 @@ final class CloudRefiner: RefinerBackend, @unchecked Sendable {
             return out
         } catch {
             let ms = Int(Date().timeIntervalSince(t0) * 1000)
-            let cancelled = (error is CancellationError) || (error as NSError).code == NSURLErrorCancelled
+            let nsError = error as NSError
+            let timedOut = nsError.code == NSURLErrorTimedOut
+            let cancelled = (error is CancellationError) || nsError.code == NSURLErrorCancelled
             CloudRequestLog.shared.record(provider: provider, baseURL: baseURL, model: model,
-                                          status: cancelled ? "timeout" : "error", ms: ms,
-                                          input: logInput, output: cancelled ? "超时取消(>润色超时)" : error.localizedDescription,
+                                          status: (cancelled || timedOut) ? "timeout" : "error", ms: ms,
+                                          input: logInput, output: (cancelled || timedOut) ? "请求超时" : error.localizedDescription,
                                           prompt: promptForLog)
             return nil
         }
@@ -189,13 +193,14 @@ final class CloudRefiner: RefinerBackend, @unchecked Sendable {
     static let hardInputTokenLimit = 24_000
 
     static func chat(baseURL: String, model: String, apiKey: String,
-                     messages: [[String: String]], maxTokens: Int, temperature: Double = 0) async throws -> Data {
+                     messages: [[String: String]], maxTokens: Int,
+                     temperature: Double = 0, timeout: TimeInterval = requestTimeout) async throws -> Data {
         guard let url = URL(string: "\(trimURL(baseURL))/chat/completions") else {
             throw NSError(domain: "cloud", code: -1, userInfo: [NSLocalizedDescriptionKey: "Base URL 无效"])
         }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
-        req.timeoutInterval = 30
+        req.timeoutInterval = timeout
         req.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try JSONSerialization.data(withJSONObject: [
@@ -233,7 +238,7 @@ final class CloudRefiner: RefinerBackend, @unchecked Sendable {
         let t0 = Date()
         do {
             _ = try await chat(baseURL: baseURL, model: model, apiKey: apiKey,
-                               messages: [["role": "user", "content": "hi"]], maxTokens: 1)
+                               messages: [["role": "user", "content": "hi"]], maxTokens: 1, timeout: testTimeout)
             let ping = Int(Date().timeIntervalSince(t0) * 1000)
             // 整段润色总耗时 ≈ 本次往返(网络 + 首字/思考)+ 生成几十~上百字输出(经验 +1~3s)。
             // 故总耗时 = 往返 + 生成,必然 ≥ 单次往返(修正:旧版写死 +0.3s,与实测往返自相矛盾)。

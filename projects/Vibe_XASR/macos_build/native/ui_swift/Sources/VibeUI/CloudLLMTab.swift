@@ -1,8 +1,7 @@
 import SwiftUI
 import AppKit
 
-// 「AI 功能」标签完整视图:本地润色 + 云端大模型(服务商/Key/模型/测试连接)+ 处理项 + Prompt 模板工作室。
-// 1:1 还原 云端llm「大模型设置」设计。
+// 「AI 功能」标签完整视图:模式切换 + 本地润色 + 云端配置 + 请求日志。
 
 // MARK: - 小工具
 
@@ -154,22 +153,18 @@ struct LLMTab: View {
             modeCard
 
             if polishMode == .local {
-                Text("本地润色").sectionLabel(scheme)
+                Text("本地润色（流式润色）").sectionLabel(scheme)
                 localCard
             }
 
             if polishMode == .cloud || polishMode == .local {
-                Text(s.refiner ? "智能增强" : "AI 润色").sectionLabel(scheme)
+                Text(s.refiner ? "智能增强" : "AI 润色（非流式润色）").sectionLabel(scheme)
                 cloudCard
             }
 
             if cfg.enabled {
                 Text(l10n.t("llm.sec.requests")).sectionLabel(scheme)
                 requestLogCard
-                Text(l10n.t("llm.sec.mods")).sectionLabel(scheme)
-                modsCard
-                Text(l10n.t("llm.sec.templates")).sectionLabel(scheme)
-                PromptTemplateStudioView(s: s, l10n: l10n, embedded: true)
             }
         }
         .onChange(of: s.cloud) { _, newVal in   // 外部(如重置)同步进来
@@ -187,14 +182,14 @@ struct LLMTab: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
                 polishModeButton(
-                    title: "本地润色",
+                    title: "本地润色（流式润色）",
                     help: nil,
                     active: polishMode == .local
                 ) {
                     polishMode == .local ? deactivateAllPolish() : activateLocalMode()
                 }
                 polishModeButton(
-                    title: "AI 润色",
+                    title: "AI 润色（非流式润色）",
                     help: nil,
                     active: polishMode == .cloud
                 ) {
@@ -213,6 +208,10 @@ struct LLMTab: View {
                     VibeToggle(on: Binding(get: { cfg.enabled }, set: { setEnhancementEnabled($0) }))
                 }
                 .padding(.top, 2)
+                Text("在本地流式润色结束后，再用云端做一次整段增强。")
+                    .font(Vibe.Fonts.ui(11.5))
+                    .foregroundStyle(Vibe.Palette.textMuted(scheme))
+                    .padding(.top, 2)
             }
         }
         .padding(20)
@@ -226,7 +225,7 @@ struct LLMTab: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 8) {
-                        Text(l10n.t("llm.local.title")).font(Vibe.Fonts.ui(15.5, weight: .semibold))
+                        Text("本地润色（流式润色）").font(Vibe.Fonts.ui(15.5, weight: .semibold))
                             .foregroundStyle(Vibe.Palette.text(scheme))
                         betaBadge
                     }
@@ -325,7 +324,7 @@ struct LLMTab: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 8) {
-                        Text(s.refiner ? "智能增强" : "AI 润色").font(Vibe.Fonts.ui(15.5, weight: .semibold))
+                        Text(s.refiner ? "智能增强" : "AI 润色（非流式润色）").font(Vibe.Fonts.ui(15.5, weight: .semibold))
                             .foregroundStyle(Vibe.Palette.text(scheme))
                         if s.refiner { recommendationBadge }
                     }
@@ -651,7 +650,7 @@ struct LLMTab: View {
         .buttonStyle(.plain)
     }
     private var recommendationBadge: some View {
-        Text("建议打开")
+        Text("二次增强")
             .font(Vibe.Fonts.ui(10.5, weight: .semibold))
             .foregroundStyle(Color(red: 0.98, green: 0.74, blue: 0.36))
             .padding(.horizontal, 8).padding(.vertical, 2)
@@ -705,24 +704,6 @@ struct LLMTab: View {
         if alert.runModal() == .alertSecondButtonReturn,
            let url = URL(string: "https://github.com/Gilgamesh-J/X-ASR/issues/new") {
             NSWorkspace.shared.open(url)
-        }
-    }
-
-    // ===== 处理项卡 =====
-    private var modsCard: some View {
-        SettingsGroup(label: "") {
-            SettingsRow(title: l10n.t("llm.mod.numbers.title"), help: l10n.t("llm.mod.numbers.help")) {
-                VibeToggle(on: Binding(get: { cfg.numbers }, set: { cfg.numbers = $0; commit() }))
-            }
-            SettingsRow(title: l10n.t("llm.mod.fillers.title"), help: l10n.t("llm.mod.fillers.help")) {
-                VibeToggle(on: Binding(get: { cfg.fillers }, set: { cfg.fillers = $0; commit() }))
-            }
-            SettingsRow(title: l10n.t("llm.mod.restate.title"), help: l10n.t("llm.mod.restate.help")) {
-                VibeToggle(on: Binding(get: { cfg.restate }, set: { cfg.restate = $0; commit() }))
-            }
-            SettingsRow(title: l10n.t("llm.mod.hotwords.title"), help: l10n.t("llm.mod.hotwords.help")) {
-                VibeToggle(on: Binding(get: { cfg.hotwords }, set: { cfg.hotwords = $0; commit() }))
-            }
         }
     }
 
