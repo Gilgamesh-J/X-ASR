@@ -127,7 +127,7 @@ enum Paste {
 final class StreamingInserter {
     private let q = DispatchQueue(label: "com.xasr.vibexasr.inserter")
     private let src = CGEventSource(stateID: .hidSystemState)
-    private let keyDelay: useconds_t = 5_000
+    private let keyDelay: useconds_t = 8_000
     private var committed: [Character] = []      // touched only on `q`
 
     /// Make the focused app's text match `text` (diff vs already-typed).
@@ -351,8 +351,10 @@ final class StreamingInserter {
                 down.flags = []
                 down.post(tap: .cghidEventTap)
             }
+            // keyUp must NOT carry the unicode payload: some targets (remote-desktop
+            // clients that forward key events to tmux/terminal, some IME layers) insert
+            // the char on BOTH down and up → every character typed twice. Release only.
             if let up = CGEvent(keyboardEventSource: src, virtualKey: 0, keyDown: false) {
-                u16.withUnsafeBufferPointer { up.keyboardSetUnicodeString(stringLength: $0.count, unicodeString: $0.baseAddress) }
                 up.flags = []
                 up.post(tap: .cghidEventTap)
             }

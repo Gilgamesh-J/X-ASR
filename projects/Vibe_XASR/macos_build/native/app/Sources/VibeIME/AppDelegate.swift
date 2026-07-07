@@ -136,6 +136,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private var sessionGeneration = 0
     private var sessionHistoryID: UUID?
     private var sessionLastClipboard = ""
+    /// Focus-less (clipboard) sink pastes the final result via ⌘V exactly once.
+    private var sessionClipboardPasted = false
     private var sessionWindowPolishTask: Task<Void, Never>?
     private var sessionWindowPolishToken = 0
     private var sessionLongFormTask: Task<Void, Never>?
@@ -1217,6 +1219,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             if anySessionPolishing() {
                 hudModel.phase = .polishing
             } else {
+                // Focus-less sink (AX can't see the field — e.g. WeChat's message box)
+                // otherwise only left the result on the clipboard. Paste it once via ⌘V
+                // on finish so it actually lands (WeChat accepts ⌘V even though it hides
+                // its AX focus). Guarded to fire exactly once per session.
+                if case .clipboardOnly = sessionSink, !sessionClipboardPasted, !text.isEmpty {
+                    sessionClipboardPasted = true
+                    Paste.insert(text, restore: !store.clipboardOverwrite)
+                }
                 hudModel.phase = .done
                 setStatusIcon(engineReady ? "🎙" : "⏳")
                 hideHUD(after: doneStaySeconds())
@@ -1244,6 +1254,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         sessionStopped = false
         sessionHistoryID = nil
         sessionLastClipboard = ""
+        sessionClipboardPasted = false
         sessionRawLog.removeAll()
         sessionFlushedRawChars = 0
         sessionTailRaw = ""
