@@ -13,6 +13,8 @@ tools/
 
 # Colleague's parallel macOS copy — local reference only, never commit.
 macos_build_other_teammate/
+# Local backup of a previous macos_build — never commit.
+macos_build.bak/
 
 # ASR model payload on Windows is fetched / staged at build time, never committed.
 # Anchored to the payload dir on purpose: a bare `**/models/` also matches the C# source
