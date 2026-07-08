@@ -14,6 +14,7 @@
 <li><b>Hotword domain packs</b> — pick your field (coding, medical, legal, finance, and more) and specialized terms auto-correct to their standard spelling.</li>
 <li><b>Reworked AI cleanup ("AI 整理")</b> — local + cloud dual-path polishing for clearer, more natural text.</li>
 <li><b>Streamlined interface</b> — compact HUD, refreshed onboarding, and a new "Delete app &amp; data" option.</li>
+<li><b>Fixes</b> — text now inserts in WeChat; no more double-insertion in terminals / remote desktop (tmux).</li>
 </ul>
 <hr>
 <ul>
@@ -21,18 +22,19 @@
 <li><b>热词场景库</b> —— 选择你的行业(编程、医疗、法律、金融等),专业词自动纠正为标准写法。</li>
 <li><b>AI 整理重做</b> —— 本地 + 云端双路润色,文本更清晰自然。</li>
 <li><b>界面精简</b> —— 紧凑 HUD、重做的引导流程,新增「彻底删除软件与配置」。</li>
+<li><b>修复</b> —— 微信里现在能正常插入;终端 / 远程桌面(tmux)不再重复插入两遍。</li>
 </ul>
 <hr>
 <p>macOS is the primary development branch; the Windows build is compiled in sync and not yet fully tested (preview). Feedback welcome.<br>
 macOS 为主开发分支,Windows 为同步编译,尚未充分测试(预览版)。欢迎反馈。</p>
 ]]></description>
-      <sparkle:releaseNotesLink>https://models.speech.wiki/app/notes-212.html</sparkle:releaseNotesLink>
-      <pubDate>Wed, 08 Jul 2026 00:10:33 +0800</pubDate>
-      <sparkle:version>212</sparkle:version>
+      <sparkle:releaseNotesLink>https://models.speech.wiki/app/notes-213.html</sparkle:releaseNotesLink>
+      <pubDate>Wed, 08 Jul 2026 09:07:17 +0800</pubDate>
+      <sparkle:version>213</sparkle:version>
       <sparkle:shortVersionString>2.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
       <link>https://github.com/Gilgamesh-J/X-ASR/releases/tag/vibe-v2.0</link>
-      <enclosure url="https://models.speech.wiki/app/VibeXASR-2.0.zip?b=212" type="application/octet-stream" sparkle:edSignature="hXhzpXti3e4kCCQreh0MEsQENwqd3G4U7SwtiPECvLZuxhwLmfoJtzLlAe83cwDaoEHG//r0p0ZfQNfR2XhwBQ==" length="166231287" />
+      <enclosure url="https://models.speech.wiki/app/VibeXASR-2.0.zip?b=213" type="application/octet-stream" sparkle:edSignature="G2ud86H/0SB4N7p8sn/ta+yH56rWHrUDmafLOu/GrZboEDq1TLpa0GtaGc/5AxzNftpfBew9xP9i5lpy8yVxBw==" length="166230950" />
     </item>
   </channel>
 </rss>

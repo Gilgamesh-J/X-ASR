@@ -319,10 +319,12 @@ final class StreamingInserter {
 
     private func applyTailReplacement(deleteCount: Int, insertText: String) {
         guard deleteCount > 0 || !insertText.isEmpty else { return }
+        // Delete the old tail with plain Backspace, NOT shift+Arrow selection:
+        // terminals / tmux / remote desktops don't support shift-arrow text selection,
+        // so the old text survived and the polished replacement got appended — the
+        // whole result appeared twice. Backspace deletes from the caret everywhere.
         if deleteCount > 0 {
-            postArrow(keyCode: 123, count: deleteCount, shift: true)
-            usleep(keyDelay * 2)
-            postDeleteSelection()
+            postBackspaces(deleteCount)
             usleep(keyDelay * 2)
         }
         if !insertText.isEmpty {
