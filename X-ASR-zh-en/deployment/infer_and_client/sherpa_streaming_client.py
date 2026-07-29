@@ -13,7 +13,7 @@ import websockets
 
 def get_parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--server-uri", type=str, default="ws://127.0.0.1:8765")
+    parser.add_argument("--server-uri", type=str, default="ws://127.0.0.1:8766")
     parser.add_argument("--wav", type=str, required=True)
     parser.add_argument("--chunk-ms", type=int, default=100)
     parser.add_argument("--simulate-realtime", type=int, default=1)

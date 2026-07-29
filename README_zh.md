@@ -500,7 +500,7 @@ python infer_and_client/sherpa_streaming_client.py \
 | 2 | Binary: int16 PCM audio chunks | 持续发送音频流 |
 | 3 | JSON: `{"type": "end"}` | 结束本次会话并输出 final 结果 |
 
-更完整的部署说明见 [X-ASR-zh-en/deployment/README.md](X-ASR-zh-en/deployment/README.md)。
+更完整的部署说明见 [X-ASR-zh-en/deployment/README.md](X-ASR-zh-en/deployment/README.md)。如果需要查看服务端/客户端脚本级教程与完整参数说明，请参考 [X-ASR-zh-en/deployment/infer_and_client/README.md](X-ASR-zh-en/deployment/infer_and_client/README.md)。
 
 <a id="仓库结构"></a>
 
@@ -527,6 +527,7 @@ X-ASR/
     |   |-- README.md
     |   |-- requirements.txt
     |   |-- infer_and_client/
+    |   |   |-- README.md
     |   |   |-- sherpa_streaming_infer.py
     |   |   |-- sherpa_streaming_server.py
     |   |   `-- sherpa_streaming_client.py

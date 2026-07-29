@@ -500,7 +500,7 @@ The provided client and server use a minimal streaming protocol:
 | 2 | Binary: int16 PCM audio chunks | Stream audio to the recognizer |
 | 3 | JSON: `{"type": "end"}` | Finish the session and flush final results |
 
-For detailed deployment instructions, see [X-ASR-zh-en/deployment/README.md](X-ASR-zh-en/deployment/README.md).
+For detailed deployment instructions, see [X-ASR-zh-en/deployment/README.md](X-ASR-zh-en/deployment/README.md). For the script-level server/client guide and full parameter reference, see [X-ASR-zh-en/deployment/infer_and_client/README.md](X-ASR-zh-en/deployment/infer_and_client/README.md).
 
 <a id="repository-layout"></a>
 
@@ -527,6 +527,7 @@ X-ASR/
     |   |-- README.md
     |   |-- requirements.txt
     |   |-- infer_and_client/
+    |   |   |-- README.md
     |   |   |-- sherpa_streaming_infer.py
     |   |   |-- sherpa_streaming_server.py
     |   |   `-- sherpa_streaming_client.py

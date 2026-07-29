@@ -4,6 +4,18 @@ This folder contains deployment-ready ONNX models, a minimal WebSocket server/cl
 
 The package is intended for users who want to run the exported streaming Zipformer models locally or on a server. It does not require the original training code.
 
+## Latest Deployment Update
+
+The WebSocket deployment entry has been updated together with the inference wrapper and test client:
+
+| File | Role | Main update |
+| --- | --- | --- |
+| [`infer_and_client/sherpa_streaming_server.py`](infer_and_client/sherpa_streaming_server.py) | WebSocket ASR server | Supports the default streaming mode and an optional energy-based tail-probe mode for interactive voice-input demos. |
+| [`infer_and_client/sherpa_streaming_infer.py`](infer_and_client/sherpa_streaming_infer.py) | sherpa-onnx inference wrapper | Provides streaming decoding, text formatting, and silence-appending decode support used by tail probing. |
+| [`infer_and_client/sherpa_streaming_client.py`](infer_and_client/sherpa_streaming_client.py) | WAV-file WebSocket client | Sends audio chunks asynchronously and waits for partial/final server responses during testing. |
+
+For the script-level tutorial and the full parameter reference, see [`infer_and_client/README.md`](infer_and_client/README.md).
+
 ## Deployment Paths
 
 | Path | Use case |
@@ -18,6 +30,7 @@ The package is intended for users who want to run the exported streaming Zipform
 X-ASR-zh-en/deployment/
 ├── requirements.txt                 # Python dependencies
 ├── infer_and_client/
+│   ├── README.md                    # WebSocket server/client guide and parameter reference
 │   ├── sherpa_streaming_infer.py    # sherpa-onnx wrapper and text formatting
 │   ├── sherpa_streaming_server.py   # WebSocket streaming ASR server
 │   └── sherpa_streaming_client.py   # WAV-file WebSocket test client
