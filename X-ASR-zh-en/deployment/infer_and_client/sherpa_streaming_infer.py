@@ -115,6 +115,18 @@ class SherpaStreamingASR:
         samples = samples.astype(np.float32).reshape(-1)
         self.stream.accept_waveform(sample_rate, samples)
 
+    def append_silence_and_decode(self, seconds: float) -> int:
+        if self.finished or seconds <= 0:
+            return 0
+
+        num_samples = int(round(self.sample_rate * seconds))
+        if num_samples <= 0:
+            return 0
+
+        silence = np.zeros(num_samples, dtype=np.float32)
+        self.accept_waveform(silence, sample_rate=self.sample_rate)
+        return self.decode()
+
     def decode(self) -> int:
         """
         Decode as much as possible for the current stream.

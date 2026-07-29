@@ -251,6 +251,13 @@ Do not mix `tokens.txt`, encoder, decoder, and joiner files from different model
 | `--decoding-method` | `greedy_search` | Online decoding method |
 | `--enable-endpoint-detection` | `0` | Whether sherpa-onnx endpoint detection is enabled |
 | `--text-format` | `none`, `lower`, or `capitalize` | Post-processing mode applied after decoding |
+| `--enable-energy-tail-probe` | `0` | Enable optional energy-based tail probing for interactive voice-input scenarios |
+| `--low-energy-rms` | `0.003` | RMS threshold used to count low-energy / silence frames |
+| `--speech-rms` | `0.010` | RMS threshold used to decide whether speech has been observed |
+| `--min-speech-ms` | `200` | Minimum speech duration before tail probing can be armed |
+| `--min-silence-ms` | `500` | Minimum low-energy duration required to trigger a tail probe |
+| `--tail-probe-ms` | `500` | Amount of silence appended before decoding again |
+| `--tail-probe-cooldown-ms` | `1000` | Cooldown between tail-probe triggers |
 
 For CPU deployment, start with:
 
@@ -265,6 +272,31 @@ For CUDA deployment, use:
 ```
 
 CUDA only works if your installed `sherpa-onnx` package was built with CUDA support.
+
+### Server Modes
+
+The WebSocket server supports two practical modes:
+
+| Mode | How to enable | Recommended use |
+| --- | --- | --- |
+| Default streaming mode | `--enable-energy-tail-probe 0` | Conservative behavior. The server decodes only from audio chunks sent by the client. |
+| Interactive tail-probe mode | `--enable-energy-tail-probe 1` | Voice-input demos or frontend applications where trailing partial results should refresh after the user pauses. |
+
+In tail-probe mode, the server watches input energy. Once speech has been observed and the following low-energy segment lasts long enough, it appends a short silence segment and calls decoding again. This does not replace a real VAD pipeline; it is a lightweight interaction helper for streaming ASR demos and voice-input frontends.
+
+Example tail-probe flags:
+
+```bash
+--enable-energy-tail-probe 1 \
+--low-energy-rms 0.003 \
+--speech-rms 0.010 \
+--min-speech-ms 200 \
+--min-silence-ms 500 \
+--tail-probe-ms 500 \
+--tail-probe-cooldown-ms 1000
+```
+
+Tune these values according to microphone gain, background noise, client-side chunk size, and frontend behavior.
 
 ### Choosing a Chunk Size
 
@@ -331,9 +363,23 @@ python infer_and_client/sherpa_streaming_server.py \
   --provider cpu \
   --sample-rate 16000 \
   --feature-dim 80 \
+  --num-threads 1 \
   --decoding-method greedy_search \
   --model-type zipformer2 \
+  --enable-endpoint-detection 0 \
   --text-format none
+```
+
+To enable the optional interactive tail-probe mode, add:
+
+```bash
+--enable-energy-tail-probe 1 \
+--low-energy-rms 0.003 \
+--speech-rms 0.010 \
+--min-speech-ms 200 \
+--min-silence-ms 500 \
+--tail-probe-ms 500 \
+--tail-probe-cooldown-ms 1000
 ```
 
 In another terminal, test it with a WAV file:
@@ -514,6 +560,13 @@ Common options from `sherpa_streaming_server.py`:
 | `--model-type` | `zipformer2` | Model type passed to sherpa-onnx |
 | `--enable-endpoint-detection` | `0` | Whether to enable endpoint detection |
 | `--text-format` | `lower` | Output formatting mode |
+| `--enable-energy-tail-probe` | `0` | Enable optional energy-based tail probing |
+| `--low-energy-rms` | `0.003` | Low-energy RMS threshold |
+| `--speech-rms` | `0.010` | Speech RMS threshold |
+| `--min-speech-ms` | `200.0` | Minimum speech duration before tail probing can trigger |
+| `--min-silence-ms` | `500.0` | Required low-energy duration before a tail probe |
+| `--tail-probe-ms` | `500.0` | Silence duration appended before decoding again |
+| `--tail-probe-cooldown-ms` | `1000.0` | Cooldown between tail-probe triggers |
 
 ## Running as a Background Service
 

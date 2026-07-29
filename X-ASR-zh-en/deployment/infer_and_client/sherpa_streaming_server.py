@@ -38,13 +38,69 @@ def get_parser():
     parser.add_argument("--model-type", type=str, default="zipformer2")
     parser.add_argument("--enable-endpoint-detection", type=int, default=0)
     parser.add_argument("--text-format", type=str, default="lower")  # none/lower/capitalize
+    parser.add_argument("--enable-energy-tail-probe", type=int, default=0)
+    parser.add_argument("--low-energy-rms", type=float, default=0.003)
+    parser.add_argument("--speech-rms", type=float, default=0.010)
+    parser.add_argument("--min-speech-ms", type=float, default=200.0)
+    parser.add_argument("--min-silence-ms", type=float, default=500.0)
+    parser.add_argument("--tail-probe-ms", type=float, default=500.0)
+    parser.add_argument("--tail-probe-cooldown-ms", type=float, default=1000.0)
     return parser
+
+
+@dataclass
+class EnergyTailProbeState:
+    sample_rate: int
+    low_energy_rms: float
+    speech_rms: float
+    min_speech_ms: float
+    min_silence_ms: float
+    cooldown_ms: float
+    speech_ms: float = 0.0
+    low_ms: float = 0.0
+    cooldown_left_ms: float = 0.0
+    speech_seen: bool = False
+    triggered: bool = False
+
+    def observe(self, samples: np.ndarray) -> bool:
+        duration_ms = samples.size / self.sample_rate * 1000.0
+        rms = float(np.sqrt(np.mean(samples * samples))) if samples.size else 0.0
+
+        if self.cooldown_left_ms > 0:
+            self.cooldown_left_ms = max(0.0, self.cooldown_left_ms - duration_ms)
+
+        if rms >= self.speech_rms:
+            self.speech_ms += duration_ms
+            self.low_ms = 0.0
+            if self.speech_ms >= self.min_speech_ms:
+                self.speech_seen = True
+            if self.cooldown_left_ms <= 0:
+                self.triggered = False
+            return False
+
+        if self.speech_seen and rms <= self.low_energy_rms:
+            self.low_ms += duration_ms
+        else:
+            self.low_ms = 0.0
+
+        if (
+            self.speech_seen
+            and self.low_ms >= self.min_silence_ms
+            and not self.triggered
+            and self.cooldown_left_ms <= 0
+        ):
+            self.triggered = True
+            self.cooldown_left_ms = self.cooldown_ms
+            return True
+
+        return False
 
 
 @dataclass
 class SessionState:
     asr: SherpaStreamingASR
     sample_rate: int = 16000
+    energy: Optional[EnergyTailProbeState] = None
 
 
 def build_asr(args) -> SherpaStreamingASR:
@@ -61,6 +117,20 @@ def build_asr(args) -> SherpaStreamingASR:
         model_type=args.model_type,
         enable_endpoint_detection=bool(args.enable_endpoint_detection),
         text_format=args.text_format,
+    )
+
+
+def build_energy_state(args, sample_rate: int) -> Optional[EnergyTailProbeState]:
+    if not args.enable_energy_tail_probe:
+        return None
+
+    return EnergyTailProbeState(
+        sample_rate=sample_rate,
+        low_energy_rms=args.low_energy_rms,
+        speech_rms=args.speech_rms,
+        min_speech_ms=args.min_speech_ms,
+        min_silence_ms=args.min_silence_ms,
+        cooldown_ms=args.tail_probe_cooldown_ms,
     )
 
 
@@ -86,6 +156,13 @@ async def handle_connection(websocket, args):
                 await websocket.send(
                     json.dumps({"type": "partial", "text": partial}, ensure_ascii=False)
                 )
+
+                if session.energy is not None and session.energy.observe(pcm):
+                    session.asr.append_silence_and_decode(args.tail_probe_ms / 1000.0)
+                    partial = session.asr.get_partial_result()
+                    await websocket.send(
+                        json.dumps({"type": "partial", "text": partial}, ensure_ascii=False)
+                    )
                 continue
 
             # 文本消息：JSON 控制协议
@@ -98,6 +175,7 @@ async def handle_connection(websocket, args):
                 session = SessionState(
                     asr=build_asr(args),
                     sample_rate=client_sr,
+                    energy=build_energy_state(args, client_sr),
                 )
                 await websocket.send(
                     json.dumps({"type": "started", "sample_rate": client_sr}, ensure_ascii=False)
@@ -129,6 +207,7 @@ async def handle_connection(websocket, args):
                 session = SessionState(
                     asr=build_asr(args),
                     sample_rate=args.sample_rate,
+                    energy=build_energy_state(args, args.sample_rate),
                 )
                 await websocket.send(
                     json.dumps({"type": "reset_ok"}, ensure_ascii=False)

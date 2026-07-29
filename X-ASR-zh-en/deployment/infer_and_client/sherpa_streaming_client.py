@@ -3,8 +3,8 @@
 
 import argparse
 import asyncio
+import contextlib
 import json
-import time
 
 import numpy as np
 import soundfile as sf
@@ -42,10 +42,12 @@ def load_audio_as_mono_int16(wav_path: str, target_sr: int = 16000):
     return audio_int16, sr
 
 
-async def recv_loop(ws):
+async def recv_loop(ws, final_event: asyncio.Event):
     async for msg in ws:
         data = json.loads(msg)
-        print("[SERVER]", data)
+        print("[SERVER]", data, flush=True)
+        if data.get("type") == "final":
+            final_event.set()
 
 
 async def main():
@@ -55,7 +57,8 @@ async def main():
     chunk_samples = int(sr * args.chunk_ms / 1000)
 
     async with websockets.connect(args.server_uri, max_size=None) as ws:
-        recv_task = asyncio.create_task(recv_loop(ws))
+        final_event = asyncio.Event()
+        recv_task = asyncio.create_task(recv_loop(ws, final_event))
 
         await ws.send(json.dumps({"type": "start", "sample_rate": sr}))
 
@@ -66,14 +69,18 @@ async def main():
             await ws.send(chunk)
 
             if args.simulate_realtime:
-                time.sleep(args.chunk_ms / 1000.0)
+                await asyncio.sleep(args.chunk_ms / 1000.0)
 
             start = end
 
         await ws.send(json.dumps({"type": "end"}))
 
-        await asyncio.sleep(2.0)
+        with contextlib.suppress(asyncio.TimeoutError):
+            await asyncio.wait_for(final_event.wait(), timeout=10.0)
+
         recv_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await recv_task
 
 
 if __name__ == "__main__":

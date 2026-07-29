@@ -433,12 +433,45 @@ python infer_and_client/sherpa_streaming_server.py \
   --provider cpu \
   --sample-rate 16000 \
   --feature-dim 80 \
+  --num-threads 1 \
   --decoding-method greedy_search \
   --model-type zipformer2 \
+  --enable-endpoint-detection 0 \
   --text-format none
 ```
 
 The `--tokens`, `--encoder`, `--decoder`, and `--joiner` files must come from the same model directory.
+
+#### Optional: interactive tail-probe mode
+
+The default mode decodes only from audio chunks received from the client. For interactive voice-input scenarios, you can enable the optional energy-based tail probe. After speech activity is observed and low-energy audio lasts long enough, the server appends a short silence segment and runs decoding again. This can help trailing partial results refresh after the user pauses.
+
+```bash
+python infer_and_client/sherpa_streaming_server.py \
+  --host 0.0.0.0 \
+  --port 6666 \
+  --tokens models/chunk-160ms-model/tokens.txt \
+  --encoder models/chunk-160ms-model/encoder-160ms.onnx \
+  --decoder models/chunk-160ms-model/decoder-160ms.onnx \
+  --joiner models/chunk-160ms-model/joiner-160ms.onnx \
+  --provider cpu \
+  --sample-rate 16000 \
+  --feature-dim 80 \
+  --num-threads 1 \
+  --decoding-method greedy_search \
+  --model-type zipformer2 \
+  --enable-endpoint-detection 0 \
+  --text-format none \
+  --enable-energy-tail-probe 1 \
+  --low-energy-rms 0.003 \
+  --speech-rms 0.010 \
+  --min-speech-ms 200 \
+  --min-silence-ms 500 \
+  --tail-probe-ms 500 \
+  --tail-probe-cooldown-ms 1000
+```
+
+Tune the RMS and silence thresholds according to microphone gain, background noise, and frontend audio chunking behavior. Keep `--enable-energy-tail-probe 0` for the most conservative server behavior.
 
 ### 4. Run the WebSocket client
 

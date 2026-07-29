@@ -433,12 +433,45 @@ python infer_and_client/sherpa_streaming_server.py \
   --provider cpu \
   --sample-rate 16000 \
   --feature-dim 80 \
+  --num-threads 1 \
   --decoding-method greedy_search \
   --model-type zipformer2 \
+  --enable-endpoint-detection 0 \
   --text-format none
 ```
 
 `--tokens`、`--encoder`、`--decoder` 和 `--joiner` 必须来自同一个模型目录。
+
+#### 可选：交互式 tail-probe 模式
+
+默认模式下，服务端只基于客户端送来的音频块进行解码。对于实时语音输入法等交互场景，可以开启可选的 energy-based tail probe：当服务端检测到用户已经说过话，并持续进入低能量/静音区间时，会自动追加一小段静音并再次触发 decode，以帮助用户停顿后的尾部 partial 结果更及时刷新。
+
+```bash
+python infer_and_client/sherpa_streaming_server.py \
+  --host 0.0.0.0 \
+  --port 6666 \
+  --tokens models/chunk-160ms-model/tokens.txt \
+  --encoder models/chunk-160ms-model/encoder-160ms.onnx \
+  --decoder models/chunk-160ms-model/decoder-160ms.onnx \
+  --joiner models/chunk-160ms-model/joiner-160ms.onnx \
+  --provider cpu \
+  --sample-rate 16000 \
+  --feature-dim 80 \
+  --num-threads 1 \
+  --decoding-method greedy_search \
+  --model-type zipformer2 \
+  --enable-endpoint-detection 0 \
+  --text-format none \
+  --enable-energy-tail-probe 1 \
+  --low-energy-rms 0.003 \
+  --speech-rms 0.010 \
+  --min-speech-ms 200 \
+  --min-silence-ms 500 \
+  --tail-probe-ms 500 \
+  --tail-probe-cooldown-ms 1000
+```
+
+RMS 与静音阈值需要根据麦克风增益、背景噪声和前端分包频率调整。如果希望保持最保守、最兼容的服务行为，请继续使用 `--enable-energy-tail-probe 0`。
 
 ### 4. 运行 WebSocket 客户端
 
