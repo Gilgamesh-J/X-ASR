@@ -68,7 +68,11 @@ public sealed class TrayApp : IDisposable, IAppController
     private string _typedSoFar = string.Empty;
     // Post-insert actions (撤销 / 换模板重润色): the last inserted text + the raw ASR that produced it.
     private string _lastInsertText = string.Empty;
+    private IntPtr _lastTargetHwnd;   // window that received _lastInsertText (undo/repolish must match it)
     private string _lastRawText = string.Empty;
+    // The on-device rule edits for the utterance currently being polished — filled by
+    // ApplyCorrectionsForCloud and consumed by BuildCloudSystem's {{changes}} slot (prompt rule 5).
+    private string _cloudChanges = "";
     private volatile bool _engineReady;
     private volatile bool _engineSwapping;
     private bool _dictationEnabled = true;
@@ -114,7 +118,7 @@ public sealed class TrayApp : IDisposable, IAppController
         _overlay.ViewRequested += (_, _) => OpenOnCallSession();
         _overlay.PauseRequested += (_, _) => TogglePause();
         _overlay.UndoRequested += (_, _) => UndoLastInsert();
-        _overlay.RepolishRequested += (_, id) => RepolishLast(id);
+        _overlay.RepolishRequested += (_, id) => _ = RepolishLastAsync(id);
         // Realize the overlay handle so cross-thread BeginInvoke works immediately.
         _ = _overlay.Handle;
 
@@ -778,8 +782,11 @@ public sealed class TrayApp : IDisposable, IAppController
         {
             // Feed the cloud the text WITHOUT local 数字规整/去口水 (cloud handles them) so its 改口
             // edits aren't rejected by the digit guardrail. Pinyin/replacements/口令 still apply.
-            var cloudIn = ApplyCorrections(e.Text, isFinal: true, forCloud: true);
-            _ = RefineAndInsertAsync(e.Text, cloudIn);
+            var (cloudIn, cloudChanges) = ApplyCorrectionsForCloud(e.Text);
+            _cloudChanges = cloudChanges;
+            // The insert happens after the network round-trip; remember who had focus NOW.
+            var target = Input.TextInserter.ForegroundWindow;
+            _ = RefineAndInsertAsync(e.Text, cloudIn, target);
             return;
         }
 
@@ -792,6 +799,7 @@ public sealed class TrayApp : IDisposable, IAppController
                 TextInserter.InsertText(text);
                 MaybeOverwriteClipboard(text);
                 _lastInsertText = text; _lastRawText = e.Text;
+                _lastTargetHwnd = Input.TextInserter.ForegroundWindow;
                 _overlay?.SetText(text);     // so the "已插入 · N 字" count reflects the inserted text
                 _overlay?.ShowInserted(withUndo: true);
                 break;
@@ -799,6 +807,7 @@ public sealed class TrayApp : IDisposable, IAppController
                 // 逐字: converge to the streaming-level text (no tail rewrite); history + clipboard keep the full correction.
                 StreamTypeDiff(ApplyCorrections(e.Text, isFinal: false));
                 _lastInsertText = _typedSoFar; _lastRawText = e.Text;   // actual on-screen text (post-繁体)
+                _lastTargetHwnd = Input.TextInserter.ForegroundWindow;
                 _typedSoFar = string.Empty;
                 MaybeOverwriteClipboard(text);
                 _overlay?.SetText(text);
@@ -816,7 +825,7 @@ public sealed class TrayApp : IDisposable, IAppController
 
     /// <summary>Cloud-refine the final text (Beta), then insert. Paste mode only. Shows the 润色中 HUD;
     /// any error/timeout/guardrail-reject falls back to the rule-version text (never drops text).</summary>
-    private async Task RefineAndInsertAsync(string rawAsr, string ruleText)
+    private async Task RefineAndInsertAsync(string rawAsr, string ruleText, IntPtr target)
     {
         CloudRequestLog.Shared.PendingOriginal = rawAsr;   // log input = raw ASR (no rules)
         _overlay?.ShowRefining();
@@ -827,14 +836,44 @@ public sealed class TrayApp : IDisposable, IAppController
         RunOnUi(() =>
         {
             _history.Append(finalText, "paste", ephemeral: !_settings.HistoryEnabled);
-            TextInserter.InsertText(finalText);
+            _cloudChanges = "";
+            if (!InsertIntoSnapshotWindow(finalText, target))
+            {
+                // Focus moved while the model was working: copy instead of typing into a stranger.
+                _lastInsertText = ""; _lastRawText = rawAsr;
+                _overlay?.SetRepolishTemplates(RepolishTemplateList());
+                _overlay?.SetText(L10n.Loc("已复制到剪贴板(目标窗口已切换)", "Copied — the target window changed",
+                    "クリップボードにコピー(入力先が変更されました)", "클립보드에 복사됨(대상 창이 바뀜)"));
+                _overlay?.ShowInserted(withUndo: false, withRepolish: true);
+                RefreshOpenWindows();
+                return;
+            }
             MaybeOverwriteClipboard(finalText);
-            _lastInsertText = finalText; _lastRawText = rawAsr;
+            _lastInsertText = finalText; _lastRawText = rawAsr; _lastTargetHwnd = target;
             _overlay?.SetRepolishTemplates(RepolishTemplateList());
             _overlay?.SetText(finalText);
             _overlay?.ShowInserted(withUndo: true, withRepolish: true);
             RefreshOpenWindows();
         });
+    }
+
+    /// <summary>
+    /// Type into <paramref name="target"/> only if it is still the foreground window; otherwise put the text on
+    /// the clipboard and return false. Cloud polish can take 25 s, which is plenty of time for the user to have
+    /// moved on — typing the sentence into whatever window is in front by then is worse than not typing at all.
+    /// </summary>
+    private bool InsertIntoSnapshotWindow(string text, IntPtr target, int backspaceFirst = 0)
+    {
+        // A zero snapshot means the probe failed rather than "focus moved" — fall through and insert.
+        if (target == IntPtr.Zero || Input.TextInserter.StillForeground(target))
+        {
+            if (backspaceFirst > 0) TextInserter.Backspace(backspaceFirst);
+            TextInserter.InsertText(text);
+            return true;
+        }
+        Diag.Log($"insert deferred to clipboard: focus changed (target={target}, now={Input.TextInserter.ForegroundWindow})");
+        try { Clipboard.SetText(text); } catch { /* clipboard busy: the HUD still shows the text */ }
+        return false;
     }
 
     /// <summary>撤销: delete the just-inserted text (backspace its length) and dismiss the HUD.</summary>
@@ -857,34 +896,53 @@ public sealed class TrayApp : IDisposable, IAppController
 
     /// <summary>换模板重润色: re-run cloud 润色 on the SAME original ASR text with the CHOSEN template,
     /// then replace the inserted text. The user picks the template from the HUD menu (macOS parity).</summary>
-    private async void RepolishLast(string templateId)
+    private async Task RepolishLastAsync(string templateId)
     {
         if (string.IsNullOrEmpty(_lastRawText) || !Refiner.Active) return;
+
+        var target = _lastTargetHwnd;   // the window the original insert landed in
+        int replaced = _lastInsertText.Length;
 
         _settings.CloudActiveTemplate = string.IsNullOrEmpty(templateId) ? "auto" : templateId;
         _settings.Save(); ConfigureRefiner();   // BuildCloudSystem now uses the chosen template's prompt
         _popup?.Invalidate();
-
-        if (_lastInsertText.Length > 0) Input.TextInserter.Backspace(_lastInsertText.Length);
         _overlay?.ShowRefining();
 
         // feed the cloud the ORIGINAL raw ASR (context) routed through the chosen template's prompt
-        var ruleText = ApplyCorrections(_lastRawText, isFinal: true, forCloud: true);
+        var (ruleText, changes) = ApplyCorrectionsForCloud(_lastRawText);
+        _cloudChanges = changes;
         CloudRequestLog.Shared.PendingOriginal = _lastRawText;
         string outText;
         try { outText = await Refiner.PolishAsync(ruleText); }
         catch (Exception ex) { Diag.Log("re-polish failed: " + ex.Message); outText = ruleText; }
         outText = MaybeTraditional(outText);
+
+        // The old text is only retracted once the replacement is in hand (and only from the same window):
+        // a failed or slow re-polish used to delete the sentence first and put it back later.
         RunOnUi(() =>
         {
-            _history.Append(outText, "paste", ephemeral: !_settings.HistoryEnabled);
-            Input.TextInserter.InsertText(outText);
-            MaybeOverwriteClipboard(outText);
-            _lastInsertText = outText;
-            _overlay?.SetRepolishTemplates(RepolishTemplateList());
-            _overlay?.SetText(outText);
-            _overlay?.ShowInserted(withUndo: true, withRepolish: true);
-            RefreshOpenWindows();
+            try
+            {
+                _history.Append(outText, "paste", ephemeral: !_settings.HistoryEnabled);
+                _cloudChanges = "";
+                if (!InsertIntoSnapshotWindow(outText, target, replaced))
+                {
+                    _lastInsertText = ""; _lastTargetHwnd = IntPtr.Zero;
+                    _overlay?.SetRepolishTemplates(RepolishTemplateList());
+                    _overlay?.SetText(L10n.Loc("已复制到剪贴板(目标窗口已切换)", "Copied — the target window changed",
+                        "クリップボードにコピー(入力先が変更されました)", "클립보드에 복사됨(대상 창이 바뀜)"));
+                    _overlay?.ShowInserted(withUndo: false, withRepolish: true);
+                    RefreshOpenWindows();
+                    return;
+                }
+                MaybeOverwriteClipboard(outText);
+                _lastInsertText = outText; _lastTargetHwnd = target;
+                _overlay?.SetRepolishTemplates(RepolishTemplateList());
+                _overlay?.SetText(outText);
+                _overlay?.ShowInserted(withUndo: true, withRepolish: true);
+                RefreshOpenWindows();
+            }
+            catch (Exception ex) { Diag.Log("repolish UI failed: " + ex.Message); }
         });
     }
 
@@ -907,8 +965,7 @@ public sealed class TrayApp : IDisposable, IAppController
             if (_engine is not null) _engine.Mode = DictationMode.Paste;
         }
 
-        if (_settings.CloudEnabled && !string.IsNullOrWhiteSpace(_settings.CloudApiKey)
-            && !string.IsNullOrWhiteSpace(_settings.CloudBaseURL) && !string.IsNullOrWhiteSpace(_settings.CloudModel))
+        if (_settings.CloudEnabled && CloudRefiner.Configured(_settings.CloudBaseURL, _settings.CloudModel, _settings.CloudApiKey))
         {
             DisposeLocalRefiner();                             // free the local model's RAM when cloud is the backend
             Refiner.Backend = new CloudRefiner(_settings.CloudBaseURL, _settings.CloudModel, _settings.CloudApiKey,
@@ -1027,7 +1084,8 @@ public sealed class TrayApp : IDisposable, IAppController
                 : CloudPrompt.BuildAuto(_settings.CloudNumbers, _settings.CloudFillers, _settings.CloudRestate, _settings.CloudHotwords);
         }
         var hotwords = _settings.HotwordsEnabled ? _settings.HotwordsText.Replace("\n", "、") : "";
-        return CloudPrompt.FillStatic(sys, hotwords, DateTime.Now.ToString("yyyy-MM-dd"));
+        // The fourth argument is the one that used to be silently omitted (default "(无)").
+        return CloudPrompt.FillStatic(sys, hotwords, DateTime.Now.ToString("yyyy-MM-dd"), _cloudChanges);
     }
 
     /// <summary>Apply changed 润色 settings: persist + reconfigure the backend. (IAppController)</summary>
@@ -1037,6 +1095,29 @@ public sealed class TrayApp : IDisposable, IAppController
     /// pinyin homophone correction → text replacements → 去口水词 → 数字规整 (ITN) → 口令 expansion.
     /// Each step no-ops unless enabled + populated. Runs on FINAL text only (not streaming partials,
     /// where ITN digits would jump as you speak).</summary>
+    /// <summary>
+    /// The cloud variant of <see cref="ApplyCorrections"/> (same stages, same order) that ALSO reports what it
+    /// changed, so the prompt's {{changes}} slot can show the model the edits it is being asked to double-check.
+    /// Before this existed the slot was always "(无)" and that rule was dead.
+    /// </summary>
+    private (string Text, string Changes) ApplyCorrectionsForCloud(string raw)
+    {
+        var lines = new List<string>();
+        var text = raw ?? "";
+        void Step(string label, Func<string, string> apply)
+        {
+            var next = apply(text);
+            if (next == text) return;
+            var d = Refine.TextDiff.Describe(text, next);
+            if (!string.IsNullOrWhiteSpace(d)) lines.Add(label + ": " + d);
+            text = next;
+        }
+        if (_settings.PinyinFuzzyEnabled && _pinyin.IsActive) Step(L10n.Loc("同音字纠正", "homophones", "同音語の修正", "동음어 교정"), t => _pinyin.Normalize(t));
+        if (_settings.ReplacementsEnabled && _replaceRules.Count > 0) Step(L10n.Loc("替换规则", "replacements", "置換ルール", "치환 규칙"), t => Replacements.Apply(t, _replaceRules));
+        if (_settings.SnippetsEnabled && _snippetRules.Count > 0) Step(L10n.Loc("口令展开", "snippets", "スニペット展開", "스니펫 확장"), t => Replacements.Expand(t, _snippetRules));
+        return (text, string.Join("\n", lines));
+    }
+
     private string ApplyCorrections(string textIn, bool isFinal = true, bool forCloud = false)
     {
         var text = textIn;

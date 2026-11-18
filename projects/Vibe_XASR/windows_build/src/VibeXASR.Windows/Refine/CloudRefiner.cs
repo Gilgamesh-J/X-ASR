@@ -221,7 +221,28 @@ internal sealed class CloudRefiner : IRefinerBackend
         Provider = provider;
     }
 
-    public bool IsReady => !string.IsNullOrEmpty(ApiKey) && !string.IsNullOrEmpty(BaseUrl) && !string.IsNullOrEmpty(Model);
+    /// <summary>
+    /// Configured enough to try? A LOCAL endpoint (LM Studio, Ollama, any 127.0.0.1/localhost server) needs
+    /// no API key — the built-in presets point at exactly those, so demanding a key left the toggle ON while
+    /// ConfigureRefiner silently dropped the backend and every utterance fell back to the rule version.
+    /// </summary>
+    public bool IsReady => Configured(BaseUrl, Model, ApiKey);
+
+    /// <summary>The one readiness rule, shared by the backend, TrayApp.ConfigureRefiner and the connection test.</summary>
+    public static bool Configured(string? baseUrl, string? model, string? apiKey)
+        => !string.IsNullOrWhiteSpace(baseUrl)
+        && !string.IsNullOrWhiteSpace(model)
+        && (!string.IsNullOrWhiteSpace(apiKey) || IsLocalEndpoint(baseUrl));
+
+    /// <summary>Loopback-only endpoint: no key is expected from the user.</summary>
+    public static bool IsLocalEndpoint(string? baseUrl)
+    {
+        if (string.IsNullOrWhiteSpace(baseUrl)) return false;
+        if (!Uri.TryCreate(baseUrl.Trim(), UriKind.Absolute, out var uri)) return false;
+        if (uri.Scheme is not ("http" or "https")) return false;
+        var host = uri.Host.Trim('[', ']').ToLowerInvariant();
+        return host is "localhost" or "127.0.0.1" or "::1" or "0.0.0.0";
+    }
 
     public async Task<string?> RefineAsync(string system, string text, CancellationToken ct)
     {
@@ -296,7 +317,9 @@ internal sealed class CloudRefiner : IRefinerBackend
             max_tokens = maxTokens,
         });
         using var req = new HttpRequestMessage(HttpMethod.Post, url);
-        req.Headers.TryAddWithoutValidation("Authorization", "Bearer " + apiKey);
+        // Local servers (LM Studio / Ollama) take no key; some reject a bare "Bearer " header outright.
+        if (!string.IsNullOrWhiteSpace(apiKey))
+            req.Headers.TryAddWithoutValidation("Authorization", "Bearer " + apiKey);
         req.Content = new StringContent(payload, Encoding.UTF8, "application/json");
         using var resp = await Http.SendAsync(req, ct).ConfigureAwait(false);
         var data = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
@@ -335,7 +358,7 @@ internal sealed class CloudRefiner : IRefinerBackend
     public static async Task<(bool ok, int ping, string add, string msg)> TestConnectionAsync(
         string baseUrl, string model, string apiKey)
     {
-        if (string.IsNullOrWhiteSpace(apiKey)) return (false, 0, "", "缺少 API Key");
+        if (!Configured(baseUrl, model, apiKey)) return (false, 0, "", "缺少 API Key(本机地址可留空)");
         var sw = System.Diagnostics.Stopwatch.StartNew();
         try
         {
