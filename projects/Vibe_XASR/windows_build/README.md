@@ -63,6 +63,30 @@ into `%APPDATA%\VibeXASR\models\chunk-960ms-model\` to skip the first-run downlo
 > **TODO(win):** confirm the exact VAD asset path within the HF repo (the downloader assumes
 > `.../models/vad/<file>`); adjust `VadFileUrl` if the layout differs.
 
+## Cloning (read this first — Git LFS pointers)
+
+The repository carries 15 Git LFS pointers under `X-ASR-zh-en/deployment/models/**` (inherited
+from upstream X-ASR) whose LFS objects are **not available** on the fork's LFS store, so a plain
+clone finishes with:
+
+```text
+Error downloading object: X-ASR-zh-en/deployment/models/chunk-160ms-model/encoder-160ms.onnx (593 MB)
+Smudge error: ... remote missing object 821a1dfb...
+warning: Clone succeeded, but checkout failed.
+```
+
+None of those files are needed to build the Windows app (it fetches the model it uses from
+HuggingFace, or reads the copy the installer ships), so skip the smudge step:
+
+```powershell
+# PowerShell
+$env:GIT_LFS_SKIP_SMUDGE = '1'; git clone https://github.com/liceses/X-ASR.git; Remove-Item Env:GIT_LFS_SKIP_SMUDGE
+# bash
+GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/liceses/X-ASR.git
+```
+
+`git lfs pull` reports the same missing objects; there is nothing to fetch.
+
 ## Build
 
 From `windows_build/` in PowerShell:
