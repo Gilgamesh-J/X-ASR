@@ -59,6 +59,12 @@ public sealed class TrayApp : IDisposable, IAppController
     private readonly List<HistoryEntry> _onCallSession = new();
 
     private SynchronizationContext _ui = null!;
+    // Hidden control that owns the tray's UI thread message queue. RunOnUi/Updater marshal through its
+    // handle instead of trusting whatever SynchronizationContext.Current happened to be at Start():
+    // a context whose Post() has no destination control silently falls back to the THREAD POOL, which
+    // is how a normal launch used to die with "calling thread must be STA" the moment it opened the
+    // launcher pill (see UiThreadContext).
+    private Control? _uiMarshaller;
     private string _typedSoFar = string.Empty;
     // Post-insert actions (撤销 / 换模板重润色): the last inserted text + the raw ASR that produced it.
     private string _lastInsertText = string.Empty;
@@ -94,7 +100,12 @@ public sealed class TrayApp : IDisposable, IAppController
 
     public void Start()
     {
-        _ui = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
+        var inherited = SynchronizationContext.Current;
+        _uiMarshaller = new Control();          // never shown: it exists only to own the UI thread's queue
+        _ = _uiMarshaller.Handle;               // force the handle now, on this (STA) thread
+        _ui = new UiThreadContext(_uiMarshaller);
+        Diag.Log($"ui: SynchronizationContext.Current was {inherited?.GetType().Name ?? "null"} -> " +
+                 $"marshalling through own control (handle={_uiMarshaller.Handle})");
 
         _overlay = new Ui.Wpf.OverlayWindow();
         _overlay.SetStaySeconds(_settings.HudStaySeconds);
@@ -1548,6 +1559,30 @@ public sealed class TrayApp : IDisposable, IAppController
         else action();
     }
 
+    /// <summary>
+    /// Marshals back to the thread that owns the tray (the only STA thread). Posts through a real
+    /// WinForms control handle, so the callbacks provably land on that thread — unlike
+    /// <c>WindowsFormsSynchronizationContext</c> grabbed from <c>SynchronizationContext.Current</c>,
+    /// whose <c>Post</c> quietly degrades to the thread pool when it has no destination control.
+    /// That degradation put WPF window construction on an MTA pool thread and killed every normal
+    /// launch with <c>InvalidOperationException: the calling thread must be STA</c>.
+    /// </summary>
+    private sealed class UiThreadContext(Control marshaller) : SynchronizationContext
+    {
+        public override void Post(SendOrPostCallback d, object? state)
+        {
+            try
+            {
+                if (marshaller.IsHandleCreated && marshaller.InvokeRequired) marshaller.BeginInvoke(d, state);
+                else d(state);   // already on the UI thread: run inline, no need to round-trip
+            }
+            catch (ObjectDisposedException) { /* shutting down */ }
+            catch (InvalidOperationException) { /* handle destroyed mid-shutdown */ }
+        }
+
+        public override void Send(SendOrPostCallback d, object? state) => Post(d, state);
+    }
+
     private static string Trunc(string? s, int n = 40)
         => string.IsNullOrEmpty(s) ? "" : (s.Length <= n ? s : s[..n] + "…");
 
@@ -1581,5 +1616,6 @@ public sealed class TrayApp : IDisposable, IAppController
         _dl?.Close(); _dl = null; _engineDlCts?.Dispose();
         _launcher?.Close(); _launcher = null;
         if (_tray is not null) { _tray.Visible = false; _tray.Dispose(); _tray = null; }
+        _uiMarshaller?.Dispose(); _uiMarshaller = null;
     }
 }
