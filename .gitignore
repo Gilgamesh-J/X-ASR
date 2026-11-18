@@ -11,3 +11,6 @@ venv/
 *.log
 logs/
 *.tmp
+
+# Agent scratch (screenshots, probe projects, generated report pages)
+/.dsh/
