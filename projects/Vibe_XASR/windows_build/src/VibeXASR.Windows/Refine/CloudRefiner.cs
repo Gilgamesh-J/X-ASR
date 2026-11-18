@@ -46,6 +46,9 @@ internal static class LlmProviders
     public static LlmProvider Find(string key) => All.FirstOrDefault(p => p.Key == key) ?? All[0];
     public static bool IsBuiltin(string key) => All.Any(p => p.Key == key);
 
+    /// <summary>Runs on this machine: no API key, no billing.</summary>
+    public static bool IsLocal(string key) => key is "ollama" or "lmstudio";
+
     // Chinese display names for the zh locale (brand names like OpenAI / Claude / Groq stay English).
     // Faithful port of macOS CloudProvidersUI.zhNames.
     private static readonly Dictionary<string, string> ZhNames = new()

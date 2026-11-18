@@ -59,6 +59,11 @@ public partial class SettingsWindow : Window
         InitializeComponent();
         Palette.Attach(this);
         Palette.Changed += OnPaletteChanged;
+        // Dev-only (VIBEXASR_OPEN=wpfhost): scroll the content pane, so a tab taller than the window can be
+        // captured further down instead of only its first screenful. No effect on a normal launch.
+        if (int.TryParse(Environment.GetEnvironmentVariable("VIBEXASR_SCROLL"), out int shotScroll) && shotScroll > 0)
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded,
+                new Action(() => ContentScroll.ScrollToVerticalOffset(shotScroll)));
         // Safety net: a settings-UI exception must NEVER kill the whole tray app (hosted in the
         // WinForms loop). Log it + swallow so the window degrades instead of crashing the process.
         Dispatcher.UnhandledException += (_, e) =>
