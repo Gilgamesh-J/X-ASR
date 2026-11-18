@@ -272,6 +272,8 @@
         <Setter Property="Foreground" Value="{DynamicResource Text}"/>
         <Setter Property="FontSize" Value="12.5"/>
         <Setter Property="Height" Value="38"/>
+        <!-- ~9 rows, then the list scrolls (the drop-down template binds MaxHeight to this). -->
+        <Setter Property="MaxDropDownHeight" Value="320"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="Template">
             <Setter.Value>
@@ -289,7 +291,15 @@
                             <Border Background="{DynamicResource Surface2}" CornerRadius="8" BorderBrush="{DynamicResource Hairline}" BorderThickness="1" Margin="0,4,0,0" Padding="4"
                                     MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}">
                                 <Border.Effect><DynamicResource ResourceKey="Shadow3"/></Border.Effect>
-                                <StackPanel IsItemsHost="True"/>
+                                <!-- Scrollable drop-down. Without this ScrollViewer the items host is a bare
+                                     StackPanel: the popup grew to every item (24 providers -> a 643 DIP tall
+                                     list taller than the work area) and could not scroll at all. MaxHeight
+                                     comes from the ComboBox's MaxDropDownHeight so callers can size it. -->
+                                <ScrollViewer MaxHeight="{TemplateBinding MaxDropDownHeight}"
+                                              VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                              CanContentScroll="False" Focusable="False">
+                                    <StackPanel IsItemsHost="True"/>
+                                </ScrollViewer>
                             </Border>
                         </Popup>
                     </Grid>

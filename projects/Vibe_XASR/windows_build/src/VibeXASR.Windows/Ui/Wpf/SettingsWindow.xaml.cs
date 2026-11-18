@@ -64,6 +64,15 @@ public partial class SettingsWindow : Window
         if (int.TryParse(Environment.GetEnvironmentVariable("VIBEXASR_SCROLL"), out int shotScroll) && shotScroll > 0)
             Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded,
                 new Action(() => ContentScroll.ScrollToVerticalOffset(shotScroll)));
+        // Dev-only: open the Nth ComboBox's drop-down after layout, so the popup (a separate HWND, which
+        // RenderTargetBitmap cannot see) can be measured and screenshotted from outside.
+        if (int.TryParse(Environment.GetEnvironmentVariable("VIBEXASR_DROPDOWN"), out int dropIndex))
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(() =>
+            {
+                var boxes = new List<ComboBox>();
+                CollectCombos(this, boxes);
+                if (dropIndex >= 0 && dropIndex < boxes.Count) boxes[dropIndex].IsDropDownOpen = true;
+            }));
         // Safety net: a settings-UI exception must NEVER kill the whole tray app (hosted in the
         // WinForms loop). Log it + swallow so the window degrades instead of crashing the process.
         Dispatcher.UnhandledException += (_, e) =>
@@ -99,6 +108,13 @@ public partial class SettingsWindow : Window
             BuildNav();
             SelectTab(_tab);
         }), System.Windows.Threading.DispatcherPriority.Background);
+    }
+
+    private static void CollectCombos(System.Windows.DependencyObject root, List<ComboBox> into)
+    {
+        if (root is ComboBox cb) into.Add(cb);
+        int n = System.Windows.Media.VisualTreeHelper.GetChildrenCount(root);
+        for (int i = 0; i < n; i++) CollectCombos(System.Windows.Media.VisualTreeHelper.GetChild(root, i), into);
     }
 
     private bool _paletteFlipQueued;
