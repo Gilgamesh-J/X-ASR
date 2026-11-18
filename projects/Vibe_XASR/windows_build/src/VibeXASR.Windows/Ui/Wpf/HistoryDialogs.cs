@@ -19,9 +19,13 @@ namespace VibeXASR.Windows.Ui.Wpf;
 /// <summary>Small self-contained palette for the history sub-dialogs (no merged styles needed).</summary>
 internal static class HxPalette
 {
-    private static SolidColorBrush Hex(string h) => new((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(h));
-    public static readonly Brush Bg = Hex("#15151B"), Surface2 = Hex("#1E1E26"), AccentA = Hex("#7C5CFF"),
-        Text = Hex("#ECECF1"), Muted = Hex("#8A8A99"), Hair = Hex("#26FFFFFF"), AccentB = Hex("#38E1D6");
+    public static Brush Bg => Palette.Get("Surface");
+    public static Brush Surface2 => Palette.Get("Surface2");
+    public static Brush AccentA => Palette.Get("AccentText");
+    public static Brush AccentB => Palette.Get("AccentB");
+    public static Brush Text => Palette.Get("Text");
+    public static Brush Muted => Palette.Get("TextMuted");
+    public static Brush Hair => Palette.Get("Hairline");
 }
 
 /// <summary>Single-line text prompt (tag name). Returns <see cref="Result"/> on OK.</summary>
@@ -32,6 +36,7 @@ internal sealed class HistoryPromptWindow : Window
 
     public HistoryPromptWindow(string label)
     {
+        Palette.Attach(this);
         Title = "Vibe XASR"; Width = 340; Height = 150; ResizeMode = ResizeMode.NoResize;
         WindowStartupLocation = WindowStartupLocation.CenterOwner; Background = HxPalette.Bg;
         var sp = new StackPanel { Margin = new Thickness(16) };
@@ -59,6 +64,7 @@ internal sealed class HistoryEditWindow : Window
 
     public HistoryEditWindow(HistoryEntry e, bool zh)
     {
+        Palette.Attach(this);
         Title = L10n.Loc("编辑记录", "Edit record", "記録を編集", "기록 편집"); Width = 460; Height = 380; ResizeMode = ResizeMode.NoResize;
         WindowStartupLocation = WindowStartupLocation.CenterOwner; Background = HxPalette.Bg;
         var sp = new StackPanel { Margin = new Thickness(16) };

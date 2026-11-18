@@ -57,6 +57,8 @@ public partial class SettingsWindow : Window
         var startTab = Environment.GetEnvironmentVariable("VIBEXASR_TAB");
         if (!string.IsNullOrEmpty(startTab) && Tabs.Any(t => t.key == startTab)) _tab = startTab;
         InitializeComponent();
+        Palette.Attach(this);
+        Palette.Changed += OnPaletteChanged;
         // Safety net: a settings-UI exception must NEVER kill the whole tray app (hosted in the
         // WinForms loop). Log it + swallow so the window degrades instead of crashing the process.
         Dispatcher.UnhandledException += (_, e) =>
@@ -68,8 +70,33 @@ public partial class SettingsWindow : Window
         BuildNav();
         SelectTab(_tab);
         Loaded += (_, _) => SelfCapture();
-        Closed += (_, _) => StopModelTimer();
+        Closed += (_, _) => { StopModelTimer(); Palette.Changed -= OnPaletteChanged; };
     }
+
+    /// <summary>A live scheme switch: DynamicResource re-resolves on its own, but the code-built rows
+    /// hold Brush objects captured at build time, so the tab has to be rendered again.
+    ///
+    /// The rebuild is always deferred: the switch usually originates from the 外观 dropdown inside this
+    /// very tree, and tearing down that ComboBox while it is still dispatching its own
+    /// SelectionChanged is asking for a re-entrancy fault.</summary>
+    private void OnPaletteChanged()
+    {
+        if (_paletteFlipQueued) return;
+        _paletteFlipQueued = true;
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            _paletteFlipQueued = false;
+            if (!IsLoaded) return;
+            DarkTitleBar();    // the DWM attribute is sticky: it has to be rewritten, not merely set once
+            Nav.Children.Clear();
+            _navButtons.Clear();
+            _historyControl = null;
+            BuildNav();
+            SelectTab(_tab);
+        }), System.Windows.Threading.DispatcherPriority.Background);
+    }
+
+    private bool _paletteFlipQueued;
 
     /// <summary>Jump to a tab by key (TrayApp deep-links, e.g. tray "AI 润色" → "cloud").</summary>
     public void ShowTab(string key) { if (Tabs.Any(t => t.key == key)) SelectTab(key); }
@@ -106,7 +133,7 @@ public partial class SettingsWindow : Window
 
     private void SelectTab(string key)
     {
-        bool sameTab = _tab == key && Content.Children.Count > 0;     // in-tab rebuild → keep scroll
+        bool sameTab = _tab == key && ContentHost.Children.Count > 0;     // in-tab rebuild → keep scroll
         double keepOffset = sameTab ? ContentScroll.VerticalOffset : 0;
         _tab = key;
         StopModelTimer();   // tear down the previous tab's live model-download poller, if any
@@ -115,17 +142,18 @@ public partial class SettingsWindow : Window
         // 记录 is a full-bleed workspace (100% macOS parity) — it replaces the scroller entirely.
         if (key == "history")
         {
-            Content.Children.Clear();
+            ContentHost.Children.Clear();
             _historyControl ??= new HistoryWorkspaceControl(_app.History);
             FullBleed.Content = _historyControl;
             ContentScroll.Visibility = Visibility.Collapsed;
             FullBleed.Visibility = Visibility.Visible;
+            if (!sameTab) Motion.SlideIn(FullBleed, 6, Motion.Base);   // tab swap: settle, don't cut
             return;
         }
         ContentScroll.Visibility = Visibility.Visible;
         FullBleed.Visibility = Visibility.Collapsed;
 
-        Content.Children.Clear();
+        ContentHost.Children.Clear();
         if (sameTab)
             Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(() => ContentScroll.ScrollToVerticalOffset(keepOffset)));
         else
@@ -143,15 +171,26 @@ public partial class SettingsWindow : Window
             case "about": BuildAbout(); break;
             default: BuildPlaceholder(key); break;
         }
+        // Same-tab rebuilds (a toggle click re-renders the page) must NOT animate — that would flicker
+        // on every switch. Only a real tab change plays the 6 px settle.
+        if (!sameTab) Motion.SlideIn(ContentScroll, 6, Motion.Base);
     }
 
     // ============================ tabs ============================
 
     private void BuildGeneral()
     {
+        // 外观: auto follows Windows; dark/light pin the scheme on both UI stacks. Re-render the tab so
+        // the switch is visible immediately (the DynamicResource shell repaints itself, the code-built
+        // rows here hold brushes captured at build time).
+        // No explicit re-render here: SetTheme → ApplyTheme → Palette.Changed → OnPaletteChanged already
+        // rebuilds this tab, on the next dispatcher pass (never inside the ComboBox's own event).
+        var theme = Select(new[] { ("auto", L10n.T("theme.auto")), ("dark", L10n.T("theme.dark")), ("light", L10n.T("theme.light")) },
+            S.Theme is "dark" or "light" ? S.Theme : "auto", v => _app.SetTheme(v), 170);
         var lang = Select(new[] { ("auto", L10n.T("lang.auto")), ("zh", "简体中文"), ("zh-Hant", "繁體中文"), ("en", "English"), ("ja", "日本語"), ("ko", "한국어") },
             S.Language, v => { _app.SetLanguage(L10n.FromCode(v)); Relocalize(); }, 170);
         AddGroup(L10n.T("grp.general"),
+            Row(L10n.T("gen.theme"), L10n.T("gen.theme.help"), theme),
             Row(L10n.T("gen.lang"), L10n.T("gen.lang.help"), lang),
             Row(L10n.T("gen.launchAtLogin"), L10n.T("gen.launchAtLogin.help"),
                 Toggle(S.LaunchAtLogin, v => _app.SetLaunchAtLogin(v))),
@@ -169,7 +208,7 @@ public partial class SettingsWindow : Window
                 Segmented(new[] { ("hold", L10n.T("dict.trigger.hold")), ("toggle", L10n.T("dict.trigger.toggle")) },
                     S.Trigger == TriggerMode.Toggle ? "toggle" : "hold",
                     v => _app.SetTrigger(v == "toggle" ? TriggerMode.Toggle : TriggerMode.Hold))));
-        Content.Children.Add(BuildModeCards());
+        ContentHost.Children.Add(BuildModeCards());
     }
 
     /// <summary>The 听写模式 radio-card block (说完插入 / 逐字 / 持续候机). Lives under 通用 → 触发.</summary>
@@ -249,7 +288,7 @@ public partial class SettingsWindow : Window
         var fb = Link(L10n.T("about.feedback"), "https://github.com/Gilgamesh-J/X-ASR/issues");
         fb.HorizontalAlignment = HorizontalAlignment.Center; fb.Margin = new Thickness(0, 12, 0, 0);
         card.Children.Add(fb);
-        Content.Children.Add(card);
+        ContentHost.Children.Add(card);
 
         // GitHub issue form — fill 3 fields → opens a prefilled "New issue" page
         var form = new StackPanel { Margin = new Thickness(18, 14, 18, 14) };
@@ -270,7 +309,7 @@ public partial class SettingsWindow : Window
             try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo($"https://github.com/Gilgamesh-J/X-ASR/issues/new?title={title}&body={body}") { UseShellExecute = true }); } catch { }
         };
         form.Children.Add(submit);
-        Content.Children.Add(new Border { Style = St("Card"), Child = form });
+        ContentHost.Children.Add(new Border { Style = St("Card"), Child = form });
 
         // X-ASR credit card
         var credit = new StackPanel { Margin = new Thickness(18, 14, 18, 14), HorizontalAlignment = HorizontalAlignment.Center };
@@ -279,9 +318,9 @@ public partial class SettingsWindow : Window
         credit.Children.Add(new TextBlock { Text = L10n.T("about.xasr.desc"), Style = St("RowDesc"), TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 6) });
         var repo = Link(L10n.T("about.xasr.repo"), "https://huggingface.co/GilgameshWind/X-ASR-zh-en"); repo.HorizontalAlignment = HorizontalAlignment.Center; repo.Foreground = Br("AccentB");
         credit.Children.Add(repo);
-        Content.Children.Add(new Border { Style = St("Card"), Background = Br("AccentSoft"), Child = credit });
+        ContentHost.Children.Add(new Border { Style = St("Card"), Background = Br("AccentSoft"), Child = credit });
 
-        Content.Children.Add(new TextBlock { Text = L10n.T("about.local"), Foreground = Br("TextMuted"), FontSize = 11, FontFamily = new FontFamily("Cascadia Mono, Consolas"), HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 12, 0, 8) });
+        ContentHost.Children.Add(new TextBlock { Text = L10n.T("about.local"), Foreground = Br("TextMuted"), FontSize = 11, FontFamily = new FontFamily("Cascadia Mono, Consolas"), HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 12, 0, 8) });
     }
 
     private (TextBlock label, FrameworkElement visual, TextBox box) AboutField(string label, string placeholder, double height = 0)
@@ -311,7 +350,7 @@ public partial class SettingsWindow : Window
         var open = new Button { Style = St("Solid"), Content = "🗂  " + L10n.T("history.entry.open"), HorizontalAlignment = HorizontalAlignment.Center };
         open.Click += (_, _) => _app.OpenHistory();
         sp.Children.Add(open);
-        Content.Children.Add(new Border { Style = St("Card"), Child = sp });
+        ContentHost.Children.Add(new Border { Style = St("Card"), Child = sp });
         // also open it immediately when navigating here (idempotent: just activates if already open)
         Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, new Action(() => _app.OpenHistory()));
     }
@@ -323,7 +362,7 @@ public partial class SettingsWindow : Window
         var sp = new StackPanel { Margin = new Thickness(20, 26, 20, 26) };
         sp.Children.Add(new TextBlock { Text = "🚧", FontSize = 28, HorizontalAlignment = HorizontalAlignment.Center });
         sp.Children.Add(new TextBlock { Text = L10n.Loc($"「{label}」正在迁移到新界面…", $"“{label}” is being migrated…", $"「{label}」を新しい画面に移行中…", $"'{label}'을(를) 새 화면으로 이전 중…"), Foreground = Br("TextMuted"), FontSize = 12.5, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 10, 0, 0) });
-        Content.Children.Add(new Border { Style = St("Card"), Child = sp });
+        ContentHost.Children.Add(new Border { Style = St("Card"), Child = sp });
     }
 
     // ============================ helpers ============================
@@ -331,9 +370,9 @@ public partial class SettingsWindow : Window
     private Style St(string key) => (Style)FindResource(key);
     private Brush Br(string key) => (Brush)FindResource(key);
 
-    private void AddGroupTitle(string text) => Content.Children.Add(new TextBlock { Text = text, Style = St("GroupTitle") });
+    private void AddGroupTitle(string text) => ContentHost.Children.Add(new TextBlock { Text = text, Style = St("GroupTitle") });
     private void AddGroup(string title, params UIElement[] rows) { AddGroupTitle(title); AddCard(rows); }
-    private void AddCard(params UIElement[] rows) => Content.Children.Add(Card(rows));
+    private void AddCard(params UIElement[] rows) => ContentHost.Children.Add(Card(rows));
 
     private Border Card(params UIElement[] rows)
     {
@@ -410,7 +449,7 @@ public partial class SettingsWindow : Window
         var titleRow = new StackPanel { Orientation = Orientation.Horizontal };
         titleRow.Children.Add(new TextBlock { Text = title, Foreground = Br("Text"), FontSize = 13, FontWeight = selected ? FontWeights.SemiBold : FontWeights.Normal });
         if (recommended)
-            titleRow.Children.Add(new Border { Style = St("Badge"), Margin = new Thickness(8, 0, 0, 0), Child = new TextBlock { Text = L10n.T("badge.recommended"), Foreground = Br("AccentA"), FontSize = 10, FontWeight = FontWeights.SemiBold } });
+            titleRow.Children.Add(new Border { Style = St("Badge"), Margin = new Thickness(8, 0, 0, 0), Child = new TextBlock { Text = L10n.T("badge.recommended"), Foreground = Br("AccentText"), FontSize = 10, FontWeight = FontWeights.SemiBold } });
         left.Children.Add(titleRow);
         left.Children.Add(new TextBlock { Text = desc, Style = St("RowDesc") });
         if (!string.IsNullOrEmpty(warn))
@@ -429,34 +468,23 @@ public partial class SettingsWindow : Window
 
     private TextBlock Link(string text, string url)
     {
-        var t = new TextBlock { Text = text, Foreground = Br("AccentA"), FontSize = 12, Cursor = Cursors.Hand };
+        var t = new TextBlock { Text = text, Foreground = Br("AccentText"), FontSize = 12, Cursor = Cursors.Hand };
         t.MouseLeftButtonUp += (_, _) => { try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true }); } catch { } };
         return t;
     }
 
     // ============================ chrome + dev capture ============================
-
-    [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(IntPtr h, int attr, ref int v, int size);
-    private void DarkTitleBar() { try { var h = new WindowInteropHelper(this).Handle; int on = 1; DwmSetWindowAttribute(h, 20, ref on, sizeof(int)); } catch { } }
+    // Not a local "make it dark" call: Theme keeps the DWM attribute in sync with the active scheme, so
+    // a light window gets its light title bar back on a live switch (the attribute is sticky).
+    private void DarkTitleBar() => Theme.ApplyDarkTitleBar(new WindowInteropHelper(this).Handle);
 
     private void SelfCapture()
     {
-        var shot = Environment.GetEnvironmentVariable("VIBEXASR_SHOT");
-        if (string.IsNullOrEmpty(shot)) return;
+        if (string.IsNullOrEmpty(DevShots.Target)) return;
         Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(() =>
-        {
-            try
+            DevShots.Capture(this, DevShots.Seq > 1 ? 16 : 350, 30, () =>
             {
-                int w = (int)Math.Ceiling(ActualWidth), h = (int)Math.Ceiling(ActualHeight);
-                var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap(w, h, 96, 96, PixelFormats.Pbgra32);
-                rtb.Render(this);
-                var enc = new System.Windows.Media.Imaging.PngBitmapEncoder();
-                enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
-                using var fs = System.IO.File.Create(shot);
-                enc.Save(fs);
-            }
-            catch { }
-            if (System.Windows.Application.Current is { } a) a.Shutdown(); else Close();
-        }));
+                if (System.Windows.Application.Current is { } a) a.Shutdown(); else Close();
+            })));
     }
 }

@@ -12,31 +12,31 @@
     </Window.Resources>
     <Grid Margin="8">
         <!-- pill -->
-        <Border x:Name="Pill" CornerRadius="20" Background="{StaticResource Surface2}"
-                BorderBrush="{StaticResource Hairline}" BorderThickness="1" Padding="9,6,13,6">
-            <Border.Effect><DropShadowEffect BlurRadius="18" ShadowDepth="2" Opacity="0.45" Color="#000000"/></Border.Effect>
+        <Border x:Name="Pill" CornerRadius="20" Background="{DynamicResource Surface2}"
+                BorderBrush="{DynamicResource Hairline}" BorderThickness="1" Padding="9,6,13,6"
+                Effect="{DynamicResource Shadow2}">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <Border Width="24" Height="24" CornerRadius="7" Background="{StaticResource AccentGrad}">
+                <Border Width="24" Height="24" CornerRadius="7" Background="{DynamicResource AccentGrad}">
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
                         <Rectangle Width="2" Height="7"  Fill="White" RadiusX="1" RadiusY="1" Margin="1,0"/>
                         <Rectangle Width="2" Height="12" Fill="White" RadiusX="1" RadiusY="1" Margin="1,0"/>
                         <Rectangle Width="2" Height="9"  Fill="White" RadiusX="1" RadiusY="1" Margin="1,0"/>
                     </StackPanel>
                 </Border>
-                <TextBlock Text="Vibe XASR" Foreground="{StaticResource Text}" FontSize="12.5" FontWeight="SemiBold" VerticalAlignment="Center" Margin="9,0,9,0"/>
+                <TextBlock Text="Vibe XASR" Foreground="{DynamicResource Text}" FontSize="12.5" FontWeight="SemiBold" VerticalAlignment="Center" Margin="9,0,9,0"/>
                 <Grid Width="10" Height="10" VerticalAlignment="Center">
-                    <Ellipse x:Name="Ring" Fill="{StaticResource AccentA}" Visibility="Collapsed" RenderTransformOrigin="0.5,0.5">
+                    <Ellipse x:Name="Ring" Fill="{DynamicResource AccentA}" Visibility="Collapsed" RenderTransformOrigin="0.5,0.5">
                         <Ellipse.RenderTransform><ScaleTransform x:Name="RingScale" ScaleX="1" ScaleY="1"/></Ellipse.RenderTransform>
                     </Ellipse>
-                    <Ellipse x:Name="Dot" Width="9" Height="9" Fill="{StaticResource Success}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <Ellipse x:Name="Dot" Width="9" Height="9" Fill="{DynamicResource Success}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 </Grid>
             </StackPanel>
         </Border>
         <!-- close (hover) -->
-        <Border x:Name="CloseBtn" Width="18" Height="18" CornerRadius="9" Background="#E5202028"
-                BorderBrush="{StaticResource Hairline}" BorderThickness="1"
+        <Border x:Name="CloseBtn" Width="18" Height="18" CornerRadius="9" Background="{DynamicResource CloseBtnBg}"
+                BorderBrush="{DynamicResource Hairline}" BorderThickness="1"
                 HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,0,2,0" Visibility="Collapsed" Cursor="Hand">
-            <TextBlock Text="✕" Foreground="{StaticResource TextMuted}" FontSize="9" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            <TextBlock Text="✕" Foreground="{DynamicResource TextMuted}" FontSize="9" HorizontalAlignment="Center" VerticalAlignment="Center"/>
         </Border>
     </Grid>
 </Window>

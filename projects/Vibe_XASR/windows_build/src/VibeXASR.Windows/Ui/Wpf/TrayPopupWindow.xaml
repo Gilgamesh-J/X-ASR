@@ -10,8 +10,8 @@
     <Window.Resources>
         <ResourceDictionary Source="Styles.xaml"/>
     </Window.Resources>
-    <Border CornerRadius="14" Background="{StaticResource Surface}" BorderBrush="{StaticResource Hairline}" BorderThickness="1" Margin="10">
-        <Border.Effect><DropShadowEffect BlurRadius="24" ShadowDepth="3" Opacity="0.5" Color="#000000"/></Border.Effect>
+    <Border CornerRadius="14" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Hairline}" BorderThickness="1" Margin="10"
+            Effect="{DynamicResource Shadow2}">
         <StackPanel x:Name="Root" Margin="0,12,0,8"/>
     </Border>
 </Window>

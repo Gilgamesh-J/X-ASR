@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Vibe XASR" Height="680" Width="780"
         WindowStartupLocation="CenterScreen"
-        Background="#15151B"
+        Background="{DynamicResource Bg}"
         FontFamily="Segoe UI Variable Text, Segoe UI"
         TextOptions.TextFormattingMode="Ideal" TextOptions.TextRenderingMode="ClearType"
         UseLayoutRounding="True" SnapsToDevicePixels="True">
@@ -23,19 +23,18 @@
         </Grid.RowDefinitions>
 
         <!-- header -->
-        <Border Grid.Row="0" Background="{StaticResource Surface2}" Height="56">
-            <Border.Effect><DropShadowEffect BlurRadius="14" ShadowDepth="0" Opacity="0.35" Color="#000000"/></Border.Effect>
+        <Border Grid.Row="0" Background="{DynamicResource Surface2}" Height="56" Effect="{DynamicResource Shadow1}">
             <Grid Margin="18,0,16,0">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <Border Width="26" Height="26" CornerRadius="7" Background="{StaticResource AccentGrad}">
+                    <Border Width="26" Height="26" CornerRadius="7" Background="{DynamicResource AccentGrad}">
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
                             <Rectangle Width="2.4" Height="8"  Fill="White" RadiusX="1.2" RadiusY="1.2" Margin="1,0"/>
                             <Rectangle Width="2.4" Height="13" Fill="White" RadiusX="1.2" RadiusY="1.2" Margin="1,0"/>
                             <Rectangle Width="2.4" Height="9"  Fill="White" RadiusX="1.2" RadiusY="1.2" Margin="1,0"/>
                         </StackPanel>
                     </Border>
-                    <TextBlock x:Name="TitleText" Foreground="{StaticResource Text}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" Margin="11,0,0,0"/>
-                    <TextBlock x:Name="CountText" Foreground="{StaticResource TextMuted}" FontSize="11" FontFamily="Cascadia Mono, Consolas" VerticalAlignment="Center" Margin="10,2,0,0"/>
+                    <TextBlock x:Name="TitleText" Foreground="{DynamicResource Text}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" Margin="11,0,0,0"/>
+                    <TextBlock x:Name="CountText" Foreground="{DynamicResource TextMuted}" FontSize="11" FontFamily="Cascadia Mono, Consolas" VerticalAlignment="Center" Margin="10,2,0,0"/>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                     <Button x:Name="ExportBtn" Style="{StaticResource Ghost}" Content="导出"/>
@@ -46,12 +45,12 @@
 
         <!-- toolbar: search + view toggles -->
         <Grid Grid.Row="1" Margin="16,12,16,4">
-            <Border Background="{StaticResource Surface2}" BorderBrush="{StaticResource Hairline}" BorderThickness="1" CornerRadius="9" Height="34" Margin="0,0,0,0">
+            <Border Background="{DynamicResource Surface2}" BorderBrush="{DynamicResource Hairline}" BorderThickness="1" CornerRadius="9" Height="34" Margin="0,0,0,0">
                 <Grid>
-                    <TextBlock Text="🔍" FontSize="12" VerticalAlignment="Center" Margin="11,0,0,0" Foreground="{StaticResource TextMuted}"/>
-                    <TextBox x:Name="SearchBox" BorderThickness="0" Background="Transparent" Foreground="{StaticResource Text}"
-                             CaretBrush="{StaticResource AccentB}" VerticalContentAlignment="Center" FontSize="12.5" Margin="30,0,150,0"/>
-                    <TextBlock x:Name="SearchPlaceholder" IsHitTestVisible="False" Foreground="{StaticResource TextMuted}" FontSize="12.5" VerticalAlignment="Center" Margin="32,0,0,0"/>
+                    <TextBlock Text="🔍" FontSize="12" VerticalAlignment="Center" Margin="11,0,0,0" Foreground="{DynamicResource TextMuted}"/>
+                    <TextBox x:Name="SearchBox" BorderThickness="0" Background="Transparent" Foreground="{DynamicResource Text}"
+                             CaretBrush="{DynamicResource AccentB}" VerticalContentAlignment="Center" FontSize="12.5" Margin="30,0,150,0"/>
+                    <TextBlock x:Name="SearchPlaceholder" IsHitTestVisible="False" Foreground="{DynamicResource TextMuted}" FontSize="12.5" VerticalAlignment="Center" Margin="32,0,0,0"/>
                     <StackPanel x:Name="ToolBtns" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,5,0"/>
                 </Grid>
             </Border>
@@ -60,15 +59,15 @@
         <ContentControl x:Name="AggHost" Grid.Row="2" Margin="16,0,16,0"/>
         <ContentControl x:Name="CalHost" Grid.Row="3" Margin="16,4,16,0"/>
         <ContentControl x:Name="SelHost" Grid.Row="4" Margin="16,6,16,0"/>
-        <TextBlock x:Name="StatsText" Grid.Row="5" Foreground="{StaticResource TextMuted}" FontSize="11" FontFamily="Cascadia Mono, Consolas" Margin="18,8,16,4"/>
+        <TextBlock x:Name="StatsText" Grid.Row="5" Foreground="{DynamicResource TextMuted}" FontSize="11" FontFamily="Cascadia Mono, Consolas" Margin="18,8,16,4"/>
 
         <Grid Grid.Row="6">
             <ScrollViewer x:Name="ListScroll" VerticalScrollBarVisibility="Auto" Padding="14,2,8,14">
                 <StackPanel x:Name="List"/>
             </ScrollViewer>
-            <Border x:Name="Toast" Visibility="Collapsed" Background="{StaticResource AccentA}" CornerRadius="9"
-                    HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,18" Padding="16,8,16,8">
-                <Border.Effect><DropShadowEffect BlurRadius="16" ShadowDepth="2" Opacity="0.5" Color="#000000"/></Border.Effect>
+            <Border x:Name="Toast" Visibility="Collapsed" Background="{DynamicResource AccentFill}" CornerRadius="9"
+                    HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,18" Padding="16,8,16,8"
+                    Effect="{DynamicResource Shadow2}">
                 <TextBlock x:Name="ToastText" Foreground="White" FontSize="12.5" FontWeight="SemiBold"/>
             </Border>
         </Grid>

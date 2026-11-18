@@ -31,6 +31,13 @@ using Path = System.IO.Path;
 
 namespace VibeXASR.Windows.Ui.Wpf;
 
+// DEV-ONLY SURFACE — not reachable from the shipping UI.
+// The 记录 entry point (tray menu, popup, and the overlay's "记录" pill) opens Settings › 记录, which
+// hosts HistoryWorkspaceControl. This standalone window is kept as a separate-window variant and is
+// only opened by the VIBEXASR_OPEN=wpfhost dev hook, so nothing here is on a user path: the J/K/E/D/M
+// shortcuts, tag palette and export live in HistoryWorkspaceControl. If a standalone window ever
+// becomes a product decision, move those behaviours here (or delegate to the control) instead of
+// growing a second implementation.
 /// <summary>The 记录 workspace (WPF). Full port of the WinForms HistoryWorkspacePanel: search +
 /// aggregate (碎句聚合) + calendar heatmap, day-grouped clustered rows, multi-select (click /
 /// Shift-range), a batch toolbar (merge / to-note / tag / copy / delete), undo, and double-click
@@ -64,6 +71,8 @@ public partial class HistoryWindow : Window
     {
         _store = store;
         InitializeComponent();
+        Palette.Attach(this);
+        Palette.Changed += OnPaletteChanged;
         SourceInitialized += (_, _) => DarkTitleBar();
 
         SearchBox.TextChanged += (_, _) => { _query = SearchBox.Text; SearchPlaceholder.Visibility = string.IsNullOrEmpty(_query) ? Visibility.Visible : Visibility.Collapsed; Rebuild(); };
@@ -147,7 +156,7 @@ public partial class HistoryWindow : Window
         };
         g.Children.Add(lbl);
         var ids = grp.Nodes.SelectMany(n => n.Items.Select(i => i.Id)).ToList();
-        var sel = new TextBlock { Text = L10n.Loc("选本天", "Select day", "この日を選択", "이 날 선택"), Foreground = Br("AccentA"), FontSize = 11.5, Cursor = Cursors.Hand, VerticalAlignment = VerticalAlignment.Center };
+        var sel = new TextBlock { Text = L10n.Loc("选本天", "Select day", "この日を選択", "이 날 선택"), Foreground = Br("AccentText"), FontSize = 11.5, Cursor = Cursors.Hand, VerticalAlignment = VerticalAlignment.Center };
         sel.MouseLeftButtonUp += (_, _) => { foreach (var id in ids) _selection.Add(id); Rebuild(); };
         Grid.SetColumn(sel, 1); g.Children.Add(sel);
         return g;
@@ -174,7 +183,7 @@ public partial class HistoryWindow : Window
         grid.ColumnDefinitions.Add(new ColumnDefinition());                              // body
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });   // merge btn
 
-        var dot = new TextBlock { Text = selected ? "☑" : "☐", Foreground = selected ? Br("AccentA") : Br("TextMuted"), FontSize = 15, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 1, 10, 0) };
+        var dot = new TextBlock { Text = selected ? "☑" : "☐", Foreground = selected ? Br("AccentText") : Br("TextMuted"), FontSize = 15, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 1, 10, 0) };
         Grid.SetColumn(dot, 0); grid.Children.Add(dot);
 
         var body = new StackPanel();
@@ -337,11 +346,11 @@ public partial class HistoryWindow : Window
         hdr.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         hdr.ColumnDefinitions.Add(new ColumnDefinition());
         hdr.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        var prev = new TextBlock { Text = "‹", Foreground = Br("AccentA"), FontSize = 16, Cursor = Cursors.Hand, VerticalAlignment = VerticalAlignment.Center };
+        var prev = new TextBlock { Text = "‹", Foreground = Br("AccentText"), FontSize = 16, Cursor = Cursors.Hand, VerticalAlignment = VerticalAlignment.Center };
         prev.MouseLeftButtonUp += (_, _) => { _monthCursor = _monthCursor.AddMonths(-1); Rebuild(); };
         Grid.SetColumn(prev, 0); hdr.Children.Add(prev);
         hdr.Children.Add(new TextBlock { Text = _monthCursor.ToString(Zh ? "yyyy年M月" : "MMMM yyyy", CultureInfo.GetCultureInfo(Zh ? "zh-CN" : "en-US")), Foreground = Br("Text"), FontSize = 12.5, FontWeight = FontWeights.SemiBold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center });
-        var next = new TextBlock { Text = "›", Foreground = Br("AccentA"), FontSize = 16, Cursor = Cursors.Hand, VerticalAlignment = VerticalAlignment.Center };
+        var next = new TextBlock { Text = "›", Foreground = Br("AccentText"), FontSize = 16, Cursor = Cursors.Hand, VerticalAlignment = VerticalAlignment.Center };
         next.MouseLeftButtonUp += (_, _) => { _monthCursor = _monthCursor.AddMonths(1); Rebuild(); };
         Grid.SetColumn(next, 2); hdr.Children.Add(next);
         root.Children.Add(hdr);
@@ -370,10 +379,10 @@ public partial class HistoryWindow : Window
     private Brush HeatBrush(int level) => level switch
     {
         0 => Br("Surface"),
-        1 => new SolidColorBrush(Color.FromArgb(70, 0x7C, 0x5C, 0xFF)),
-        2 => new SolidColorBrush(Color.FromArgb(130, 0x7C, 0x5C, 0xFF)),
-        3 => new SolidColorBrush(Color.FromArgb(190, 0x7C, 0x5C, 0xFF)),
-        _ => new SolidColorBrush(Color.FromArgb(240, 0x7C, 0x5C, 0xFF)),
+        1 => Palette.Alpha("AccentFill", 70),
+        2 => Palette.Alpha("AccentFill", 130),
+        3 => Palette.Alpha("AccentFill", 190),
+        _ => Palette.Alpha("AccentFill", 240),
     };
 
     // ===================== selection batch bar =====================
@@ -496,11 +505,16 @@ public partial class HistoryWindow : Window
         return dlg.ShowDialog() == true ? dlg.Result : null;
     }
 
+    private void OnPaletteChanged()
+    {
+        if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(OnPaletteChanged)); return; }
+        DarkTitleBar();    // the DWM attribute is sticky: it has to be rewritten, not merely set once
+        Rebuild();
+    }
+
     private Style St(string key) => (Style)FindResource(key);
     private Brush Br(string key) => (Brush)FindResource(key);
-
-    [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(IntPtr h, int attr, ref int v, int size);
-    private void DarkTitleBar() { try { var h = new WindowInteropHelper(this).Handle; int on = 1; DwmSetWindowAttribute(h, 20, ref on, sizeof(int)); } catch { } }
+    private void DarkTitleBar() => Theme.ApplyDarkTitleBar(new WindowInteropHelper(this).Handle);
 
     private void SelfCapture()
     {

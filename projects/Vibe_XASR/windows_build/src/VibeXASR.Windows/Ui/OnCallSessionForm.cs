@@ -96,6 +96,26 @@ public sealed class OnCallSessionForm : Form
         Theme.ApplyDarkScrollbars(this);   // dark scrollbars to match the dark theme
     }
 
+    /// <summary>Re-apply the scheme after Windows' light/dark setting changes. WinForms copies colours
+    /// into control properties, so unlike WPF's DynamicResource nothing here follows a theme switch on
+    /// its own — the tray app calls this from its UserPreferenceChanged handler.</summary>
+    public void ApplyScheme()
+    {
+        if (IsDisposed) return;
+        if (InvokeRequired) { BeginInvoke((Action)ApplyScheme); return; }
+        BackColor = Theme.Surface;
+        _header.BackColor = Theme.Surface2;
+        _title.ForeColor = Theme.Text;
+        _count.ForeColor = Theme.TextMuted;
+        _listHost.BackColor = Theme.Surface;
+        Theme.ApplyDarkTitleBar(Handle);
+        Theme.ApplyDarkScrollbars(this);
+        _builtWidth = -1;   // the rows cache their own colours; force a full rebuild
+        RebuildRows();
+        DoLayout();
+        Invalidate(true);
+    }
+
     /// <summary>Refresh from the session snapshot (called on open + on each new utterance).</summary>
     public void Reload()
     {
@@ -176,7 +196,7 @@ internal sealed class SessionRow : Panel
         BackColor = Theme.Surface;
         Width = width;
         int textW = width - 32;
-        int textH = SettingsForm.MeasureWrapped(entry.Text, Theme.Mono(10.5f), textW);
+        int textH = TextMeasure.Wrapped(entry.Text, Theme.Mono(10.5f), textW);
         Height = 10 + 14 + 3 + textH + 11;
     }
 
@@ -190,7 +210,7 @@ internal sealed class SessionRow : Panel
 
         var textFont = Theme.Mono(10.5f);
         int textW = Width - 32;
-        int textH = SettingsForm.MeasureWrapped(_entry.Text, textFont, textW);
+        int textH = TextMeasure.Wrapped(_entry.Text, textFont, textW);
         TextRenderer.DrawText(g, _entry.Text, textFont, new Rectangle(16, 27, textW, textH), Theme.Text,
             TextFormatFlags.Left | TextFormatFlags.WordBreak | TextFormatFlags.NoPadding);
 

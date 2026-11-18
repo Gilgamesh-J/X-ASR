@@ -101,18 +101,21 @@ powershell -ExecutionPolicy Bypass -File .\build-installer.ps1   # -> installer\
 
 The installer:
 - installs to `%LOCALAPPDATA%\Programs\VibeXASR` — **per-user, no admin / no UAC**;
-- bundles `models\chunk-960ms-model\*` + `models\silero_vad.onnx`; the app reads them from
-  its install dir (like the macOS app reads `Resources/`), so it's **ready offline on first
-  launch** (extra latency tiers still download on demand to `%APPDATA%\VibeXASR`);
+- bundles `models\chunk-960ms-model\*`, `models\firered\*` + `firered_vad.dll`, and a silero v4
+  fallback; the app reads them from its install dir (like the macOS app reads `Resources/`), so
+  it's **ready offline on first launch** (extra latency tiers still download on demand to
+  `%APPDATA%\VibeXASR`);
 - adds **Start-Menu + Desktop shortcuts** (with the app icon) and an Apps-list (uninstall)
   entry; install silently with `msiexec /i VibeXASR-Setup.msi /qn`.
 
 The app icon is a real embedded multi-resolution `.ico` (`src/VibeXASR.Windows/appicon.ico`,
 referenced via `<ApplicationIcon>`), so Explorer / shortcuts / the tray all show the mark.
 
-> **VAD note:** the bundled VAD is **silero v4** — sherpa-onnx 1.10.x rejects silero **v5**
-> with `Unsupported silero vad model`. (FireRedVAD on macOS uses a custom shim, not sherpa,
-> so it isn't wired on Windows yet — Windows defaults to silero.)
+> **VAD note:** the default VAD is **FireRed** (`third_party/firered/firered_vad.dll`, the same
+> native shim the macOS build uses; the installer bundles it together with `models/firered/`).
+> If that DLL or its ONNX model is missing, `Dictation/Vad.cs` logs the failure and falls back to
+> **silero v4** — sherpa-onnx 1.10.x rejects silero **v5** with `Unsupported silero vad model`,
+> which is why the installer pins v4.
 
 ## Using it (push-to-talk) & troubleshooting
 
@@ -123,8 +126,9 @@ referenced via `<ApplicationIcon>`), so Explorer / shortcuts / the tray all show
 - After launch, wait a moment for **就绪 / Ready** — the 565 MB model loads on a background
   thread (the UI and hotkey stay responsive). Pressing the key before it's ready shows a
   "model loading" tip rather than doing nothing.
-- VAD on Windows is **silero** (FireRedVAD is a macOS-only shim; a stored `fire` setting
-  coerces to silero so it can't break the engine).
+- VAD on Windows is **FireRed** by default, with **silero** as the automatic fallback when
+  `firered_vad.dll` or `models/firered/firered_vad.onnx` is absent (`Models/ModelPaths.ResolveVad`
+  picks silero in that case; `Dictation/Vad.cs` also catches a failed init and switches).
 - A diagnostic log is written to **`%APPDATA%\VibeXASR\log.txt`** (hook install / hotkey /
   engine ready / mic peak level / recognized text) — useful if dictation seems unresponsive.
 
@@ -141,9 +145,10 @@ referenced via `<ApplicationIcon>`), so Explorer / shortcuts / the tray all show
 | Modes | paste / type / oncall | paste / type / oncall (`Dictation/DictationEngine.cs`, `TrayApp.cs`) |
 | Edge-endpointing + preroll | yes | ported in `DictationEngine.cs` (300 ms preroll, VAD + ASR endpoint) |
 | CJK de-spacing | drop spaces between CJK glyphs | `StreamingAsr.DeSpaceCjk` |
-| Overlay | floating caption / oncall panel | borderless top-most `OverlayForm` (NOACTIVATE, click-through) |
+| Overlay | floating caption / oncall panel | layered top-most `Ui/Wpf/OverlayWindow` (click-through, drag-to-move) |
 | History | JSON | `%APPDATA%\VibeXASR\history.json` (`Storage/HistoryStore.cs`) |
 | Settings | plist/JSON | `%APPDATA%\VibeXASR\settings.json` (`Storage/Settings.cs`) |
+| Theme | follows macOS appearance | `auto` follows Windows; `dark`/`light` pin it (`Ui/DesignTokens.cs` holds both schemes) |
 | Models | HF `GilgameshWind/X-ASR-zh-en` | same URL (`Models/ModelDownloader.cs`) |
 
 ## Source layout
@@ -167,19 +172,29 @@ windows_build/
    │  └─ DictationEngine.cs        VAD->ASR orchestration, preroll, 3 modes, endpointing
    ├─ Input/
    │  └─ TextInserter.cs           SendInput KEYEVENTF_UNICODE + Backspace(n)
-   ├─ Ui/                          macOS-faithful WinForms surfaces (port of VibeUI)
-   │  ├─ Theme.cs                  design tokens (colors/fonts/radii) + dark title bar + rounded paths
+   ├─ Ui/                          design tokens + the two remaining WinForms surfaces
+   │  ├─ DesignTokens.cs           THE colour table: every token as a dark/light pair (one source for both stacks)
+   │  ├─ Theme.cs                  WinForms reader of DesignTokens + fonts/radii + DWM dark title bar & scrollbars
+   │  ├─ TextMeasure.cs            GDI text measurement helpers shared by the WinForms surfaces
    │  ├─ L10n.cs                   4-language zh/en/ja/ko string table (port of L10n.swift)
-   │  ├─ Controls.cs               owner-drawn VibeToggle/VibeButton/Segmented/Select/ProgressBar + dark menu renderer
+   │  ├─ Controls.cs               owner-drawn VibeToggle/VibeButton + tray-menu renderer
    │  ├─ Branding.cs               runtime-generated accent app/tray icon
    │  ├─ HotkeyRecorder.cs         click-to-record hotkey field (one-shot LL hook) + VK name map
-   │  ├─ SettingsForm.cs           sidebar + General/Dictation/Model/Records/Permissions/About tabs
-   │  ├─ TierManageRow.cs          per-tier download / use / cancel / delete row
-   │  ├─ HistoryForm.cs            HistoryPanel (stats + privacy + list, copy/edit/delete) + standalone window
-   │  ├─ TrayPopupForm.cs          menu-bar-style dropdown (status dot, recent card, toggle, entries)
-   │  ├─ OverlayForm.cs            rounded HUD pill (orb + waveform + caret) + OnCall panel; click-through
-   │  ├─ DownloadForm.cs           first-run model-download progress dialog
-   │  └─ IAppController.cs         live seam between windows and TrayApp (the SettingsBridge analogue)
+   │  ├─ OnboardingForm.cs         first-run window (WinForms; re-applies the scheme on a live switch)
+   │  ├─ OnCallSessionForm.cs      on-call transcript window (WinForms; re-applies the scheme too)
+   │  ├─ IAppController.cs         live seam between windows and TrayApp (the SettingsBridge analogue)
+   │  └─ Wpf/                      the shipping UI (WPF, hosted in the tray app's message loop)
+   │     ├─ Palette.cs            WPF reader of DesignTokens -> one ResourceDictionary of {DynamicResource} brushes
+   │     ├─ Motion.cs             the single motion language (durations, easings, all helpers; off on RDP / no-animation)
+   │     ├─ Styles.xaml           the dark/light-neutral control templates; colours are all DynamicResource
+   │     ├─ SettingsWindow.*      General/Dictation/Cloud/Model/Dictionary/History/Share/Permissions/About tabs
+   │     ├─ HistoryWindow.*       history list + stats, tag palette, per-row dialogs
+   │     ├─ OverlayWindow.*       HUD pill / confirm bar / on-call panel (layered, click-through, click-drag)
+   │     ├─ TrayPopupWindow.*     menu-bar-style dropdown (status dot, recent card, template & mic menus)
+   │     ├─ LauncherWindow.*      the small always-on-top floating entry point
+   │     ├─ DownloadWindow.*      model-download progress window
+   │     ├─ PromptStudioWindow.*  prompt template editor
+   │     └─ DevShots.cs           dev-only screenshot helper (RenderTargetBitmap / DrawToBitmap)
    ├─ Storage/
    │  ├─ Settings.cs               settings.json + enums + %APPDATA% paths (+ clip/history/launch/tray)
    │  └─ HistoryStore.cs           history.json: id/mode/expiry per entry, lifetime stats, 60s ephemeral
@@ -205,10 +220,17 @@ The original `// TODO(win):` items are done:
 5. **Overlay polish** — rounded gradient HUD pill (orb + reactive waveform + blinking caret),
    click-through HUD, interactive OnCall panel, and `CopyRequested` wired to the live text.
 6. **4-language UI** (zh/en/ja/ko) ported from `L10n.swift`; **app/tray icon** generated at runtime.
+7. **Light theme** — the whole UI used to be hard-coded dark while the WinForms onboarding/on-call
+   windows followed Windows, so one app showed two schemes. Every colour now lives in
+   `Ui/DesignTokens.cs` as a dark/light pair; `auto` follows Windows and a live switch repaints
+   both stacks. Accent-as-text and the muted greys were retuned to clear WCAG AA (4.5:1).
 
-> A hidden launch hook `VIBEXASR_OPEN=settings|history|popup|overlay[:oncall]` opens a single
-> surface at startup (skips the engine) — handy for screenshots, and the seam for a future
-> single-instance "show Settings".
+> Hidden launch hooks for screenshots (all skip the engine):
+> `VIBEXASR_OPEN=wpfhost` + `VIBEXASR_WIN=settings|history|popup|launcher|overlay|overlay-inserted|overlay-oncall|download|onboarding|oncall`
+> opens one surface; add `VIBEXASR_THEME=auto|dark|light`, `VIBEXASR_TAB=<tab>`, `VIBEXASR_LANG=zh|zh-Hant|en|ja|ko`,
+> `VIBEXASR_SHOT=<path.png>` (self-capture) and `VIBEXASR_FLIP=1` (capture, switch scheme in place,
+> capture again). `VIBEXASR_PICK=<n>` drives the 外观 dropdown for real, so the preference → scheme
+> → repaint chain is exercised end to end.
 
 ## Building it here (notes)
 

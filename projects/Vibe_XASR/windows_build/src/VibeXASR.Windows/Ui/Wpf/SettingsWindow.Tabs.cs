@@ -78,10 +78,10 @@ public partial class SettingsWindow
                 wsp.Children.Add(g);
             }
             if (pages > 1) wsp.Children.Add(Pager(_hwPage, pages, p => { _hwPage = p; SelectTab("dictionary"); }));
-            var addHw = new TextBlock { Text = "⊕ " + L10n.T("hw.add"), Foreground = Br("AccentA"), FontSize = 13, Margin = new Thickness(0, 6, 0, 0), Cursor = Cursors.Hand };
+            var addHw = new TextBlock { Text = "⊕ " + L10n.T("hw.add"), Foreground = Br("AccentText"), FontSize = 13, Margin = new Thickness(0, 6, 0, 0), Cursor = Cursors.Hand };
             addHw.MouseLeftButtonUp += (_, _) => { _hotwords.Add(""); _hwPage = (_hotwords.Count - 1) / HwPerPage; SelectTab("dictionary"); };
             wsp.Children.Add(addHw);
-            Content.Children.Add(new Border { Style = St("Card"), Child = wsp });
+            ContentHost.Children.Add(new Border { Style = St("Card"), Child = wsp });
 
             // strength (segmented) + homophone + footer
             AddCard(
@@ -140,10 +140,10 @@ public partial class SettingsWindow
                 Grid.SetColumn(del, 3); g.Children.Add(del);
                 rsp.Children.Add(g);
             }
-            var addRep = new TextBlock { Text = "⊕ " + L10n.T("rep.add"), Foreground = Br("AccentA"), FontSize = 13, Margin = new Thickness(0, 6, 0, 0), Cursor = Cursors.Hand };
+            var addRep = new TextBlock { Text = "⊕ " + L10n.T("rep.add"), Foreground = Br("AccentText"), FontSize = 13, Margin = new Thickness(0, 6, 0, 0), Cursor = Cursors.Hand };
             addRep.MouseLeftButtonUp += (_, _) => { _reps.Add(new RepRule()); SelectTab("dictionary"); };
             rsp.Children.Add(addRep);
-            Content.Children.Add(new Border { Style = St("Card"), Child = rsp });
+            ContentHost.Children.Add(new Border { Style = St("Card"), Child = rsp });
             AddFooter(L10n.T("rep.count", _reps.Count(r => r.From.Trim().Length > 0)), () => { ApplyReps(); SelectTab("dictionary"); },
                 onExport: () => ExportTextFile(RepText(), "vibe-replacements.txt"),
                 onImport: () =>
@@ -182,7 +182,7 @@ public partial class SettingsWindow
         {
             bool sel = v == value;
             var seg = new Border { CornerRadius = new CornerRadius(6), Background = sel ? Br("AccentSoft") : System.Windows.Media.Brushes.Transparent, Padding = new Thickness(15, 5, 15, 5), Cursor = Cursors.Hand,
-                Child = new TextBlock { Text = l, Foreground = sel ? Br("AccentA") : Br("TextMuted"), FontSize = 12.5, FontWeight = sel ? FontWeights.SemiBold : FontWeights.Normal } };
+                Child = new TextBlock { Text = l, Foreground = sel ? Br("AccentText") : Br("TextMuted"), FontSize = 12.5, FontWeight = sel ? FontWeights.SemiBold : FontWeights.Normal } };
             seg.MouseLeftButtonUp += (_, _) => onPick(v);
             sp.Children.Add(seg);
         }
@@ -213,7 +213,7 @@ public partial class SettingsWindow
         save.Click += (_, _) => onSave();
         btns.Children.Add(save);
         Grid.SetColumn(btns, 1); g.Children.Add(btns);
-        Content.Children.Add(g);
+        ContentHost.Children.Add(g);
     }
 
     // ---- import / export (macOS LexiconIO parity) ----
@@ -265,9 +265,9 @@ public partial class SettingsWindow
             AddCardRaw(trigGrid, exp);
         }
 
-        var add = new TextBlock { Text = "⊕ " + L10n.T("snip.add"), Foreground = Br("AccentA"), FontSize = 13, Margin = new Thickness(20, 4, 0, 4), Cursor = Cursors.Hand };
+        var add = new TextBlock { Text = "⊕ " + L10n.T("snip.add"), Foreground = Br("AccentText"), FontSize = 13, Margin = new Thickness(20, 4, 0, 4), Cursor = Cursors.Hand };
         add.MouseLeftButtonUp += (_, _) => { _snips.Add(new Snip()); SaveSnips(); SelectTab("snippet"); };
-        Content.Children.Add(add);
+        ContentHost.Children.Add(add);
 
         // footer: count + save
         var footGrid = new Grid { Margin = new Thickness(20, 6, 8, 0) };
@@ -285,7 +285,7 @@ public partial class SettingsWindow
         saveBtn.Click += (_, _) => { SaveSnips(); SelectTab("snippet"); };
         footBtns.Children.Add(saveBtn);
         Grid.SetColumn(footBtns, 1); footGrid.Children.Add(footBtns);
-        Content.Children.Add(footGrid);
+        ContentHost.Children.Add(footGrid);
     }
 
     private void SaveSnips() => _app.SetSnippets(S.SnippetsEnabled, SerializeSnips(_snips));
@@ -332,7 +332,7 @@ public partial class SettingsWindow
         var head = new StackPanel { Margin = new Thickness(16, 12, 16, 12) };
         head.Children.Add(new TextBlock { Text = L10n.T("model.headline.title"), Style = St("RowTitle"), FontWeight = FontWeights.SemiBold });
         head.Children.Add(new TextBlock { Text = L10n.T("model.headline.repo"), Style = St("RowDesc"), FontFamily = new FontFamily("Cascadia Mono, Consolas") });
-        Content.Children.Add(new Border { Style = St("Card"), Child = head });
+        ContentHost.Children.Add(new Border { Style = St("Card"), Child = head });
 
         // download source picker (CDN加速链接 / ModelScope / HuggingFace)
         AddCard(Row(L10n.T("model.source"), L10n.T("model.source.help2"),
@@ -351,7 +351,7 @@ public partial class SettingsWindow
             card.MouseLeftButtonUp += (_, _) => { _app.SelectTier(t); SelectTab("model"); };
             grid.Children.Add(card);
         }
-        Content.Children.Add(new Border { Style = St("Card"), Child = grid });
+        ContentHost.Children.Add(new Border { Style = St("Card"), Child = grid });
         AddNote(L10n.T("model.tier.help"));
 
         // model management: per-tier download / cancel / use / delete + live progress
@@ -561,7 +561,7 @@ public partial class SettingsWindow
         var bannerBg = new SolidColorBrush(WithAlpha(((SolidColorBrush)Br(granted ? "Success" : "Warn")).Color, 28));
         var banner = new Border { CornerRadius = new CornerRadius(12), Background = bannerBg, Padding = new Thickness(16, 12, 16, 12), Margin = new Thickness(0, 0, 0, 10),
             Child = new TextBlock { Text = L10n.T(granted ? "perm.banner.ok" : "perm.banner.warn"), Foreground = Br(granted ? "Success" : "Warn"), FontSize = 13, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap } };
-        Content.Children.Add(banner);
+        ContentHost.Children.Add(banner);
 
         // mic granted pill
         var micPill = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
@@ -656,7 +656,7 @@ public partial class SettingsWindow
         head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var titleRow = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         titleRow.Children.Add(new TextBlock { Text = L10n.Loc("AI 润色(本地)", "AI Polish (local)", "AI 整形(ローカル)", "AI 다듬기(로컬)"), Foreground = Br("Text"), FontSize = 14, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
-        titleRow.Children.Add(new Border { Style = St("Badge"), Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, Child = new TextBlock { Text = "Beta", Foreground = Br("AccentA"), FontSize = 10, FontWeight = FontWeights.SemiBold } });
+        titleRow.Children.Add(new Border { Style = St("Badge"), Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, Child = new TextBlock { Text = "Beta", Foreground = Br("AccentText"), FontSize = 10, FontWeight = FontWeights.SemiBold } });
         Grid.SetColumn(titleRow, 0); head.Children.Add(titleRow);
         var tog = new ToggleButton { Style = St("Toggle"), IsChecked = S.LocalRefinerEnabled, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
         // Click = user-only (programmatic IsChecked in Refresh won't re-fire). macOS requestEnable: enabling polish
@@ -764,7 +764,7 @@ public partial class SettingsWindow
         sp.Children.Add(new TextBlock { Text = L10n.Loc("量化 GGUF · 首次联网下载", "Quantized GGUF · downloaded on first use", "量子化 GGUF · 初回オンラインDL", "양자화 GGUF · 첫 사용 시 다운로드"),
             Foreground = Br("TextMuted"), FontSize = 11, Opacity = 0.7, Margin = new Thickness(0, 4, 0, 0) });
 
-        Content.Children.Add(new Border { Style = St("Card"), Child = sp });
+        ContentHost.Children.Add(new Border { Style = St("Card"), Child = sp });
     }
 
     private void CloudCommit()
@@ -867,7 +867,7 @@ public partial class SettingsWindow
                 sp.Children.Add(new TextBlock { Text = "💳 " + prov.Price, Style = St("RowDesc"), Margin = new Thickness(0, 12, 0, 0) });
         }
 
-        Content.Children.Add(new Border { Style = St("Card"), Child = sp });
+        ContentHost.Children.Add(new Border { Style = St("Card"), Child = sp });
     }
 
     private FrameworkElement CloudProfilesBar()
@@ -956,13 +956,13 @@ public partial class SettingsWindow
                 top.Children.Add(new TextBlock { Text = $"{e.At:HH:mm:ss}  {CloudProviderLabel(e.Provider)} · {e.Model}", Foreground = Br("Text"), FontSize = 12, VerticalAlignment = VerticalAlignment.Center });
                 top.Children.Add(new TextBlock { Text = $"   {e.Ms}ms  {CloudLogText(e.Status)}", Foreground = Br(CloudLogBrush(e.Status)), FontFamily = new FontFamily("Cascadia Mono, Consolas"), FontSize = 11, VerticalAlignment = VerticalAlignment.Center });
                 row.Children.Add(top);
-                string change = e.Status != "ok" ? $"「{Clip(e.Input, 40)}」 · {CloudLogText(e.Status)}"
-                              : e.Input.Trim() == e.Output.Trim() ? $"「{Clip(e.Input, 60)}」 · {L10n.Loc("无修改", "no change", "変更なし", "변경 없음")}"
-                              : L10n.Loc($"从「{Clip(e.Input, 30)}」改成「{Clip(e.Output, 30)}」", $"{Clip(e.Input, 30)} → {Clip(e.Output, 30)}", $"「{Clip(e.Input, 30)}」→「{Clip(e.Output, 30)}」", $"「{Clip(e.Input, 30)}」→「{Clip(e.Output, 30)}」");
+                string change = e.Status != "ok" ? $"「{Elide(e.Input, 40)}」 · {CloudLogText(e.Status)}"
+                              : e.Input.Trim() == e.Output.Trim() ? $"「{Elide(e.Input, 60)}」 · {L10n.Loc("无修改", "no change", "変更なし", "변경 없음")}"
+                              : L10n.Loc($"从「{Elide(e.Input, 30)}」改成「{Elide(e.Output, 30)}」", $"{Elide(e.Input, 30)} → {Elide(e.Output, 30)}", $"「{Elide(e.Input, 30)}」→「{Elide(e.Output, 30)}」", $"「{Elide(e.Input, 30)}」→「{Elide(e.Output, 30)}」");
                 row.Children.Add(new TextBlock { Text = change, Style = St("RowDesc"), Margin = new Thickness(16, 2, 0, 0), TextWrapping = TextWrapping.Wrap });
                 sp.Children.Add(row);
             }
-        Content.Children.Add(new Border { Style = St("Card"), Child = sp });
+        ContentHost.Children.Add(new Border { Style = St("Card"), Child = sp });
     }
 
     private void BuildCloudPromptCard()
@@ -1007,7 +1007,7 @@ public partial class SettingsWindow
         sp.Children.Add(editor);
         sp.Children.Add(new TextBlock { Text = L10n.Loc("「自动」由上方开关实时拼成;改后可恢复自动。模板可增删、点选即套用。占位符调用时自动替换(热词取自「词典」)。", "“Auto” is built from the toggles above. Tokens are filled at call time.", "「自動」は上のスイッチからリアルタイムに生成されます。編集後も自動に戻せます。テンプレートは追加・削除でき、クリックで適用。プレースホルダーは呼び出し時に自動置換されます(ホットワードは「辞書」から取得)。", "「자동」은 위 스위치로 실시간 생성됩니다. 수정 후 자동으로 되돌릴 수 있습니다. 템플릿은 추가·삭제할 수 있고 클릭하면 적용됩니다. 자리표시자는 호출 시 자동 치환됩니다(핫워드는 「사전」에서 가져옴)."), Style = St("RowDesc"), Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap });
 
-        Content.Children.Add(new Border { Style = St("Card"), Child = sp });
+        ContentHost.Children.Add(new Border { Style = St("Card"), Child = sp });
     }
 
     private string CloudCurrentPrompt()
@@ -1032,7 +1032,7 @@ public partial class SettingsWindow
         return chip;
     }
 
-    private static string Clip(string s, int n) { s = (s ?? "").Replace("\n", " ").Trim(); return s.Length > n ? s.Substring(0, n) + "…" : s; }
+    private static string Elide(string s, int n) { s = (s ?? "").Replace("\n", " ").Trim(); return s.Length > n ? s.Substring(0, n) + "…" : s; }
     private string CloudLogBrush(string s) => s == "ok" ? "Success" : (s is "timeout" or "skipped" ? "Warn" : "Danger");
     private string CloudLogText(string s) => s switch { "ok" => L10n.Loc("成功", "ok", "成功", "성공"), "timeout" => L10n.Loc("超时", "timeout", "タイムアウト", "시간 초과"), "skipped" => L10n.Loc("超 token", "skipped", "トークン超過", "토큰 초과"), _ => L10n.Loc("失败", "error", "失敗", "실패") };
 
@@ -1063,13 +1063,13 @@ public partial class SettingsWindow
     private TextBlock Label(string text) => new() { Text = text, Style = St("RowDesc"), Margin = new Thickness(2, 6, 0, 4) };
 
     private void AddNote(string text) =>
-        Content.Children.Add(new TextBlock { Text = text, Style = St("RowDesc"), Margin = new Thickness(18, 0, 18, 10), TextWrapping = TextWrapping.Wrap });
+        ContentHost.Children.Add(new TextBlock { Text = text, Style = St("RowDesc"), Margin = new Thickness(18, 0, 18, 10), TextWrapping = TextWrapping.Wrap });
 
     private void AddCardRaw(params UIElement[] children)
     {
         var sp = new StackPanel { Margin = new Thickness(18, 10, 18, 12) };
         foreach (var c in children) sp.Children.Add(c);
-        Content.Children.Add(new Border { Style = St("Card"), Child = sp });
+        ContentHost.Children.Add(new Border { Style = St("Card"), Child = sp });
     }
 
     private Grid RowInline(string title, FrameworkElement control)

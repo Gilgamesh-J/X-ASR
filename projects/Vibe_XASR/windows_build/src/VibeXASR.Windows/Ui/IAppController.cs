@@ -25,6 +25,7 @@ public interface IAppController
     void SetModelSource(string code);   // "official" | "modelscope" | "huggingface" — download mirror
     void SetHotkey(int vk, int mods);   // vk + modifier bitfield (Ctrl=1,Alt=2,Shift=4,Win=8)
     void SetLanguage(Lang lang);
+    void SetTheme(string preference);   // "auto" | "dark" | "light" — applies + persists immediately
     void SetClipboardOverwrite(bool on);
     void SetHistoryEnabled(bool on);
     void SetLaunchAtLogin(bool on);

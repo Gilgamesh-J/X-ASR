@@ -54,6 +54,13 @@ public sealed class OverlayWindow : Window
     private Grid? _hudGrid;   // for measuring the stream-text column width (head-clip long text)
     private Ellipse? _orbGlow;
 
+    // ---- motion plumbing (see Motion.cs) ----
+    private Grid? _host;          // wraps Content so a new pill can pop in without touching Window.Opacity
+    private Action? _enter;       // entrance animation, played AFTER the window is on screen
+    private int _hideSeq;         // invalidates an in-flight fade-out when a new state arrives
+    private bool _lastConfirmUndo, _lastConfirmRepolish;   // how the confirm bar was built (for a theme rebuild)
+    private double _phase;        // waveform phase (bars travel instead of breathing in lockstep)
+
     public event EventHandler? CopyRequested;
     public event EventHandler? StopRequested;
     public event EventHandler? ViewRequested;
@@ -69,13 +76,44 @@ public sealed class OverlayWindow : Window
     public void DevShowRepolishMenu() { _state = OverlayState.Inserted; ShowRepolishMenu(); }
 
     public string CurrentText => _text;
+
+    /// <summary>Re-render the current state with the new token values. The HUD is created once and
+    /// reused across the whole tray session, so it is the one surface that would otherwise keep the
+    /// old scheme after the user switches Windows' theme while it is on screen.</summary>
+    public void ReapplyPalette()
+    {
+        if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(ReapplyPalette); return; }
+        if (_state == OverlayState.Hidden) return;
+        // ShowListening/ShowOnCall reset the streamed text, so snapshot it: reading _text afterwards
+        // would give the empty string the rebuild just wrote.
+        string text = _text;
+        double level = _level;
+        switch (_state)
+        {
+            case OverlayState.Listening:
+                ShowListening(); SetLevel(level); SetText(text); break;
+            case OverlayState.Inserted:
+                ShowInserted(autoHide: false, withUndo: _lastConfirmUndo, withRepolish: _lastConfirmRepolish); break;
+            case OverlayState.Refining: ShowRefining(); break;
+            case OverlayState.OnCall: ShowOnCall(); SetText(text); break;
+        }
+    }
     public IntPtr Handle => new WindowInteropHelper(this).EnsureHandle();
 
-    // ---- palette (self-contained; matches Styles.xaml) ----
+    // ---- palette ----
+    // Every colour comes from Palette.cs so the HUD follows the same scheme as the rest of the app.
+    // These are read through properties (not cached fields): the overlay is a long-lived window and a
+    // live theme flip must repaint its next state, not keep the brushes it was born with.
     private static SolidColorBrush Hex(string h) => new((Color)System.Windows.Media.ColorConverter.ConvertFromString(h));
-    private static readonly Brush Bg = Hex("#15151B"), AccentA = Hex("#7C5CFF"), AccentB = Hex("#38E1D6"),
-        TextB = Hex("#ECECF1"), Muted = Hex("#8A8A99"), Surface2 = Hex("#1E1E26"),
-        OkB = Hex("#34D399"), DangerB = Hex("#FF6B6B"), Hair = Hex("#22FFFFFF");
+    private static Brush Bg => Palette.Get("Surface");
+    private static Brush Surface2 => Palette.Get("Surface2");
+    private static Brush TextB => Palette.Get("Text");
+    private static Brush Muted => Palette.Get("TextMuted");
+    private static Brush AccentA => Palette.Get("AccentA");
+    private static Brush AccentB => Palette.Get("AccentB");
+    private static Brush OkB => Palette.Get("SuccessFill");
+    private static Brush DangerB => Palette.Get("DangerFill");
+    private static Brush Hair => Palette.Get("Hairline");
 
     public OverlayWindow()
     {
@@ -94,7 +132,12 @@ public sealed class OverlayWindow : Window
         // Hover-to-keep the "已插入" confirm (macOS parity): cursor on → cancel hide; cursor off → restart.
         MouseEnter += (_, _) => { if (_state == OverlayState.Inserted) _hideTimer?.Stop(); };
         MouseLeave += (_, _) => { if (_state == OverlayState.Inserted) StartHideTimer(); };
+        Palette.Attach(this);
+        Palette.Changed += OnPaletteChanged;
+        Closed += (_, _) => Palette.Changed -= OnPaletteChanged;
     }
+
+    private void OnPaletteChanged() => ReapplyPalette();
 
     // ============================ public driving API ============================
 
@@ -114,6 +157,7 @@ public sealed class OverlayWindow : Window
     public void ShowListening()
     {
         if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(ShowListening); return; }
+        _hideSeq++;
         _state = OverlayState.Listening; _text = string.Empty; _startedAt = DateTime.Now;
         Width = 560; Height = 64;
         SetClickThrough(true);
@@ -121,12 +165,16 @@ public sealed class OverlayWindow : Window
         PositionBottomCenter();
         if (!_anim.IsEnabled) _anim.Start();
         ShowNoActivate();
+        PlayEnter();
     }
 
     public void ShowInserted(bool autoHide = true, bool withUndo = false, bool withRepolish = false)
     {
         if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(() => ShowInserted(autoHide, withUndo, withRepolish)); return; }
         if (_state == OverlayState.OnCall) return;
+        _lastConfirmUndo = withUndo;
+        _lastConfirmRepolish = withRepolish;
+        _hideSeq++;
         _state = OverlayState.Inserted;
         Height = 56;
         SetClickThrough(false);   // allow MouseEnter/Leave (hover-to-keep) + clickable action pills
@@ -136,6 +184,7 @@ public sealed class OverlayWindow : Window
         BuildConfirm(true, L10n.T("hud.insertedN", CharCount(_text)), actions.ToArray());
         PositionBottomCenter();
         ShowNoActivate();
+        PlayEnter();
         // With action pills, give the user time to reach them (hover keeps it indefinitely).
         if (!autoHide) return;
         StartHideTimer(actions.Count > 0 ? Math.Max(_staySeconds, 2.4) : -1);
@@ -166,10 +215,11 @@ public sealed class OverlayWindow : Window
         var panel = new Border { Background = Bg, BorderBrush = Hair, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(14), Child = sp, Margin = new Thickness(20),
             HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
             Effect = new DropShadowEffect { BlurRadius = 18, ShadowDepth = 4, Opacity = 0.5, Color = Colors.Black } };
-        Content = panel;
+        SetContent(panel, 0.97);
         SizeToContent = SizeToContent.WidthAndHeight;
         PositionBottomCenter();
         ShowNoActivate();
+        PlayEnter();
         StartHideTimer(8);   // fallback dismiss if the user picks nothing; hovering keeps it (MouseEnter)
     }
 
@@ -189,6 +239,7 @@ public sealed class OverlayWindow : Window
     {
         if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(ShowRefining); return; }
         if (_state == OverlayState.OnCall) return;
+        _hideSeq++;
         _state = OverlayState.Refining;
         Height = 56;
         SetClickThrough(true);
@@ -196,11 +247,13 @@ public sealed class OverlayWindow : Window
         PositionBottomCenter();
         if (!_anim.IsEnabled) _anim.Start();
         ShowNoActivate();
+        PlayEnter();
     }
 
     public void ShowOnCall()
     {
         if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(ShowOnCall); return; }
+        _hideSeq++;
         _state = OverlayState.OnCall; _text = string.Empty; _paused = false; _startedAt = DateTime.Now;
         FixSize(340, 196);
         SetClickThrough(false);
@@ -208,6 +261,7 @@ public sealed class OverlayWindow : Window
         PositionTopRight();
         if (!_anim.IsEnabled) _anim.Start();
         ShowNoActivate();
+        PlayEnter();
     }
 
     public void HideOverlay()
@@ -215,20 +269,62 @@ public sealed class OverlayWindow : Window
         if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(HideOverlay); return; }
         if (_state == OverlayState.OnCall) return;
         _hideTimer?.Stop();
-        _state = OverlayState.Hidden; _anim.Stop(); ClearRefs(); Hide();
+        _state = OverlayState.Hidden;
+        HideWithMotion();
     }
 
     public void LeaveOnCall()
     {
         if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(LeaveOnCall); return; }
-        _state = OverlayState.Hidden; _anim.Stop(); ClearRefs(); Hide();
+        _state = OverlayState.Hidden;
+        HideWithMotion();
     }
 
-    public new void Dispose() { _anim.Stop(); Close(); }
+    public void Dispose() { _anim.Stop(); Close(); }
 
     // ============================ builders ============================
 
     private void ClearRefs() { _streamText = _caret = _timerText = _onCallBody = _onCallTimer = null; _orbGlow = null; _hudGrid = null; }
+
+    // ============================ motion ============================
+
+    /// <summary>Swap the window content through a host Grid and remember the entrance animation.
+    /// The old content is dropped on the same frame: with SizeToContent the window has to be free to
+    /// shrink to the new pill's size immediately (a lingering old element would pin it open).</summary>
+    private void SetContent(UIElement? child, double popFrom = 0.96, double slideDy = 0)
+    {
+        if (_host is null) { _host = new Grid(); Content = _host; }
+        _host.Children.Clear();
+        _enter = null;
+        if (child is null) return;
+        _host.Children.Add(child);
+        if (child is not FrameworkElement fe) return;
+        _enter = slideDy != 0
+            ? () => Motion.SlideIn(fe, slideDy, Motion.Base)
+            : () => Motion.PopIn(fe, popFrom, Motion.Base);
+    }
+
+    /// <summary>Play the remembered entrance animation. Called after ShowNoActivate() so the first
+    /// rendered frame is already the animation's start state (no flash of the settled pill).</summary>
+    private void PlayEnter()
+    {
+        var e = _enter; _enter = null;
+        if (e is null) return;
+        if (!IsVisible) { ShowNoActivate(); }
+        e();
+    }
+
+    private void FinishHide() { _anim.Stop(); ClearRefs(); Hide(); }
+
+    /// <summary>Fade the pill out, then hide. Any Show* call in between bumps <see cref="_hideSeq"/>
+    /// so a stale fade-out can never hide the overlay that just appeared.</summary>
+    private void HideWithMotion()
+    {
+        int seq = ++_hideSeq;
+        var content = (_host is { Children.Count: > 0 }) ? _host.Children[0] as FrameworkElement : null;
+        if (content is null || !Motion.Enabled || !IsVisible) { FinishHide(); return; }
+        Motion.PopOut(content, 0.985, Motion.Fast, () => { if (seq == _hideSeq) FinishHide(); });
+    }
 
     private Border Pill(double radius, Brush edge, double edgeAlpha, UIElement child) => new()
     {
@@ -286,7 +382,7 @@ public sealed class OverlayWindow : Window
         var timerPill = new Border { CornerRadius = new CornerRadius(11), Background = Surface2, Padding = new Thickness(9, 3, 9, 3), Margin = new Thickness(0, 0, 16, 0), VerticalAlignment = VerticalAlignment.Center, Child = _timerText };
         Grid.SetColumn(timerPill, 2); grid.Children.Add(timerPill);
 
-        Content = Pill(Height / 2.0, AccentA, 0.6, grid);
+        SetContent(Pill(Height / 2.0, AccentA, 0.6, grid));
     }
 
     private void BuildConfirm(bool done, string label, params (string text, bool filled, Action onClick)[] actions)
@@ -295,7 +391,7 @@ public sealed class OverlayWindow : Window
         var sp = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(14, 9, 14, 9) };
         // small status dot (green check when inserted; pulsing accent while refining) — no big glowing orb
         sp.Children.Add(StatusDot(done));
-        sp.Children.Add(new TextBlock { Text = label, Foreground = done ? OkB : AccentA, FontSize = 13.5, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(9, 0, actions.Length > 0 ? 12 : 2, 0) });
+        sp.Children.Add(new TextBlock { Text = label, Foreground = done ? TextB : AccentA, FontSize = 13.5, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(9, 0, actions.Length > 0 ? 12 : 2, 0) });
         foreach (var (text, filled, onClick) in actions) sp.Children.Add(Pill2(text, filled, onClick, filled ? AccentA : null));
         // Subtle dark HUD bar (NOT a loud colored outline) + transparent margin so the drop shadow
         // can fade out instead of being clipped into a hard black edge at the window border.
@@ -305,7 +401,7 @@ public sealed class OverlayWindow : Window
             Child = sp, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(20),
             Effect = new DropShadowEffect { BlurRadius = 16, ShadowDepth = 3, Opacity = 0.45, Color = Colors.Black },
         };
-        Content = pill;
+        SetContent(pill, 0.97);
         SizeToContent = SizeToContent.WidthAndHeight;   // window fits pill + shadow margin exactly
     }
 
@@ -352,8 +448,8 @@ public sealed class OverlayWindow : Window
         actions.Children.Add(Pill2(L10n.T("hud.stop"), true, () => StopRequested?.Invoke(this, EventArgs.Empty)));
         Grid.SetRow(actions, 2); root.Children.Add(actions);
 
-        Content = new Border { CornerRadius = new CornerRadius(16), Background = Bg, BorderBrush = Hair, BorderThickness = new Thickness(1), Child = root,
-            Effect = new DropShadowEffect { BlurRadius = 22, ShadowDepth = 2, Opacity = 0.5, Color = Colors.Black } };
+        SetContent(new Border { CornerRadius = new CornerRadius(16), Background = Bg, BorderBrush = Hair, BorderThickness = new Thickness(1), Child = root,
+            Effect = new DropShadowEffect { BlurRadius = 22, ShadowDepth = 2, Opacity = 0.5, Color = Colors.Black } }, slideDy: -8);
     }
 
     private Border Pill2(string text, bool filled, Action onClick, Brush? fill = null)
@@ -422,6 +518,7 @@ public sealed class OverlayWindow : Window
     private void OnAnimTick()
     {
         _blinkTick++;
+        _phase += 0.16;
         bool speaking = (_state is OverlayState.Listening or OverlayState.OnCall) && !_paused;
         double mid = (_bars.Length - 1) / 2.0;
         for (int i = 0; i < _bars.Length; i++)
@@ -429,10 +526,12 @@ public sealed class OverlayWindow : Window
             double c = 1 - Math.Abs(i - mid) / Math.Max(mid, 0.0001);    // 1 at center → 0 at edges
             double env = 0.35 + 0.65 * c;
             double idle = 0.14 + 0.30 * c;                               // resting shape = smooth symmetric hill
+            double travel = 0.5 + 0.5 * Math.Sin(_phase + i * 0.55);     // slow wave sweeping left→right
             double target = speaking
-                ? Math.Max(idle, _level * env * (0.5 + _rng.NextDouble() * 0.7))
-                : idle * (0.9 + _rng.NextDouble() * 0.2);                // gentle shimmer at rest (not flat dots)
-            _bars[i] += (target - _bars[i]) * 0.3;
+                ? Math.Max(idle, _level * env * (0.35 + 0.9 * travel * (0.6 + 0.4 * _rng.NextDouble())))
+                : idle * (0.85 + 0.15 * travel) * (0.95 + 0.10 * _rng.NextDouble());   // gentle shimmer at rest
+            // 0.18 instead of 0.30: the 45 ms timer already gives ~22 fps, a softer lerp hides the stepping.
+            _bars[i] += (target - _bars[i]) * 0.18;
             _bars[i] = Math.Min(1, Math.Max(0.08, _bars[i]));
             if (_state == OverlayState.Listening && _barRects[i] is { } rr) rr.Height = Math.Max(3, _bars[i] * 30);
         }

@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Win32;   // SystemEvents: live theme-change notifications
 using System.Windows.Forms;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
@@ -46,7 +47,6 @@ public sealed class TrayApp : IDisposable, IAppController
     private Ui.Wpf.TrayPopupWindow? _popup;
     private Ui.Wpf.LauncherWindow? _launcher;
     private Ui.Wpf.SettingsWindow? _settingsWpf;
-    private Ui.Wpf.HistoryWindow? _historyWpf;
     private OnCallSessionForm? _onCallSessionForm;
     private OnboardingForm? _onboarding;
     private Ui.Wpf.DownloadWindow? _dl;
@@ -69,6 +69,10 @@ public sealed class TrayApp : IDisposable, IAppController
     private volatile bool _listening;
     private volatile bool _engineError;    // engine/model load failed → tray shows the error tint
     private volatile float _holdPeakRms;   // loudest mic level seen during the current hold (diagnostics)
+    private DateTime _holdStartedAt;       // when the current hold began (a tap must not nag about a silent mic)
+    private float _lastHoldPeakRms;        // that hold's peak level + length, snapshotted at release so the
+    private double _lastHoldMs;            // empty-result hint can decide with both facts in hand
+    private bool _micSilentHintShown;      // the "no audio was captured" balloon, at most once per launch
     private bool _announcedReady;          // show the "ready" tray prompt once per launch
 
     public TrayApp()
@@ -77,8 +81,15 @@ public sealed class TrayApp : IDisposable, IAppController
         _tierBeforeSwap = _settings.Tier;
         _models = new ModelManager(_settings);
         L10n.Current = L10n.FromCode(_settings.Language);
-        Theme.IsDark = true; // dark-first like macOS; respect system below
-        Theme.IsDark = DetectDark();
+        ApplyTheme();   // both UI stacks resolve the same decision from the saved preference
+        // Windows broadcasts WM_SETTINGCHANGE ("ImmersiveColorSet") when the user flips the app theme.
+        // Without this the two UI stacks drift apart until the next launch. With an explicit
+        // "dark"/"light" preference the broadcast is still received but the resolution ignores it.
+        SystemEvents.UserPreferenceChanged += (_, e) =>
+        {
+            if (e.Category != UserPreferenceCategory.General) return;
+            RunOnUi(ApplyTheme);
+        };
     }
 
     public void Start()
@@ -121,7 +132,7 @@ public sealed class TrayApp : IDisposable, IAppController
         var openArg = openRaw is not null && openRaw.Contains(':') ? openRaw.Split(':', 2)[1] : null;
         // Normal launch starts the engine; "popup"/"rebind" also do (they need real engine state).
         // settings/history/overlay hooks skip it for clean screenshots.
-        if (string.IsNullOrEmpty(open) || open is "popup" or "rebind")
+        if (string.IsNullOrEmpty(open) || open is "popup" or "rebind" or "holdtest")
             _ = EnsureEngineAsync(swapping: false);
         // Auto-update (WinSparkle): start automatic daily checks on a normal launch only —
         // never during the screenshot/test hooks (settings/history/overlay/selftest…).
@@ -143,6 +154,7 @@ public sealed class TrayApp : IDisposable, IAppController
             case "rebind": SetHotkey(int.TryParse(openArg, out var vk) ? vk : 0x78, 0); break; // live-rebind self-test
             case "selftest": _ = SelfTestAsync(openArg); break; // feed a WAV through the engine
             case "mictest": _ = MicTestAsync(); break; // capture real mic → save WAV → run ASR
+            case "holdtest": _ = HoldTestAsync(); break; // one empty PTT hold (silent-mic branch)
             case "checkupdate": Updater.Initialize(_ui, Quit); Updater.CheckForUpdatesUi(); break; // WinSparkle UI
             case "onboard": ShowOnboarding(); break; // preview the first-run guide
             case "dicttest": RunDictTest(); break; // 词典 post-processor validation
@@ -389,6 +401,30 @@ public sealed class TrayApp : IDisposable, IAppController
         catch (Exception ex) { Diag.Log("selftest FAILED: " + ex); }
     }
 
+    /// <summary>
+    /// Diagnostic: run ONE push-to-talk hold with nothing spoken, so the "captured pure digital silence"
+    /// branch is exercised without a physical key press (an injected SendInput key can never reach the
+    /// hook — it drops LLKHF_INJECTED events on purpose). VIBEXASR_OPEN=holdtest.
+    /// Logs the peak RMS, the hint decision, and the empty OnFinal.
+    /// </summary>
+    private async Task HoldTestAsync()
+    {
+        try
+        {
+            var wait = System.Diagnostics.Stopwatch.StartNew();
+            while (!_engineReady && wait.ElapsedMilliseconds < 30000) await Task.Delay(150);
+            Diag.Log($"holdtest: engineReady={_engineReady}");
+            if (!_engineReady) return;
+
+            RunOnUi(() => { if (!StartDictation()) Diag.Log("holdtest: StartDictation refused"); });
+            await Task.Delay(1400);            // a realistic hold length, with nothing spoken
+            RunOnUi(StopDictation);
+            await Task.Delay(900);             // let the worker finalize + the balloon fire
+            Diag.Log($"holdtest: done (peak={_lastHoldPeakRms:F6} holdMs={_lastHoldMs:F0} hintShown={_micSilentHintShown})");
+        }
+        catch (Exception ex) { Diag.Log("holdtest FAILED: " + ex); }
+    }
+
     /// <summary>Once per launch, tell the user the app is live + how to use it (tray prompt),
     /// since otherwise it just sits silently in the notification area.</summary>
     private void AnnounceReady()
@@ -471,7 +507,10 @@ public sealed class TrayApp : IDisposable, IAppController
         {
             var samples = new List<float>();
             int frames = 0; float peak = 0;
-            var mic = new MicCapture();
+            // The diagnostic has to listen to the SAME endpoint the app dictates from, otherwise it
+            // "proves" a device the user is not using (it used to pass no id at all, so a user who had
+            // picked the built-in array in Settings still had the silent headset tested).
+            var mic = new MicCapture(_settings.MicDeviceId);
             mic.FrameAvailable += (_, f) =>
             {
                 frames++;
@@ -622,6 +661,7 @@ public sealed class TrayApp : IDisposable, IAppController
         if (_listening) return true;
         _typedSoFar = string.Empty;
         _holdPeakRms = 0;
+        _holdStartedAt = DateTime.UtcNow;
         _listening = true;
         UpdateTrayIcon();
         _engine?.BeginHold();
@@ -638,8 +678,51 @@ public sealed class TrayApp : IDisposable, IAppController
         _listening = false;
         UpdateTrayIcon();
         Diag.Log($"StopDictation; peak mic RMS={_holdPeakRms:F4}");
+        RecordHoldLevel();
         _engine?.EndHold();
         if (_settings.CueEnabled) CueSound.Shared.Play(_settings.CueTheme, start: false);  // 提示音: stop chime
+    }
+
+    /// <summary>
+    /// Remember how loud (or rather how silent) this hold was, so the END of the utterance can decide
+    /// whether to explain the empty result. Snapshotting here is what keeps the hint honest: it fires
+    /// only for "held long enough + nothing recognized + the mic returned essentially no signal", and
+    /// never for a quiet-but-real utterance that did produce text.
+    /// </summary>
+    private void RecordHoldLevel()
+    {
+        _lastHoldPeakRms = _holdPeakRms;
+        _lastHoldMs = (DateTime.UtcNow - _holdStartedAt).TotalMilliseconds;
+        if (_lastHoldMs >= 700 && !_settings.MicMuted && _lastHoldPeakRms < MicSilentRms)
+            Diag.Log($"mic: hold captured digital silence (peak RMS {_lastHoldPeakRms:F6}) — device muted, asleep, or not the one the user speaks into");
+    }
+
+    /// <summary>
+    /// Floor below which a hold carried no usable signal: -70 dBFS. A live microphone always has a noise
+    /// floor well above it (the built-in array idles at ~1.6e-3 here, i.e. 16x this); a Bluetooth headset
+    /// whose mic stream is asleep returns round zeros. Measured on this machine: 0.0000 (headset asleep,
+    /// the case that produced the silent transcripts), 0.0001 (headset awake but quiet), 0.0016 (array).
+    /// </summary>
+    private const float MicSilentRms = 3e-4f;
+
+    /// <summary>
+    /// The user held the key, nothing was recognized, and the capture was silent: say so once instead of
+    /// doing nothing. Without this the only trace is a log line the user will never read. Skipped when the
+    /// user muted the mic on purpose (that silence is the feature working).
+    /// </summary>
+    private void HintIfMicWasSilent()
+    {
+        if (_settings.MicMuted || _micSilentHintShown) return;
+        if (_lastHoldMs < 700 || _lastHoldPeakRms >= MicSilentRms) return;
+        _micSilentHintShown = true;   // a hint, not a nag — once per launch
+        bool zh = L10n.Resolved is Lang.Zh or Lang.Hant;
+        // Two causes produce the same silence — nobody spoke, or the capture path is dead — and the level
+        // alone cannot tell them apart, so the message names both instead of accusing the hardware.
+        _tray?.ShowBalloonTip(9000,
+            zh ? "没有听到任何声音" : "No audio was captured",
+            zh ? "这次按住时没有录到声音：可能还没开口，也可能麦克风没在工作。若你确实说了话，请检查系统默认录音设备、是否被静音，或在 设置 › 听写 里换一个设备。"
+               : "Nothing was recorded during that hold: either you had not started speaking yet, or the microphone is not working. If you did speak, check the Windows default recording device and mute state, or pick another device in Settings › Dictation.",
+            ToolTipIcon.Warning);
     }
 
     // ---- engine events (raised on the engine worker thread) ----
@@ -669,6 +752,9 @@ public sealed class TrayApp : IDisposable, IAppController
         if (string.IsNullOrEmpty(e.Text))
         {
             if (_settings.Mode != DictationMode.OnCall) _overlay?.HideOverlay();
+            // Nothing recognized: only now do we know the hold really came up empty, so this is where a
+            // dead capture path gets explained to the user (see HintIfMicWasSilent).
+            HintIfMicWasSilent();
             return;
         }
 
@@ -1156,7 +1242,6 @@ public sealed class TrayApp : IDisposable, IAppController
         {
             if (_tray?.ContextMenuStrip is { } cm) RebuildTrayMenu(cm);
             if (_settingsWpf is { } sw) sw.Title = L10n.T("win.settings");
-            if (_historyWpf is { } hw) hw.Title = "Vibe XASR · " + L10n.T("history.title");
             if (_promptStudio is { } ps) ps.Title = L10n.T("studio.window");
         });
     }
@@ -1466,16 +1551,24 @@ public sealed class TrayApp : IDisposable, IAppController
     private static string Trunc(string? s, int n = 40)
         => string.IsNullOrEmpty(s) ? "" : (s.Length <= n ? s : s[..n] + "…");
 
-    private static bool DetectDark()
+    // There used to be a second copy of this registry read here. Two copies of the same probe is how
+    // the two UI stacks end up disagreeing, so this now delegates to the one in Theme.
+    private static bool DetectDark() => Theme.DetectDarkMode();
+
+    /// <summary>Resolve the saved theme preference and push it into both UI stacks.
+    /// <c>Theme.IsDark</c> drives WinForms (which copies colours onto controls, so each live form
+    /// needs an explicit re-apply); <c>Palette.Apply</c> swaps the WPF token dictionary, whose
+    /// DynamicResource consumers re-resolve on their own and whose code-built surfaces subscribe to
+    /// <c>Palette.Changed</c>.</summary>
+    private void ApplyTheme() =>
+        Theme.ApplyPreference(_settings.Theme, _ => _onCallSessionForm?.ApplyScheme());
+
+    /// <summary>Settings → 通用 → 外观. "auto" follows Windows; "dark"/"light" pin the scheme.</summary>
+    public void SetTheme(string preference)
     {
-        try
-        {
-            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
-                @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
-            if (key?.GetValue("AppsUseLightTheme") is int v) return v == 0;
-        }
-        catch { }
-        return true;
+        _settings.Theme = preference is "dark" or "light" ? preference : "auto";
+        _settings.Save();
+        ApplyTheme();
     }
 
     public void Dispose()

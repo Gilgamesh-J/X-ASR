@@ -2,6 +2,7 @@ using System;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
+using System.Windows.Media.Animation;
 using VibeXASR.Windows.Storage;
 
 namespace VibeXASR.Windows.Ui.Wpf;
@@ -17,21 +18,33 @@ public partial class DownloadWindow : Window
     public DownloadWindow()
     {
         InitializeComponent();
+        Palette.Attach(this);
         TitleText.Text = L10n.T("dl.title");
         CancelBtn.Content = L10n.T("cancel");
         CancelBtn.Click += (_, _) => { CancelBtn.IsEnabled = false; CancelBtn.Content = L10n.T("switching"); CancelRequested?.Invoke(); };
         SourceInitialized += (_, _) => DarkTitleBar();
+        Loaded += (_, _) => { if (Content is FrameworkElement root) Motion.PopIn(root, 0.97, Motion.Base); };
     }
 
     /// <summary>Update progress (0..1) + a detail line. Safe to call from any thread.</summary>
     public void Report(double fraction, string detail)
     {
         if (!Dispatcher.CheckAccess()) { try { Dispatcher.BeginInvoke(() => Report(fraction, detail)); } catch { } return; }
-        Track.UpdateLayout();
-        Fill.Width = Math.Max(0, Track.ActualWidth * Math.Max(0, Math.Min(1, fraction)));
+        double f = Math.Max(0, Math.Min(1, fraction));
+        // The fill spans the whole track (HorizontalAlignment=Stretch), so ScaleX alone is the progress
+        // value: no ActualWidth to read, no layout pass per report.
+        // Read the LIVE value while the previous clock is still running, then clear it and write the new
+        // value as the base (Motion's rule: base holds the end state). Chaining from the live value keeps
+        // a burst of reports gliding instead of jumping forward to the previous target each time.
+        double from = FillScale.ScaleX;
+        FillScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, null);
+        FillScale.ScaleX = f;
+        if (Motion.Enabled && Math.Abs(f - from) > 0.002)
+        {
+            FillScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty,
+                new DoubleAnimation(from, f, new Duration(Motion.Fast)) { EasingFunction = Motion.EaseOut });
+        }
         DetailText.Text = detail;
     }
-
-    [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(IntPtr h, int attr, ref int v, int size);
-    private void DarkTitleBar() { try { var h = new WindowInteropHelper(this).Handle; int on = 1; DwmSetWindowAttribute(h, 20, ref on, sizeof(int)); } catch { } }
+    private void DarkTitleBar() => Theme.ApplyDarkTitleBar(new WindowInteropHelper(this).Handle);
 }
