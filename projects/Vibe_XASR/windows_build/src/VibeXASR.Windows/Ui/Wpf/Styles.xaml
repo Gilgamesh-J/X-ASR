@@ -9,6 +9,8 @@
          Shadow1/2/3 also live in Palette.cs: a light UI cannot use the same black drop as a dark one
          (it reads as dirt), so the depths and the tint are per scheme. -->
 
+    <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
     <!-- ===================== text styles ===================== -->
     <Style x:Key="GroupTitle" TargetType="TextBlock">
         <Setter Property="Foreground" Value="{DynamicResource TextMuted}"/>
@@ -295,11 +297,32 @@
                                      StackPanel: the popup grew to every item (24 providers -> a 643 DIP tall
                                      list taller than the work area) and could not scroll at all. MaxHeight
                                      comes from the ComboBox's MaxDropDownHeight so callers can size it. -->
-                                <ScrollViewer MaxHeight="{TemplateBinding MaxDropDownHeight}"
-                                              VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
-                                              CanContentScroll="False" Focusable="False">
-                                    <StackPanel IsItemsHost="True"/>
-                                </ScrollViewer>
+                                <StackPanel>
+                                    <!-- Filter row: only rendered for SelectBox (20+ entry lists). PART_SearchBox
+                                         is wired up in SelectBox.cs to Items.Filter. -->
+                                    <Grid Margin="2,0,2,6"
+                                          Visibility="{Binding Path=(local:SelectBox.ShowSearch), RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource BoolToVis}}">
+                                        <TextBox x:Name="PART_SearchBox" Style="{StaticResource FieldBox}" FontSize="12"/>
+                                        <TextBlock Text="筛选…" IsHitTestVisible="False" FontSize="12" Margin="13,0,0,0" VerticalAlignment="Center">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Foreground" Value="{DynamicResource TextMuted}"/>
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Text, ElementName=PART_SearchBox}" Value="">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </Grid>
+                                    <ScrollViewer MaxHeight="{TemplateBinding MaxDropDownHeight}"
+                                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                                  CanContentScroll="False" Focusable="False">
+                                        <StackPanel IsItemsHost="True"/>
+                                    </ScrollViewer>
+                                </StackPanel>
                             </Border>
                         </Popup>
                     </Grid>

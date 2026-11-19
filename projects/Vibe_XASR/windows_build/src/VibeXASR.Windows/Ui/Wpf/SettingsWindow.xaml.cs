@@ -71,7 +71,14 @@ public partial class SettingsWindow : Window
             {
                 var boxes = new List<ComboBox>();
                 CollectCombos(this, boxes);
-                if (dropIndex >= 0 && dropIndex < boxes.Count) boxes[dropIndex].IsDropDownOpen = true;
+                if (dropIndex >= 0 && dropIndex < boxes.Count)
+                {
+                    boxes[dropIndex].IsDropDownOpen = true;
+                    var q = Environment.GetEnvironmentVariable("VIBEXASR_DROPDOWN_QUERY");
+                    if (!string.IsNullOrEmpty(q) && boxes[dropIndex] is SelectBox sb)
+                        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background,
+                            new Action(() => sb.SimulateTyping(q)));
+                }
             }));
         // Safety net: a settings-UI exception must NEVER kill the whole tray app (hosted in the
         // WinForms loop). Log it + swallow so the window degrades instead of crashing the process.
@@ -430,7 +437,8 @@ public partial class SettingsWindow : Window
 
     private ComboBox Select((string val, string label)[] options, string value, Action<string> onChange, double width = 170)
     {
-        var c = new ComboBox { Style = St("Select"), Width = width, ItemContainerStyle = St("SelectItem"), HorizontalAlignment = HorizontalAlignment.Right };
+        // SelectBox = same look, but lists of 8+ entries get a filter field inside the drop-down.
+        var c = new SelectBox { Style = St("Select"), Width = width, ItemContainerStyle = St("SelectItem"), HorizontalAlignment = HorizontalAlignment.Right };
         foreach (var (v, l) in options) c.Items.Add(new ComboBoxItem { Content = l, Tag = v });
         c.SelectedIndex = Math.Max(0, Array.FindIndex(options, o => o.val == value));
         c.SelectionChanged += (_, _) => { if (c.SelectedItem is ComboBoxItem it) onChange((string)it.Tag); };
