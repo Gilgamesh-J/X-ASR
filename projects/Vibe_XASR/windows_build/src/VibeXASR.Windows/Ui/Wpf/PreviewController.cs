@@ -23,6 +23,16 @@ internal sealed class PreviewController : IAppController
     public void SetModelSource(string code) => Settings.ModelSource = code;
     public void SetHotkey(int vk, int mods) { Settings.HotkeyVk = vk; Settings.HotkeyMods = mods; }
     public void SetLanguage(Lang lang) { Settings.Language = L10n.ToCode(lang); L10n.Current = lang; }
+
+    // The preview host has no TrayApp, so it applies the scheme itself: swapping the dictionary is
+    // enough for every DynamicResource consumer, and the code-built surfaces rebuild from Changed.
+    public void SetTheme(string preference)
+    {
+        Settings.Theme = preference is "dark" or "light" ? preference : "auto";
+        bool dark = Theme.ResolveDark(Settings.Theme);
+        Theme.IsDark = dark;
+        Palette.Apply(dark);
+    }
     public void SetClipboardOverwrite(bool on) => Settings.ClipboardOverwrite = on;
     public void SetHistoryEnabled(bool on) => Settings.HistoryEnabled = on;
     public void SetLaunchAtLogin(bool on) => Settings.LaunchAtLogin = on;

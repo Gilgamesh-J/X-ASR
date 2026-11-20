@@ -34,16 +34,23 @@ public sealed class HistoryWorkspaceControl : UserControl
     private readonly HistoryStore _store;
     private static bool Zh => L10n.Resolved is Lang.Zh or Lang.Hant;
 
-    // palette (self-contained)
-    private static SolidColorBrush Hex(string h) => new((Color)System.Windows.Media.ColorConverter.ConvertFromString(h));
-    private static readonly Brush Surface = Hex("#15151B"), Surface2 = Hex("#1E1E26"), Text = Hex("#ECECF1"),
-        Muted = Hex("#8A8A99"), Faint = Hex("#6A6A78"), AccentA = Hex("#7C5CFF"), AccentB = Hex("#38E1D6"),
-        AccentSoft = Hex("#2A2342"), Success = Hex("#34D399"), Danger = Hex("#FF6B6B"),
-        Hair = Hex("#22FFFFFF"), HairStrong = Hex("#33FFFFFF");
-    private static readonly Brush AccentGrad = new LinearGradientBrush(
-        (Color)System.Windows.Media.ColorConverter.ConvertFromString("#7C5CFF"),
-        (Color)System.Windows.Media.ColorConverter.ConvertFromString("#38E1D6"), 45);
-    private static readonly string[] TagPalette = { "#7C5CFF", "#5B8CFF", "#46C98B", "#E0894A", "#E05A8A", "#42B8C8", "#B07CF2", "#D0A92E" };
+    // palette — every value comes from Palette.cs (scheme-aware). Read through properties rather
+    // than cached fields so a live theme flip is picked up by the next Rebuild().
+    private static Brush Surface => Palette.Get("Surface");
+    private static Brush Surface2 => Palette.Get("Surface2");
+    private static Brush Text => Palette.Get("Text");
+    private static Brush Muted => Palette.Get("TextMuted");
+    private static Brush Faint => Palette.Get("TextFaint");
+    private static Brush AccentA => Palette.Get("AccentA");
+    private static Brush AccentText => Palette.Get("AccentText");
+    private static Brush AccentB => Palette.Get("AccentB");
+    private static Brush AccentSoft => Palette.Get("AccentSoft");
+    private static Brush AccentGrad => Palette.Get("AccentGrad");
+    private static Brush Success => Palette.Get("Success");
+    private static Brush Danger => Palette.Get("Danger");
+    private static Brush Hair => Palette.Get("Hairline");
+    private static Brush HairStrong => Palette.Get("HairlineStrong");
+    private static string[] TagPalette => Palette.TagColors;
 
     // filter / view state
     private string _query = "";
@@ -70,6 +77,9 @@ public sealed class HistoryWorkspaceControl : UserControl
     public HistoryWorkspaceControl(HistoryStore store)
     {
         _store = store;
+        Palette.Attach(this);        // merge the token dictionary before any colour below resolves
+        Palette.Changed += OnPaletteChanged;
+        Unloaded += (_, _) => Palette.Changed -= OnPaletteChanged;
         Background = Surface;
         Focusable = true;
         Content = _root;
@@ -79,6 +89,12 @@ public sealed class HistoryWorkspaceControl : UserControl
     }
 
     // ===================== rebuild =====================
+
+    private void OnPaletteChanged()
+    {
+        if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(OnPaletteChanged); return; }
+        if (IsVisible) Rebuild();
+    }
 
     private void Rebuild()
     {
@@ -144,7 +160,7 @@ public sealed class HistoryWorkspaceControl : UserControl
 
         var right = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         right.Children.Add(UndoButton());
-        var pill = new Border { CornerRadius = new CornerRadius(8), Background = new SolidColorBrush(Color.FromArgb(31, 0x34, 0xD3, 0x99)), Padding = new Thickness(11, 6, 11, 6), Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center,
+        var pill = new Border { CornerRadius = new CornerRadius(8), Background = new SolidColorBrush(Palette.WithA(Palette.Col("Success"), 31)), Padding = new Thickness(11, 6, 11, 6), Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center,
             Child = new StackPanel { Orientation = Orientation.Horizontal, Children = { new TextBlock { Text = "🔒 " + L10n.Loc("本地", "Local", "ローカル", "로컬"), Foreground = Success, FontSize = 12.5, FontWeight = FontWeights.SemiBold } } } };
         right.Children.Add(pill);
         right.Children.Add(GhostBtn("📤 " + L10n.Loc("导出", "Export", "エクスポート", "내보내기"), false, () => ExportAll(entries)));
@@ -259,7 +275,7 @@ public sealed class HistoryWorkspaceControl : UserControl
         foreach (var (v, l) in opts)
         {
             bool sel = v == value;
-            var seg = new Border { CornerRadius = new CornerRadius(5), Background = sel ? AccentSoft : Brushes.Transparent, Padding = new Thickness(12, 4, 12, 4), Cursor = Cursors.Hand, Child = new TextBlock { Text = l, Foreground = sel ? AccentA : Muted, FontSize = 11.5, FontWeight = sel ? FontWeights.SemiBold : FontWeights.Normal } };
+            var seg = new Border { CornerRadius = new CornerRadius(5), Background = sel ? AccentSoft : Brushes.Transparent, Padding = new Thickness(12, 4, 12, 4), Cursor = Cursors.Hand, Child = new TextBlock { Text = l, Foreground = sel ? AccentText : Muted, FontSize = 11.5, FontWeight = sel ? FontWeights.SemiBold : FontWeights.Normal } };
             seg.MouseLeftButtonUp += (_, _) => onPick(v);
             sp.Children.Add(seg);
         }
@@ -273,7 +289,7 @@ public sealed class HistoryWorkspaceControl : UserControl
         var sp = new StackPanel { Orientation = Orientation.Horizontal };
         void Seg2(string label, bool sel, Action onClick)
         {
-            var b = new Border { CornerRadius = new CornerRadius(5), Background = sel ? AccentSoft : Brushes.Transparent, Padding = new Thickness(12, 4, 12, 4), Cursor = Cursors.Hand, Child = new TextBlock { Text = label, Foreground = sel ? AccentA : Muted, FontSize = 12, FontWeight = sel ? FontWeights.SemiBold : FontWeights.Normal } };
+            var b = new Border { CornerRadius = new CornerRadius(5), Background = sel ? AccentSoft : Brushes.Transparent, Padding = new Thickness(12, 4, 12, 4), Cursor = Cursors.Hand, Child = new TextBlock { Text = label, Foreground = sel ? AccentText : Muted, FontSize = 12, FontWeight = sel ? FontWeights.SemiBold : FontWeights.Normal } };
             b.MouseLeftButtonUp += (_, _) => onClick();
             sp.Children.Add(b);
         }
@@ -325,7 +341,7 @@ public sealed class HistoryWorkspaceControl : UserControl
         g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var d = entries.FirstOrDefault(e => H.DayKey(e.Timestamp) == sd)?.Timestamp ?? DateTimeOffset.Now;
         var left = new StackPanel { Orientation = Orientation.Horizontal };
-        left.Children.Add(new TextBlock { Text = "📅 " + L10n.Loc("正在查看 ", "Viewing ", "表示中 ", "보는 중 "), Foreground = AccentA, FontSize = 13, VerticalAlignment = VerticalAlignment.Center });
+        left.Children.Add(new TextBlock { Text = "📅 " + L10n.Loc("正在查看 ", "Viewing ", "表示中 ", "보는 중 "), Foreground = AccentText, FontSize = 13, VerticalAlignment = VerticalAlignment.Center });
         left.Children.Add(new TextBlock { Text = DayLabel(sd, d), Foreground = Text, FontSize = 13, FontWeight = FontWeights.Bold, VerticalAlignment = VerticalAlignment.Center });
         g.Children.Add(left);
         var clear = GhostBtn(L10n.Loc("查看全部", "View all", "すべて表示", "전체 보기"), false, () => { _selectedDay = null; Rebuild(); });
@@ -379,7 +395,7 @@ public sealed class HistoryWorkspaceControl : UserControl
         g.ColumnDefinitions.Add(new ColumnDefinition());
         g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var left = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-        left.Children.Add(new TextBlock { Text = "⛙", Foreground = AccentA, FontSize = 14, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) });
+        left.Children.Add(new TextBlock { Text = "⛙", Foreground = AccentText, FontSize = 14, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) });
         string head = _aggMode == H.AggMode.Pause
             ? L10n.Loc($"按 ≤{_gapMin} 分钟 停顿聚合 · 发现 ", $"Grouped by ≤{_gapMin}m pause · found ", $"≤{_gapMin}分 停止で集約 · ", $"≤{_gapMin}분 멈춤으로 묶음 · ")
             : L10n.Loc($"按 {_targetChars} 字 聚合 · 发现 ", $"Grouped by {_targetChars} chars · found ", $"{_targetChars}文字で集約 · ", $"{_targetChars}자로 묶음 · ");
@@ -455,7 +471,7 @@ public sealed class HistoryWorkspaceControl : UserControl
         head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var hl = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Cursor = Cursors.Hand };
         hl.Children.Add(new TextBlock { Text = expanded ? "▾" : "▸", Foreground = Muted, FontSize = 12, FontWeight = FontWeights.Bold, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) });
-        hl.Children.Add(new Border { CornerRadius = new CornerRadius(9), Background = AccentSoft, Padding = new Thickness(7, 1, 7, 1), Child = new TextBlock { Text = "OnCall", Foreground = AccentA, FontSize = 9.5, FontWeight = FontWeights.Bold } });
+        hl.Children.Add(new Border { CornerRadius = new CornerRadius(9), Background = AccentSoft, Padding = new Thickness(7, 1, 7, 1), Child = new TextBlock { Text = "OnCall", Foreground = AccentText, FontSize = 9.5, FontWeight = FontWeights.Bold } });
         hl.Children.Add(new TextBlock { Text = "  " + L10n.Loc($"{node.Items.Count} 句 · {total} 字", $"{node.Items.Count} frags · {total} chars", $"{node.Items.Count}句 · {total}文字", $"{node.Items.Count}구 · {total}자"), Foreground = Muted, FontSize = 12, VerticalAlignment = VerticalAlignment.Center });
         hl.MouseLeftButtonUp += (_, _) => { if (expanded) _expandedOC.Remove(node.Id); else _expandedOC.Add(node.Id); Rebuild(); };
         head.Children.Add(hl);
@@ -476,7 +492,7 @@ public sealed class HistoryWorkspaceControl : UserControl
             if (preview.Length > 54) preview = preview[..54];
             sp.Children.Add(new TextBlock { Text = preview + L10n.Loc(" …点击展开", " …expand", " …展開", " …펼치기"), Foreground = Muted, FontSize = 13, FontFamily = new FontFamily("Cascadia Mono, Consolas"), Margin = new Thickness(34, 0, 12, 11), TextTrimming = TextTrimming.CharacterEllipsis });
         }
-        return new Border { CornerRadius = new CornerRadius(10), Background = new SolidColorBrush(Color.FromArgb(128, 0x1E, 0x1E, 0x26)), BorderBrush = Hair, BorderThickness = new Thickness(1), Margin = new Thickness(0, 4, 0, 4), Child = sp };
+        return new Border { CornerRadius = new CornerRadius(10), Background = Palette.Alpha("Surface2", 128), BorderBrush = Hair, BorderThickness = new Thickness(1), Margin = new Thickness(0, 4, 0, 4), Child = sp };
     }
 
     private FrameworkElement FragRow(HistoryEntry e, bool canMerge)
@@ -496,7 +512,7 @@ public sealed class HistoryWorkspaceControl : UserControl
         Grid.SetColumn(check, 0); grid.Children.Add(check);
 
         var body = new StackPanel();
-        if (e.Title is { Length: > 0 } title) body.Children.Add(new TextBlock { Text = title, Foreground = AccentA, FontSize = 14, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 0, 0, 3) });
+        if (e.Title is { Length: > 0 } title) body.Children.Add(new TextBlock { Text = title, Foreground = AccentText, FontSize = 14, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 0, 0, 3) });
         body.Children.Add(new TextBlock { Text = e.Text, Foreground = Text, FontFamily = new FontFamily("Cascadia Mono, Consolas"), FontSize = 13.5, TextWrapping = TextWrapping.Wrap, LineHeight = 19 });
         var meta = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 5, 0, 0) };
         meta.Children.Add(new TextBlock { Text = FullTime(e.Timestamp), Foreground = Faint, FontFamily = new FontFamily("Cascadia Mono, Consolas"), FontSize = 11, VerticalAlignment = VerticalAlignment.Center });
@@ -515,11 +531,23 @@ public sealed class HistoryWorkspaceControl : UserControl
         if (canMerge && fi >= 0 && fi < _flatIds.Count - 1) act.Children.Add(IconAct("⬇", false, L10n.Loc("并入下一条", "Merge down", "下に結合", "아래로 병합"), () => MergeAdjacent(e.Id, +1)));
         Grid.SetColumn(act, 2); grid.Children.Add(act);
 
-        var card = new Border { CornerRadius = new CornerRadius(9), Padding = new Thickness(0), Margin = new Thickness(0, 0, 0, 1), Background = selected ? AccentSoft : Brushes.Transparent, Cursor = Cursors.Hand, Child = grid };
+        var card = new Border { CornerRadius = new CornerRadius(8), Padding = new Thickness(0), Margin = new Thickness(0, 0, 0, 1), Background = selected ? AccentSoft : Brushes.Transparent, Cursor = Cursors.Hand, Child = grid };
         if (focused) { card.BorderBrush = AccentA; card.BorderThickness = new Thickness(1.5); }
         if (e.Title is { Length: > 0 }) card.BorderThickness = new Thickness(2, 0, 0, 0);
-        card.MouseEnter += (_, _) => { act.Visibility = Visibility.Visible; if (!selected) card.Background = new SolidColorBrush(Color.FromArgb(90, 0x1E, 0x1E, 0x26)); check.Opacity = 1; };
-        card.MouseLeave += (_, _) => { act.Visibility = Visibility.Collapsed; if (!selected) card.Background = Brushes.Transparent; check.Opacity = selected || _selection.Count > 0 ? 1 : 0; };
+        // Hover: the row fill is instant (a list highlight that lags reads as input delay), but the reveal
+        // of the checkbox + action icons fades in — that is what stops the row from "jumping" under the cursor.
+        card.MouseEnter += (_, _) =>
+        {
+            if (act.Visibility != Visibility.Visible) { act.Visibility = Visibility.Visible; Motion.FadeIn(act, Motion.Fast); }
+            if (!selected) card.Background = Palette.Alpha("Surface2", 90);
+            Motion.FadeIn(check, Motion.Fast);
+        };
+        card.MouseLeave += (_, _) =>
+        {
+            Motion.FadeOut(act, Motion.Fast, () => { if (!card.IsMouseOver) act.Visibility = Visibility.Collapsed; });
+            if (!selected) card.Background = Brushes.Transparent;
+            if (selected || _selection.Count > 0) Motion.FadeIn(check, Motion.Fast); else Motion.FadeOut(check, Motion.Fast);
+        };
         bool suppress = false;
         card.PreviewMouseLeftButtonDown += (_, ev) => { if (ev.ClickCount == 2) { suppress = true; ev.Handled = true; EditEntry(e); } };
         card.MouseLeftButtonUp += (_, ev) =>
@@ -584,7 +612,7 @@ public sealed class HistoryWorkspaceControl : UserControl
         hdr.ColumnDefinitions.Add(new ColumnDefinition());
         hdr.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         hdr.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        var prev = new TextBlock { Text = "‹", Foreground = AccentA, FontSize = 16, Cursor = Cursors.Hand, VerticalAlignment = VerticalAlignment.Center };
+        var prev = new TextBlock { Text = "‹", Foreground = AccentText, FontSize = 16, Cursor = Cursors.Hand, VerticalAlignment = VerticalAlignment.Center };
         prev.MouseLeftButtonUp += (_, _) => { _monthCursor = _monthCursor.AddMonths(-1); Rebuild(); };
         Grid.SetColumn(prev, 0); hdr.Children.Add(prev);
         var title = new TextBlock { Text = L10n.Loc($"{_monthCursor.Year} 年 {_monthCursor.Month} 月", _monthCursor.ToString("MMMM yyyy", CultureInfo.InvariantCulture), $"{_monthCursor.Year}年{_monthCursor.Month}月", $"{_monthCursor.Year}년 {_monthCursor.Month}월"), Foreground = Text, FontSize = 12.5, FontWeight = FontWeights.SemiBold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
@@ -592,7 +620,7 @@ public sealed class HistoryWorkspaceControl : UserControl
         var today = new TextBlock { Text = L10n.Loc("今天", "Today", "今日", "오늘"), Foreground = Muted, FontSize = 11, Cursor = Cursors.Hand, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
         today.MouseLeftButtonUp += (_, _) => { _monthCursor = DateTime.Today; Rebuild(); };
         Grid.SetColumn(today, 2); hdr.Children.Add(today);
-        var next = new TextBlock { Text = "›", Foreground = AccentA, FontSize = 16, Cursor = Cursors.Hand, VerticalAlignment = VerticalAlignment.Center };
+        var next = new TextBlock { Text = "›", Foreground = AccentText, FontSize = 16, Cursor = Cursors.Hand, VerticalAlignment = VerticalAlignment.Center };
         next.MouseLeftButtonUp += (_, _) => { _monthCursor = _monthCursor.AddMonths(1); Rebuild(); };
         Grid.SetColumn(next, 3); hdr.Children.Add(next);
         root.Children.Add(hdr);
@@ -618,10 +646,10 @@ public sealed class HistoryWorkspaceControl : UserControl
     private Brush HeatBrush(int level) => level switch
     {
         0 => Surface,
-        1 => new SolidColorBrush(Color.FromArgb(70, 0x7C, 0x5C, 0xFF)),
-        2 => new SolidColorBrush(Color.FromArgb(130, 0x7C, 0x5C, 0xFF)),
-        3 => new SolidColorBrush(Color.FromArgb(190, 0x7C, 0x5C, 0xFF)),
-        _ => new SolidColorBrush(Color.FromArgb(240, 0x7C, 0x5C, 0xFF)),
+        1 => Palette.Alpha("AccentFill", 70),
+        2 => Palette.Alpha("AccentFill", 130),
+        3 => Palette.Alpha("AccentFill", 190),
+        _ => Palette.Alpha("AccentFill", 240),
     };
 
     // ===================== shortcuts + bulk + toast =====================
@@ -829,7 +857,7 @@ public sealed class HistoryWorkspaceControl : UserControl
     private Brush TagColor(string name)
     {
         uint h = 0; foreach (var ch in name) h = h * 31 + ch;
-        return Hex(TagPalette[(int)(h % (uint)TagPalette.Length)]);
+        return new SolidColorBrush(Palette.Hex(TagPalette[(int)(h % (uint)TagPalette.Length)]));
     }
     private static Color WithA(Color c, byte a) => Color.FromArgb(a, c.R, c.G, c.B);
 

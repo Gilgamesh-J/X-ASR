@@ -25,19 +25,34 @@ public partial class LauncherWindow : Window
 
     private Point _dragStart;
     private bool _dragging, _moved;
+    private int _closeSeq;   // invalidates a pending close-button fade-out
 
     public LauncherWindow(IAppController app)
     {
         _app = app;
         InitializeComponent();
+        Palette.Attach(this);
         SourceInitialized += (_, _) => { NoActivate(); PlaceFromSettings(); };
         Loaded += (_, _) => UpdateStatus();
         _poll.Tick += (_, _) => UpdateStatus();
         _poll.Start();
         Closed += (_, _) => _poll.Stop();
 
-        MouseEnter += (_, _) => CloseBtn.Visibility = Visibility.Visible;
-        MouseLeave += (_, _) => { if (!_dragging) CloseBtn.Visibility = Visibility.Collapsed; };
+        // Hover: the pill lifts 3% and the ✕ fades in (it used to pop in at full opacity).
+        MouseEnter += (_, _) =>
+        {
+            _closeSeq++;
+            Motion.Hover(Pill, true);
+            CloseBtn.Visibility = Visibility.Visible;
+            Motion.FadeIn(CloseBtn, Motion.Fast);
+        };
+        MouseLeave += (_, _) =>
+        {
+            Motion.Hover(Pill, false);
+            if (_dragging) return;
+            int seq = ++_closeSeq;
+            Motion.FadeOut(CloseBtn, Motion.Fast, () => { if (seq == _closeSeq) CloseBtn.Visibility = Visibility.Collapsed; });
+        };
 
         // drag vs click on the pill body
         Pill.MouseLeftButtonDown += OnDown;
@@ -50,6 +65,7 @@ public partial class LauncherWindow : Window
     private void OnDown(object sender, MouseButtonEventArgs e)
     {
         _dragging = true; _moved = false;
+        Motion.Press(Pill, true);
         _dragStart = PointToScreen(e.GetPosition(this));
         Pill.CaptureMouse();
     }
@@ -73,6 +89,7 @@ public partial class LauncherWindow : Window
     {
         if (!_dragging) return;
         _dragging = false; Pill.ReleaseMouseCapture();
+        Motion.Press(Pill, false);
         if (_moved)
         {
             S.LauncherX = Left; S.LauncherY = Top; try { S.Save(); } catch { }

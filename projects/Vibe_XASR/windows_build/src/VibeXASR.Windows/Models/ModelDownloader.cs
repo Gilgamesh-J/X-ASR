@@ -82,7 +82,15 @@ public sealed class ModelDownloader
         _ => $"https://www.modelscope.ai/models/{MsRepo}/resolve/master/{RelPath(tierMs, file)}",
     };
 
-    private string VadUrl(string file) => $"https://huggingface.co/{HfRepo}/resolve/main/deployment/models/vad/{file}";
+    // Silero VAD does NOT live in the ASR model repos: both the Hugging Face and the ModelScope
+    // path under deployment/models/vad/ return 404, which used to strand a first run on
+    // "ENGINE FAILED: 404" after the ASR tier had already downloaded. The one URL that is actually
+    // published is silero-vad's own v4.0 asset (the same file the MSI build stages).
+    private const string SileroVadUrl = "https://github.com/snakers4/silero-vad/raw/v4.0/files/silero_vad.onnx";
+
+    private string VadUrl(string file) => file == "silero_vad.onnx"
+        ? SileroVadUrl
+        : $"https://huggingface.co/{HfRepo}/resolve/main/deployment/models/vad/{file}";
 
     /// <summary>Ensure the tier's ASR files exist locally, downloading what's missing.</summary>
     public async Task EnsureTierAsync(ModelPaths paths, IProgress<DownloadProgress>? progress = null, CancellationToken ct = default)

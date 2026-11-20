@@ -26,12 +26,16 @@ public partial class TrayPopupWindow : Window
     private readonly IAppController _app;
     private Settings S => _app.Settings;
     private static bool Zh => L10n.Resolved is Lang.Zh or Lang.Hant;
+    private bool _closing;   // a fade-out is in flight; ignore re-entrant Deactivated
 
     public TrayPopupWindow(IAppController app)
     {
         _app = app;
         InitializeComponent();
-        Deactivated += (_, _) => { if (Environment.GetEnvironmentVariable("VIBEXASR_OPEN") != "popup") Hide(); };
+        Palette.Attach(this);
+        Palette.Changed += OnPaletteChanged;
+        Closed += (_, _) => Palette.Changed -= OnPaletteChanged;
+        Deactivated += (_, _) => { if (Environment.GetEnvironmentVariable("VIBEXASR_OPEN") != "popup") HideWithMotion(); };
         Loaded += (_, _) => SelfCapture();
     }
 
@@ -45,6 +49,7 @@ public partial class TrayPopupWindow : Window
         Left = wa.Right - ActualWidth - 4;
         Top = wa.Bottom - ActualHeight - 4;
         Activate();
+        EnterWithMotion();
     }
 
     /// <summary>Show near a screen point (the launcher's top-right) — its bottom-right corner anchors
@@ -60,6 +65,31 @@ public partial class TrayPopupWindow : Window
         Left = Math.Max(wa.Left + 4, Math.Min(left, wa.Right - ActualWidth - 4));
         Top = Math.Max(wa.Top + 4, Math.Min(top, wa.Bottom - ActualHeight - 4));
         Activate();
+        EnterWithMotion();
+    }
+
+    /// <summary>Dropdown entrance: it drops 6 px into place while fading in (a scale-pop on a menu
+    /// anchored to the tray reads as a bubble, not a menu).</summary>
+    private void EnterWithMotion()
+    {
+        _closing = false;
+        if (Content is not FrameworkElement fe) return;
+        Motion.Reset(fe);
+        Motion.SlideIn(fe, -6, Motion.Base);
+    }
+
+    /// <summary>Fade out before hiding — the menu used to vanish on the first Deactivated frame.</summary>
+    private void HideWithMotion()
+    {
+        if (_closing) return;
+        if (Content is not FrameworkElement fe || !Motion.Enabled || !IsVisible) { Hide(); return; }
+        _closing = true;
+        Motion.SlideOut(fe, -6, Motion.Fast, () =>
+        {
+            _closing = false;
+            Hide();
+            Motion.Reset(fe);
+        });
     }
 
     /// <summary>Refresh dynamic state (listening dot, recent text, enable toggle). Cheap re-layout.</summary>
@@ -148,7 +178,7 @@ public partial class TrayPopupWindow : Window
             tplGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             tplGrid.Children.Add(new TextBlock { Text = L10n.T("popup.template"), Foreground = Br("Text"), FontSize = 13, VerticalAlignment = VerticalAlignment.Center });
             var chip = new Border { CornerRadius = new CornerRadius(7), Background = Br("AccentSoft"), Padding = new Thickness(11, 4, 11, 4), Cursor = Cursors.Hand, HorizontalAlignment = HorizontalAlignment.Right,
-                Child = new TextBlock { Text = ids[cur].name + "  ⇄", Foreground = Br("AccentA"), FontSize = 12.5, FontWeight = FontWeights.SemiBold } };
+                Child = new TextBlock { Text = ids[cur].name + "  ⇄", Foreground = Br("AccentText"), FontSize = 12.5, FontWeight = FontWeights.SemiBold } };
             chip.MouseLeftButtonUp += (_, _) => { var next = ids[(cur + 1) % ids.Count].id; _app.SetActiveTemplate(next); Rebuild(); };
             Grid.SetColumn(chip, 1); tplGrid.Children.Add(chip);
             Root.Children.Add(tplGrid);
@@ -188,30 +218,23 @@ public partial class TrayPopupWindow : Window
         return row;
     }
 
+    /// <summary>Danger-@-25% chip tint, scheme-aware (was a hard-coded #FF6B6B fill).</summary>
+    private void OnPaletteChanged() { if (IsVisible) Rebuild(); }
+
     private Style St(string key) => (Style)FindResource(key);
     private Brush Br(string key)
     {
-        if (key == "Danger25") return new SolidColorBrush(System.Windows.Media.Color.FromArgb(41, 0xFF, 0x6B, 0x6B));
+        if (key == "Danger25") return Palette.Get("Danger25");
         return (Brush)FindResource(key);
     }
 
     private void SelfCapture()
     {
-        var shot = Environment.GetEnvironmentVariable("VIBEXASR_SHOT");
-        if (string.IsNullOrEmpty(shot)) return;
+        if (string.IsNullOrEmpty(DevShots.Target)) return;
         Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(() =>
-        {
-            try
+            DevShots.Capture(this, DevShots.Seq > 1 ? 16 : 350, 30, () =>
             {
-                int w = (int)Math.Ceiling(ActualWidth), h = (int)Math.Ceiling(ActualHeight);
-                var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap(w, h, 96, 96, PixelFormats.Pbgra32);
-                rtb.Render(this);
-                var enc = new System.Windows.Media.Imaging.PngBitmapEncoder();
-                enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
-                using var fs = System.IO.File.Create(shot); enc.Save(fs);
-            }
-            catch { }
-            if (System.Windows.Application.Current is { } a) a.Shutdown(); else Close();
-        }));
+                if (System.Windows.Application.Current is { } a) a.Shutdown(); else Close();
+            })));
     }
 }

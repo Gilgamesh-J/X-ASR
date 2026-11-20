@@ -78,10 +78,10 @@ public partial class SettingsWindow
                 wsp.Children.Add(g);
             }
             if (pages > 1) wsp.Children.Add(Pager(_hwPage, pages, p => { _hwPage = p; SelectTab("dictionary"); }));
-            var addHw = new TextBlock { Text = "⊕ " + L10n.T("hw.add"), Foreground = Br("AccentA"), FontSize = 13, Margin = new Thickness(0, 6, 0, 0), Cursor = Cursors.Hand };
+            var addHw = new TextBlock { Text = "⊕ " + L10n.T("hw.add"), Foreground = Br("AccentText"), FontSize = 13, Margin = new Thickness(0, 6, 0, 0), Cursor = Cursors.Hand };
             addHw.MouseLeftButtonUp += (_, _) => { _hotwords.Add(""); _hwPage = (_hotwords.Count - 1) / HwPerPage; SelectTab("dictionary"); };
             wsp.Children.Add(addHw);
-            Content.Children.Add(new Border { Style = St("Card"), Child = wsp });
+            ContentHost.Children.Add(new Border { Style = St("Card"), Child = wsp });
 
             // strength (segmented) + homophone + footer
             AddCard(
@@ -140,10 +140,10 @@ public partial class SettingsWindow
                 Grid.SetColumn(del, 3); g.Children.Add(del);
                 rsp.Children.Add(g);
             }
-            var addRep = new TextBlock { Text = "⊕ " + L10n.T("rep.add"), Foreground = Br("AccentA"), FontSize = 13, Margin = new Thickness(0, 6, 0, 0), Cursor = Cursors.Hand };
+            var addRep = new TextBlock { Text = "⊕ " + L10n.T("rep.add"), Foreground = Br("AccentText"), FontSize = 13, Margin = new Thickness(0, 6, 0, 0), Cursor = Cursors.Hand };
             addRep.MouseLeftButtonUp += (_, _) => { _reps.Add(new RepRule()); SelectTab("dictionary"); };
             rsp.Children.Add(addRep);
-            Content.Children.Add(new Border { Style = St("Card"), Child = rsp });
+            ContentHost.Children.Add(new Border { Style = St("Card"), Child = rsp });
             AddFooter(L10n.T("rep.count", _reps.Count(r => r.From.Trim().Length > 0)), () => { ApplyReps(); SelectTab("dictionary"); },
                 onExport: () => ExportTextFile(RepText(), "vibe-replacements.txt"),
                 onImport: () =>
@@ -182,7 +182,7 @@ public partial class SettingsWindow
         {
             bool sel = v == value;
             var seg = new Border { CornerRadius = new CornerRadius(6), Background = sel ? Br("AccentSoft") : System.Windows.Media.Brushes.Transparent, Padding = new Thickness(15, 5, 15, 5), Cursor = Cursors.Hand,
-                Child = new TextBlock { Text = l, Foreground = sel ? Br("AccentA") : Br("TextMuted"), FontSize = 12.5, FontWeight = sel ? FontWeights.SemiBold : FontWeights.Normal } };
+                Child = new TextBlock { Text = l, Foreground = sel ? Br("AccentText") : Br("TextMuted"), FontSize = 12.5, FontWeight = sel ? FontWeights.SemiBold : FontWeights.Normal } };
             seg.MouseLeftButtonUp += (_, _) => onPick(v);
             sp.Children.Add(seg);
         }
@@ -213,7 +213,7 @@ public partial class SettingsWindow
         save.Click += (_, _) => onSave();
         btns.Children.Add(save);
         Grid.SetColumn(btns, 1); g.Children.Add(btns);
-        Content.Children.Add(g);
+        ContentHost.Children.Add(g);
     }
 
     // ---- import / export (macOS LexiconIO parity) ----
@@ -265,9 +265,9 @@ public partial class SettingsWindow
             AddCardRaw(trigGrid, exp);
         }
 
-        var add = new TextBlock { Text = "⊕ " + L10n.T("snip.add"), Foreground = Br("AccentA"), FontSize = 13, Margin = new Thickness(20, 4, 0, 4), Cursor = Cursors.Hand };
+        var add = new TextBlock { Text = "⊕ " + L10n.T("snip.add"), Foreground = Br("AccentText"), FontSize = 13, Margin = new Thickness(20, 4, 0, 4), Cursor = Cursors.Hand };
         add.MouseLeftButtonUp += (_, _) => { _snips.Add(new Snip()); SaveSnips(); SelectTab("snippet"); };
-        Content.Children.Add(add);
+        ContentHost.Children.Add(add);
 
         // footer: count + save
         var footGrid = new Grid { Margin = new Thickness(20, 6, 8, 0) };
@@ -285,7 +285,7 @@ public partial class SettingsWindow
         saveBtn.Click += (_, _) => { SaveSnips(); SelectTab("snippet"); };
         footBtns.Children.Add(saveBtn);
         Grid.SetColumn(footBtns, 1); footGrid.Children.Add(footBtns);
-        Content.Children.Add(footGrid);
+        ContentHost.Children.Add(footGrid);
     }
 
     private void SaveSnips() => _app.SetSnippets(S.SnippetsEnabled, SerializeSnips(_snips));
@@ -332,7 +332,7 @@ public partial class SettingsWindow
         var head = new StackPanel { Margin = new Thickness(16, 12, 16, 12) };
         head.Children.Add(new TextBlock { Text = L10n.T("model.headline.title"), Style = St("RowTitle"), FontWeight = FontWeights.SemiBold });
         head.Children.Add(new TextBlock { Text = L10n.T("model.headline.repo"), Style = St("RowDesc"), FontFamily = new FontFamily("Cascadia Mono, Consolas") });
-        Content.Children.Add(new Border { Style = St("Card"), Child = head });
+        ContentHost.Children.Add(new Border { Style = St("Card"), Child = head });
 
         // download source picker (CDN加速链接 / ModelScope / HuggingFace)
         AddCard(Row(L10n.T("model.source"), L10n.T("model.source.help2"),
@@ -351,7 +351,7 @@ public partial class SettingsWindow
             card.MouseLeftButtonUp += (_, _) => { _app.SelectTier(t); SelectTab("model"); };
             grid.Children.Add(card);
         }
-        Content.Children.Add(new Border { Style = St("Card"), Child = grid });
+        ContentHost.Children.Add(new Border { Style = St("Card"), Child = grid });
         AddNote(L10n.T("model.tier.help"));
 
         // model management: per-tier download / cancel / use / delete + live progress
@@ -561,7 +561,7 @@ public partial class SettingsWindow
         var bannerBg = new SolidColorBrush(WithAlpha(((SolidColorBrush)Br(granted ? "Success" : "Warn")).Color, 28));
         var banner = new Border { CornerRadius = new CornerRadius(12), Background = bannerBg, Padding = new Thickness(16, 12, 16, 12), Margin = new Thickness(0, 0, 0, 10),
             Child = new TextBlock { Text = L10n.T(granted ? "perm.banner.ok" : "perm.banner.warn"), Foreground = Br(granted ? "Success" : "Warn"), FontSize = 13, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap } };
-        Content.Children.Add(banner);
+        ContentHost.Children.Add(banner);
 
         // mic granted pill
         var micPill = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
@@ -590,6 +590,8 @@ public partial class SettingsWindow
     private (bool done, bool ok, int ping, string add, string msg) _cloudTest;
     private List<CloudTemplate> _cloudTemplates = new();
     private List<CloudCustomProvider> _cloudCustoms = new();
+    private bool _cloudModelFree;            // model field is free text (custom model id / custom provider)
+    private string? _cloudEditingCustom;     // "" = adding a new custom provider, an id = editing that one
     private List<CloudProfile> _cloudProfiles = new();
 
     /// <summary>AI 润色 (cloud OR local) is on. macOS polishOn — while on, dictation is locked to 说完插入
@@ -656,7 +658,7 @@ public partial class SettingsWindow
         head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var titleRow = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         titleRow.Children.Add(new TextBlock { Text = L10n.Loc("AI 润色(本地)", "AI Polish (local)", "AI 整形(ローカル)", "AI 다듬기(로컬)"), Foreground = Br("Text"), FontSize = 14, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
-        titleRow.Children.Add(new Border { Style = St("Badge"), Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, Child = new TextBlock { Text = "Beta", Foreground = Br("AccentA"), FontSize = 10, FontWeight = FontWeights.SemiBold } });
+        titleRow.Children.Add(new Border { Style = St("Badge"), Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, Child = new TextBlock { Text = "Beta", Foreground = Br("AccentText"), FontSize = 10, FontWeight = FontWeights.SemiBold } });
         Grid.SetColumn(titleRow, 0); head.Children.Add(titleRow);
         var tog = new ToggleButton { Style = St("Toggle"), IsChecked = S.LocalRefinerEnabled, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
         // Click = user-only (programmatic IsChecked in Refresh won't re-fire). macOS requestEnable: enabling polish
@@ -764,7 +766,57 @@ public partial class SettingsWindow
         sp.Children.Add(new TextBlock { Text = L10n.Loc("量化 GGUF · 首次联网下载", "Quantized GGUF · downloaded on first use", "量子化 GGUF · 初回オンラインDL", "양자화 GGUF · 첫 사용 시 다운로드"),
             Foreground = Br("TextMuted"), FontSize = 11, Opacity = 0.7, Margin = new Thickness(0, 4, 0, 0) });
 
-        Content.Children.Add(new Border { Style = St("Card"), Child = sp });
+        ContentHost.Children.Add(new Border { Style = St("Card"), Child = sp });
+    }
+
+    /// <summary>Add or update a custom OpenAI-compatible provider and select it.</summary>
+    private void SaveCustomProvider(string? editId, string name, string url)
+    {
+        name = (name ?? "").Trim();
+        url = (url ?? "").Trim();
+        if (name.Length == 0 || url.Length == 0) return;      // both are required; the button stays inert otherwise
+        if (!url.Contains("://", StringComparison.Ordinal)) url = "https://" + url;
+
+        var id = string.IsNullOrEmpty(editId) ? NextCustomId() : editId!;
+        var cust = _cloudCustoms.FirstOrDefault(z => z.Id == id);
+        if (cust is null) { cust = new CloudCustomProvider { Id = id }; _cloudCustoms.Add(cust); }
+        cust.Label = name;
+        cust.BaseURL = url;
+
+        S.CloudProvider = id;
+        S.CloudBaseURL = url;
+        if (string.IsNullOrEmpty(editId)) S.CloudModel = "";   // a new endpoint has no presets: type the model
+        _cloudModelFree = true;
+        _cloudEditingCustom = null;
+        _cloudTest = default;
+        CloudCommit();
+        SelectTab("cloud");
+    }
+
+    /// <summary>Delete a custom provider (and its saved key); falls back to OpenAI if it was selected.</summary>
+    private void DeleteCustomProvider(string id)
+    {
+        try { SecretStore.Set("cloud_profile_" + id, ""); } catch { }
+        _cloudCustoms.RemoveAll(z => z.Id == id);
+        if (_cloudEditingCustom == id) _cloudEditingCustom = null;
+        if (S.CloudProvider == id)
+        {
+            var fallback = LlmProviders.Find("openai");
+            S.CloudProvider = fallback.Key;
+            S.CloudBaseURL = fallback.BaseUrl;
+            S.CloudModel = fallback.DefaultModel;
+            _cloudModelFree = false;
+        }
+        CloudCommit();
+        SelectTab("cloud");
+    }
+
+    private string NextCustomId()
+    {
+        int n = _cloudCustoms.Count + 1;
+        var id = "custom" + n;
+        while (_cloudCustoms.Any(z => z.Id == id)) { n++; id = "custom" + n; }
+        return id;
     }
 
     private void CloudCommit()
@@ -810,25 +862,104 @@ public partial class SettingsWindow
             // profiles bar
             sp.Children.Add(CloudProfilesBar());
 
-            var prov = LlmProviders.Find(S.CloudProvider);
+            // A custom provider has no preset catalog: Find() would fall back to OpenAI (All[0]) and the card
+            // would then show OpenAI's model list, model label and price. Keep it null and derive everything.
+            var isCustomProvider = !LlmProviders.IsBuiltin(S.CloudProvider);
+            var prov = isCustomProvider ? null : LlmProviders.Find(S.CloudProvider);
+            var models = prov?.Models ?? Array.Empty<LlmModel>();
+            var modelLabel = prov?.ModelLabel ?? L10n.Loc("模型", "Model", "モデル", "모델");
             // provider + model (two columns)
             var provOpts = LlmProviders.All.Select(p => (p.Key, (LlmProviders.IsBuiltin(p.Key) ? p.Mark + "  " : "") + LlmProviders.LocalizedLabel(p.Key, Zh)))
                 .Concat(_cloudCustoms.Select(c => (c.Id, "•  " + c.Label))).ToArray();
             var provSel = Select(provOpts, S.CloudProvider, OnProviderChanged, 240); provSel.HorizontalAlignment = HorizontalAlignment.Stretch; provSel.Width = double.NaN;
 
+            // Model: the preset list plus a 自定义… escape hatch. Also free text when the saved id is not in the
+            // list (a model released after this build, or LM Studio's real /v1/models name) or when the provider
+            // is a custom one. Before this the picker was the ONLY way in, so those models were unreachable.
+            bool freeModel = _cloudModelFree || models.Length == 0 || models.All(m => m.Id != S.CloudModel);
             FrameworkElement modelCtl;
-            if (prov.Models.Length > 0)
+            if (freeModel)
             {
-                var mopts = prov.Models.Select(m => (m.Id, m.Label)).ToArray();
-                var ms = Select(mopts, S.CloudModel, v => { S.CloudModel = v; _cloudTest = default; _app.ApplyCloudSettings(); }, 240);
+                var g = new Grid();
+                g.ColumnDefinitions.Add(new ColumnDefinition());
+                g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                var box = MonoField(S.CloudModel, t => { S.CloudModel = t.Trim(); _cloudTest = default; _app.ApplyCloudSettings(); });
+                Grid.SetColumn(box, 0); g.Children.Add(box);
+                if (models.Length > 0)
+                {
+                    var back = new TextBlock { Text = L10n.Loc("← 预设", "← presets", "← プリセット", "← 프리셋"), Foreground = Br("AccentText"), FontSize = 11.5, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, Cursor = Cursors.Hand };
+                    back.MouseLeftButtonUp += (_, _) =>
+                    {
+                        _cloudModelFree = false;
+                        if (models.All(m => m.Id != S.CloudModel)) { S.CloudModel = models[0].Id; _cloudTest = default; _app.ApplyCloudSettings(); }
+                        SelectTab("cloud");
+                    };
+                    Grid.SetColumn(back, 1); g.Children.Add(back);
+                }
+                modelCtl = g;
+            }
+            else
+            {
+                var mopts = models.Select(m => (m.Id, m.Label))
+                    .Append(("__custom__", L10n.Loc("自定义…", "Custom…", "カスタム…", "사용자 지정…"))).ToArray();
+                var ms = Select(mopts, S.CloudModel, v =>
+                {
+                    if (v == "__custom__")
+                    {
+                        _cloudModelFree = true;
+                        // Defer: never rebuild this tab inside the ComboBox's own SelectionChanged.
+                        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, new Action(() => SelectTab("cloud")));
+                        return;
+                    }
+                    S.CloudModel = v; _cloudTest = default; _app.ApplyCloudSettings();
+                }, 240);
                 ms.HorizontalAlignment = HorizontalAlignment.Stretch; ms.Width = double.NaN; modelCtl = ms;
             }
-            else modelCtl = MonoField(S.CloudModel, t => { S.CloudModel = t; _cloudTest = default; _app.ApplyCloudSettings(); });
-            sp.Children.Add(TwoCol(L10n.Loc("服务商", "Provider", "プロバイダー", "제공업체"), provSel, prov.ModelLabel, modelCtl));
+            sp.Children.Add(TwoCol(L10n.Loc("服务商", "Provider", "プロバイダー", "제공업체"), provSel, modelLabel, modelCtl));
+
+            // ---- 我的服务商: custom OpenAI-compatible endpoints (add / edit / delete) ----
+            sp.Children.Add(new TextBlock { Text = L10n.Loc("我的服务商(自定义)", "My providers (custom)", "マイプロバイダー(カスタム)", "내 제공업체(사용자 지정)"), Foreground = Br("Text"), FontSize = 12.5, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 14, 0, 6) });
+            var chips = new WrapPanel();
+            foreach (var cust in _cloudCustoms.ToList())
+            {
+                var cid = cust.Id;
+                var chipSp = new StackPanel { Orientation = Orientation.Horizontal };
+                var chipName = new TextBlock { Text = cust.Label, Foreground = Br("Text"), FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Cursor = Cursors.Hand };
+                chipName.MouseLeftButtonUp += (_, _) => { S.CloudProvider = cid; S.CloudBaseURL = cust.BaseURL; _cloudModelFree = true; _cloudTest = default; CloudCommit(); SelectTab("cloud"); };
+                chipSp.Children.Add(chipName);
+                var chipEdit = new TextBlock { Text = "✎", Foreground = Br("TextMuted"), FontSize = 11, Margin = new Thickness(9, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, Cursor = Cursors.Hand };
+                chipEdit.MouseLeftButtonUp += (_, e) => { e.Handled = true; _cloudEditingCustom = cid; SelectTab("cloud"); };
+                chipSp.Children.Add(chipEdit);
+                var chipDel = new TextBlock { Text = "✕", Foreground = Br("TextMuted"), FontSize = 11, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, Cursor = Cursors.Hand };
+                chipDel.MouseLeftButtonUp += (_, e) => { e.Handled = true; DeleteCustomProvider(cid); };
+                chipSp.Children.Add(chipDel);
+                chips.Children.Add(new Border { CornerRadius = new CornerRadius(8), Background = Br("Field"), Padding = new Thickness(11, 6, 11, 6), Margin = new Thickness(0, 0, 8, 8), Child = chipSp });
+            }
+            var addChip = new Border { CornerRadius = new CornerRadius(8), BorderBrush = Br("Hairline"), BorderThickness = new Thickness(1), Padding = new Thickness(11, 6, 11, 6), Margin = new Thickness(0, 0, 8, 8), Cursor = Cursors.Hand,
+                Child = new TextBlock { Text = L10n.Loc("＋ 新增服务商", "＋ New provider", "＋ プロバイダーを追加", "＋ 제공업체 추가"), Foreground = Br("AccentText"), FontSize = 12 } };
+            addChip.MouseLeftButtonUp += (_, _) => { _cloudEditingCustom = ""; SelectTab("cloud"); };
+            chips.Children.Add(addChip);
+            sp.Children.Add(chips);
+
+            if (_cloudEditingCustom is not null)
+            {
+                var editingCust = string.IsNullOrEmpty(_cloudEditingCustom) ? null : _cloudCustoms.FirstOrDefault(z => z.Id == _cloudEditingCustom);
+                var custName = MonoField(editingCust?.Label ?? "", _ => { }, "My provider");
+                var custUrl = MonoField(editingCust?.BaseURL ?? "", _ => { }, "https://host/v1");
+                sp.Children.Add(TwoCol(L10n.Loc("名称", "Name", "名前", "이름"), custName, "Base URL", custUrl));
+                var custBtns = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
+                var custSave = new Button { Style = St("Solid"), Content = editingCust is null ? L10n.Loc("添加服务商", "Add provider", "追加", "추가") : L10n.Loc("保存修改", "Save", "保存", "저장") };
+                custSave.Click += (_, _) => SaveCustomProvider(editingCust?.Id, custName.Text, custUrl.Text);
+                var custCancel = new Button { Style = St("Ghost"), Content = L10n.T("cancel"), Margin = new Thickness(8, 0, 0, 0) };
+                custCancel.Click += (_, _) => { _cloudEditingCustom = null; SelectTab("cloud"); };
+                custBtns.Children.Add(custSave); custBtns.Children.Add(custCancel);
+                sp.Children.Add(custBtns);
+                sp.Children.Add(new TextBlock { Text = L10n.Loc("任何兼容 OpenAI /chat/completions 的服务都能接:填 Base URL,模型名在上面那栏直接输入。", "Any OpenAI-compatible /chat/completions endpoint works: put the base URL here and type the model id above.", "OpenAI 互換の /chat/completions なら何でも接続できます。Base URL をここに入れ、モデル名は上の欄に直接入力してください。", "OpenAI 호환 /chat/completions 엔드포인트라면 무엇이든 연결됩니다. Base URL을 여기에 넣고 모델 이름은 위 칸에 직접 입력하세요."), Style = St("RowDesc"), Margin = new Thickness(2, 8, 0, 0), TextWrapping = TextWrapping.Wrap });
+            }
 
             // base url
             sp.Children.Add(Label(L10n.Loc("API 地址(Base URL)", "API base URL", "API アドレス(Base URL)", "API 주소(Base URL)")));
-            sp.Children.Add(MonoField(S.CloudBaseURL, t => { S.CloudBaseURL = t; _cloudTest = default; _app.ApplyCloudSettings(); }, prov.BaseUrl));
+            sp.Children.Add(MonoField(S.CloudBaseURL, t => { S.CloudBaseURL = t; _cloudTest = default; _app.ApplyCloudSettings(); }, prov?.BaseUrl ?? "https://host/v1"));
 
             // api key + show
             sp.Children.Add(Label("API Key"));
@@ -842,6 +973,8 @@ public partial class SettingsWindow
             showBtn.Click += (_, _) => { if (_cloudShowKey) { S.CloudApiKey = keyBox.Text.Trim(); _app.ApplyCloudSettings(); } _cloudShowKey = !_cloudShowKey; SelectTab("cloud"); };
             Grid.SetColumn(showBtn, 1); keyGrid.Children.Add(showBtn);
             sp.Children.Add(keyGrid);
+            if (CloudRefiner.IsLocalEndpoint(S.CloudBaseURL))
+                sp.Children.Add(new TextBlock { Text = L10n.Loc("这是本机地址,API Key 可以留空 —— 请求不会带 Authorization 头。", "Local endpoint: the API key may stay empty — no Authorization header is sent.", "ローカルアドレスのため API Key は空欄で構いません(Authorization ヘッダーは送信されません)。", "로컬 주소이므로 API Key는 비워도 됩니다(Authorization 헤더를 보내지 않습니다)."), Style = St("RowDesc"), Margin = new Thickness(2, 6, 0, 0), TextWrapping = TextWrapping.Wrap });
 
             // temperature + max tokens
             var tempBox = MonoField(S.CloudTemperature.ToString("0.##"), t => { if (double.TryParse(t, out var v)) { S.CloudTemperature = Math.Min(2, Math.Max(0, v)); _app.ApplyCloudSettings(); } });
@@ -863,11 +996,11 @@ public partial class SettingsWindow
             testRow.Children.Add(testBtn); testRow.Children.Add(testMsg);
             sp.Children.Add(testRow);
 
-            if (!string.IsNullOrEmpty(prov.Price))
-                sp.Children.Add(new TextBlock { Text = "💳 " + prov.Price, Style = St("RowDesc"), Margin = new Thickness(0, 12, 0, 0) });
+            if (!string.IsNullOrEmpty(prov?.Price))
+                sp.Children.Add(new TextBlock { Text = (LlmProviders.IsLocal(prov!.Key) ? "🖥 " : "💳 ") + prov.Price, Style = St("RowDesc"), Margin = new Thickness(0, 12, 0, 0) });
         }
 
-        Content.Children.Add(new Border { Style = St("Card"), Child = sp });
+        ContentHost.Children.Add(new Border { Style = St("Card"), Child = sp });
     }
 
     private FrameworkElement CloudProfilesBar()
@@ -917,7 +1050,7 @@ public partial class SettingsWindow
         try { SecretStore.Set("cloud_profile_" + S.CloudProvider, S.CloudApiKey); } catch { }
         S.CloudProvider = key;
         if (LlmProviders.IsBuiltin(key)) { var p = LlmProviders.Find(key); S.CloudBaseURL = p.BaseUrl; S.CloudModel = string.IsNullOrEmpty(p.DefaultModel) ? (p.Models.FirstOrDefault()?.Id ?? "") : p.DefaultModel; }
-        else { var c = _cloudCustoms.FirstOrDefault(z => z.Id == key); if (c is not null) S.CloudBaseURL = c.BaseURL; }
+        else { var c = _cloudCustoms.FirstOrDefault(z => z.Id == key); if (c is not null) S.CloudBaseURL = c.BaseURL; _cloudModelFree = true; }
         try { var k = SecretStore.Get("cloud_profile_" + key); if (!string.IsNullOrEmpty(k)) S.CloudApiKey = k; } catch { }
         _cloudTest = default; _app.ApplyCloudSettings(); SelectTab("cloud");
     }
@@ -956,13 +1089,13 @@ public partial class SettingsWindow
                 top.Children.Add(new TextBlock { Text = $"{e.At:HH:mm:ss}  {CloudProviderLabel(e.Provider)} · {e.Model}", Foreground = Br("Text"), FontSize = 12, VerticalAlignment = VerticalAlignment.Center });
                 top.Children.Add(new TextBlock { Text = $"   {e.Ms}ms  {CloudLogText(e.Status)}", Foreground = Br(CloudLogBrush(e.Status)), FontFamily = new FontFamily("Cascadia Mono, Consolas"), FontSize = 11, VerticalAlignment = VerticalAlignment.Center });
                 row.Children.Add(top);
-                string change = e.Status != "ok" ? $"「{Clip(e.Input, 40)}」 · {CloudLogText(e.Status)}"
-                              : e.Input.Trim() == e.Output.Trim() ? $"「{Clip(e.Input, 60)}」 · {L10n.Loc("无修改", "no change", "変更なし", "변경 없음")}"
-                              : L10n.Loc($"从「{Clip(e.Input, 30)}」改成「{Clip(e.Output, 30)}」", $"{Clip(e.Input, 30)} → {Clip(e.Output, 30)}", $"「{Clip(e.Input, 30)}」→「{Clip(e.Output, 30)}」", $"「{Clip(e.Input, 30)}」→「{Clip(e.Output, 30)}」");
+                string change = e.Status != "ok" ? $"「{Elide(e.Input, 40)}」 · {CloudLogText(e.Status)}"
+                              : e.Input.Trim() == e.Output.Trim() ? $"「{Elide(e.Input, 60)}」 · {L10n.Loc("无修改", "no change", "変更なし", "변경 없음")}"
+                              : L10n.Loc($"从「{Elide(e.Input, 30)}」改成「{Elide(e.Output, 30)}」", $"{Elide(e.Input, 30)} → {Elide(e.Output, 30)}", $"「{Elide(e.Input, 30)}」→「{Elide(e.Output, 30)}」", $"「{Elide(e.Input, 30)}」→「{Elide(e.Output, 30)}」");
                 row.Children.Add(new TextBlock { Text = change, Style = St("RowDesc"), Margin = new Thickness(16, 2, 0, 0), TextWrapping = TextWrapping.Wrap });
                 sp.Children.Add(row);
             }
-        Content.Children.Add(new Border { Style = St("Card"), Child = sp });
+        ContentHost.Children.Add(new Border { Style = St("Card"), Child = sp });
     }
 
     private void BuildCloudPromptCard()
@@ -1007,7 +1140,7 @@ public partial class SettingsWindow
         sp.Children.Add(editor);
         sp.Children.Add(new TextBlock { Text = L10n.Loc("「自动」由上方开关实时拼成;改后可恢复自动。模板可增删、点选即套用。占位符调用时自动替换(热词取自「词典」)。", "“Auto” is built from the toggles above. Tokens are filled at call time.", "「自動」は上のスイッチからリアルタイムに生成されます。編集後も自動に戻せます。テンプレートは追加・削除でき、クリックで適用。プレースホルダーは呼び出し時に自動置換されます(ホットワードは「辞書」から取得)。", "「자동」은 위 스위치로 실시간 생성됩니다. 수정 후 자동으로 되돌릴 수 있습니다. 템플릿은 추가·삭제할 수 있고 클릭하면 적용됩니다. 자리표시자는 호출 시 자동 치환됩니다(핫워드는 「사전」에서 가져옴)."), Style = St("RowDesc"), Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap });
 
-        Content.Children.Add(new Border { Style = St("Card"), Child = sp });
+        ContentHost.Children.Add(new Border { Style = St("Card"), Child = sp });
     }
 
     private string CloudCurrentPrompt()
@@ -1032,7 +1165,7 @@ public partial class SettingsWindow
         return chip;
     }
 
-    private static string Clip(string s, int n) { s = (s ?? "").Replace("\n", " ").Trim(); return s.Length > n ? s.Substring(0, n) + "…" : s; }
+    private static string Elide(string s, int n) { s = (s ?? "").Replace("\n", " ").Trim(); return s.Length > n ? s.Substring(0, n) + "…" : s; }
     private string CloudLogBrush(string s) => s == "ok" ? "Success" : (s is "timeout" or "skipped" ? "Warn" : "Danger");
     private string CloudLogText(string s) => s switch { "ok" => L10n.Loc("成功", "ok", "成功", "성공"), "timeout" => L10n.Loc("超时", "timeout", "タイムアウト", "시간 초과"), "skipped" => L10n.Loc("超 token", "skipped", "トークン超過", "토큰 초과"), _ => L10n.Loc("失败", "error", "失敗", "실패") };
 
@@ -1063,13 +1196,13 @@ public partial class SettingsWindow
     private TextBlock Label(string text) => new() { Text = text, Style = St("RowDesc"), Margin = new Thickness(2, 6, 0, 4) };
 
     private void AddNote(string text) =>
-        Content.Children.Add(new TextBlock { Text = text, Style = St("RowDesc"), Margin = new Thickness(18, 0, 18, 10), TextWrapping = TextWrapping.Wrap });
+        ContentHost.Children.Add(new TextBlock { Text = text, Style = St("RowDesc"), Margin = new Thickness(18, 0, 18, 10), TextWrapping = TextWrapping.Wrap });
 
     private void AddCardRaw(params UIElement[] children)
     {
         var sp = new StackPanel { Margin = new Thickness(18, 10, 18, 12) };
         foreach (var c in children) sp.Children.Add(c);
-        Content.Children.Add(new Border { Style = St("Card"), Child = sp });
+        ContentHost.Children.Add(new Border { Style = St("Card"), Child = sp });
     }
 
     private Grid RowInline(string title, FrameworkElement control)

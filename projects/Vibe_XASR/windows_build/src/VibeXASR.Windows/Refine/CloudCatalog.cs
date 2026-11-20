@@ -539,8 +539,10 @@ internal static class CloudCatalog
                     new LlmModel("Qwen/Qwen2.5-72B-Instruct-Turbo", "Qwen2.5 72B Instruct Turbo", ""),
                 } },
         new() { Key = "ollama", Label = "Ollama", Mark = "Ol", Cls = "ollama", Desc = "Ollama",
-                BaseUrl = "http://127.0.0.1:11434", KeyHint = "API Key", ModelLabel = "模型", DefaultModel = "llama3.1",
-                Price = "按 token 计费(以所选服务商为准)",
+                // Ollama's OpenAI-compatible surface lives under /v1 — without it the client posts to
+                // /chat/completions and gets a 404 every time.
+                BaseUrl = "http://127.0.0.1:11434/v1", KeyHint = "API Key", ModelLabel = "模型", DefaultModel = "llama3.1",
+                Price = "本机运行 · 不产生调用费用",
                 Models = new[]
                 {
                     new LlmModel("deepseek-v3.1:671b", "DeepSeek V3.1", ""),
@@ -571,7 +573,7 @@ internal static class CloudCatalog
                 } },
         new() { Key = "lmstudio", Label = "LM Studio", Mark = "LM", Cls = "lmstudio", Desc = "LM Studio",
                 BaseUrl = "http://127.0.0.1:1234/v1", KeyHint = "API Key", ModelLabel = "模型", DefaultModel = "lmstudio-local",
-                Price = "按 token 计费(以所选服务商为准)",
+                Price = "本机运行 · 不产生调用费用",
                 Models = new[]
                 {
                     new LlmModel("lmstudio-local", "LM Studio (Local)", ""),

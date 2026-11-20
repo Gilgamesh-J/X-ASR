@@ -108,6 +108,19 @@ public sealed class OnboardingForm : Form
         Activate(); BringToFront();
     }
 
+    /// <summary>Repaint for a live light/dark switch. Every step is painted from Theme inside
+    /// OnPaint, so the body follows at once; the buttons were styled at construction and are
+    /// re-styled here (WinForms has no DynamicResource).</summary>
+    public void ApplyScheme()
+    {
+        if (IsDisposed) return;
+        if (InvokeRequired) { BeginInvoke((Action)ApplyScheme); return; }
+        BackColor = Theme.Surface;
+        Theme.ApplyDarkTitleBar(Handle);
+        Sync();
+        Invalidate(true);
+    }
+
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics; Draw.Hq(g);
@@ -118,8 +131,19 @@ public sealed class OnboardingForm : Form
         var logoRect = new RectangleF(28, 24, 34, 34);
         Draw.FillAccent(g, logoRect, 10);
         Draw.LogoBars(g, logoRect, new float[] { 8, 16, 22, 13, 9 }, 3f, 2.5f);
-        TextRenderer.DrawText(g, "Vibe XASR", Theme.Ui(13f, FontStyle.Bold), new Rectangle(72, 25, 220, 22), Theme.Text, LeftMid);
-        TextRenderer.DrawText(g, _zh ? "使用引导" : "Quick start", Theme.Ui(9f), new Rectangle(72, 45, 220, 16), Theme.TextMuted, LeftMid);
+        // Wordmark metrics are MEASURED, not assumed: at 150% DPI a 13pt bold face needs ~25px of
+        // line box, and a fixed 22px rect clipped the descender off "Vibe XASR" (the "b" and "p"
+        // lost their tails in the screenshot). Any hard-coded single-line height here is wrong on
+        // somebody's monitor.
+        var wordFont = Theme.Ui(13f, FontStyle.Bold);
+        var subFont = Theme.Ui(9f);
+        int wordH = TextRenderer.MeasureText("Vibe XASR", wordFont, new Size(int.MaxValue, int.MaxValue),
+            TextFormatFlags.NoPadding).Height;
+        int subH = TextRenderer.MeasureText(_zh ? "使用引导" : "Quick start", subFont, new Size(int.MaxValue, int.MaxValue),
+            TextFormatFlags.NoPadding).Height;
+        int headerTop = 24 + (34 - (wordH + subH)) / 2;   // centre the two lines against the 34px logo
+        TextRenderer.DrawText(g, "Vibe XASR", wordFont, new Rectangle(72, headerTop, 220, wordH), Theme.Text, LeftMid);
+        TextRenderer.DrawText(g, _zh ? "使用引导" : "Quick start", subFont, new Rectangle(72, headerTop + wordH, 220, subH), Theme.TextMuted, LeftMid);
         for (int i = 0; i < StepCount; i++)
         {
             var col = i == _step ? Theme.AccentA : Theme.HairlineStrong;
@@ -144,7 +168,7 @@ public sealed class OnboardingForm : Form
         string body = _zh
             ? "Vibe XASR 没有主窗口,装好后一直在后台待命。它的图标在任务栏最右侧的通知区(挨着时钟)。"
             : "Vibe XASR has no main window — it runs quietly in the background. Its icon sits in the notification area at the far right of the taskbar (next to the clock).";
-        int bh = SettingsForm.MeasureWrapped(body, Theme.Ui(10.5f), W - 56);
+        int bh = TextMeasure.Wrapped(body, Theme.Ui(10.5f), W - 56);
         TextRenderer.DrawText(g, body, Theme.Ui(10.5f), new Rectangle(28, y, W - 56, bh), Theme.TextMuted, LeftTopWrap); y += bh + 14;
 
         // Mock taskbar strip with a highlighted tray cluster on the right.
@@ -172,7 +196,7 @@ public sealed class OnboardingForm : Form
         string tip = _zh
             ? "💡 看不到图标?点通知区的 ⌃ 展开隐藏图标,把 Vibe XASR 拖到任务栏上即可一直显示。"
             : "💡 Don't see it? Click the ⌃ arrow to show hidden icons, then drag Vibe XASR onto the taskbar to keep it visible.";
-        int th = SettingsForm.MeasureWrapped(tip, Theme.Ui(9.5f), W - 56);
+        int th = TextMeasure.Wrapped(tip, Theme.Ui(9.5f), W - 56);
         TextRenderer.DrawText(g, tip, Theme.Ui(9.5f), new Rectangle(28, y, W - 56, th), Theme.TextMuted, LeftTopWrap);
     }
 
@@ -243,10 +267,10 @@ public sealed class OnboardingForm : Form
             ? (_zh ? $"按住 {_keyName} 说话即可。" : $"Hold {_keyName} and speak.")
             : (_zh ? "首次启动要加载本地模型(约 560MB),通常几秒到十几秒,请稍候。" : "First launch loads the local model (~560MB) — usually a few seconds to ~15s.");
         int subW = W - 56 - 52;
-        int subH = SettingsForm.MeasureWrapped(sub, subFont, subW);
+        int subH = TextMeasure.Wrapped(sub, subFont, subW);
         int cardH = Math.Max(60, 34 + subH + 12);
         var card = new RectangleF(28, y, W - 56, cardH);
-        Draw.FillRounded(g, card, 12, ready ? SettingsForm.Blend(Theme.Success, Theme.Surface, 0.14f) : Theme.Surface2);
+        Draw.FillRounded(g, card, 12, ready ? TextMeasure.Blend(Theme.Success, Theme.Surface, 0.14f) : Theme.Surface2);
         Draw.StrokeRounded(g, card, 12, ready ? Color.FromArgb(120, Theme.Success) : Theme.Hairline);
         var dotC = ready ? Theme.Success : Theme.Warn;
         using (var b = new SolidBrush(dotC)) g.FillEllipse(b, (int)card.X + 16, (int)card.Y + 16, 12, 12);
@@ -257,7 +281,7 @@ public sealed class OnboardingForm : Form
         string mic = _app.MicGranted()
             ? (_zh ? "🎙 首次说话时若 Windows 询问麦克风权限,请点「允许」。" : "🎙 If Windows asks for microphone access on first use, click Allow.")
             : (_zh ? "⚠️ 麦克风似乎被禁用 —— 在 设置 › 权限 里开启,否则无法识别。" : "⚠️ Microphone seems blocked — enable it in Settings › Permissions.");
-        int mh = SettingsForm.MeasureWrapped(mic, Theme.Ui(9.5f), W - 56);
+        int mh = TextMeasure.Wrapped(mic, Theme.Ui(9.5f), W - 56);
         TextRenderer.DrawText(g, mic, Theme.Ui(9.5f), new Rectangle(28, y, W - 56, mh), _app.MicGranted() ? Theme.TextMuted : Theme.Warn, LeftTopWrap); y += mh + 12;
 
         TextRenderer.DrawText(g, _zh ? "🔒 100% 本地 · 离线 · 数据不出设备" : "🔒 100% local · offline · nothing leaves this device",

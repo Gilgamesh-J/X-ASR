@@ -103,6 +103,10 @@ public sealed class Settings
     /// <summary>UI language code (auto, en, zh, ja, ko). Auto follows the system.</summary>
     public string Language { get; set; } = "auto";
 
+    /// <summary>UI theme: "auto" (follow Windows) | "dark" | "light". Applies to both UI stacks —
+    /// the WinForms surfaces read it through Theme.ResolveDark, the WPF ones through Palette.</summary>
+    public string Theme { get; set; } = "auto";
+
     /// <summary>Keep the dictated text on the clipboard after each result (issue #12 parity).</summary>
     public bool ClipboardOverwrite { get; set; } = false;
 
@@ -300,19 +304,32 @@ public sealed class Settings
     {
         Directory.CreateDirectory(AppPaths.DataDir);
         var json = JsonSerializer.Serialize(this, JsonOpts);
-        // Write-then-rename for crash safety.
+        // Write-then-rename for crash safety. The ".json.tmp" sidecar is left in place if the copy
+        // throws (the process is usually gone by then) — deleting it in a finally only hides the
+        // failure, so the leftover file is the diagnostic.
         var tmp = FilePath + ".tmp";
         File.WriteAllText(tmp, json);
-        File.Copy(tmp, FilePath, overwrite: true);
-        File.Delete(tmp);
+        File.Move(tmp, FilePath, overwrite: true);
     }
 }
 
 /// <summary>Shared %APPDATA%/VibeXASR resolution.</summary>
 public static class AppPaths
 {
+    private static string? _override;
+
+    /// <summary>
+    /// Point every data path at another directory for the rest of the process.
+    ///
+    /// This exists for automated checks and for the dev screenshot host: without it, any test that
+    /// exercises the real <see cref="Settings"/> / <see cref="HistoryStore"/> classes writes into the
+    /// user's live %APPDATA%VibeXASR and can clobber their settings and history. Tests get their own
+    /// sandbox instead of a mock that drifts from the shipping code.
+    /// </summary>
+    public static void OverrideDataDir(string? dir) => _override = string.IsNullOrWhiteSpace(dir) ? null : dir;
+
     public static string DataDir =>
-        Path.Combine(
+        _override ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "VibeXASR");
 }

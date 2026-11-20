@@ -18,6 +18,17 @@ namespace VibeXASR.Windows.Input;
 /// </summary>
 public static class TextInserter
 {
+    /// <summary>
+    /// The window that would receive an insert right now. Callers snapshot this when the utterance ends and
+    /// compare before inserting, because a cloud-refined insert can land many seconds later — long enough for
+    /// the user to click somewhere else and have the sentence typed into the wrong window.
+    /// </summary>
+    public static IntPtr ForegroundWindow => GetForegroundWindow();
+
+    /// <summary>Is the snapshot still the foreground window? (false → do not type into it.)</summary>
+    public static bool StillForeground(IntPtr snapshot)
+        => snapshot != IntPtr.Zero && GetForegroundWindow() == snapshot;
+
     /// <summary>Insert a whole string at the caret (Paste mode, or a chunk in Type mode).</summary>
     public static void InsertText(string text)
     {
@@ -179,6 +190,9 @@ public static class TextInserter
     // TODO(win): verify SendInput signature/marshalling on your SDK. cbSize must equal
     // sizeof(INPUT) for the running architecture (struct packing differs x64 vs arm64? no —
     // both are 64-bit LLP64, layout is identical, but confirm).
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
     [DllImport("user32.dll", SetLastError = true)]
     private static extern uint SendInput(uint nInputs,
         [MarshalAs(UnmanagedType.LPArray)] INPUT[] pInputs, int cbSize);

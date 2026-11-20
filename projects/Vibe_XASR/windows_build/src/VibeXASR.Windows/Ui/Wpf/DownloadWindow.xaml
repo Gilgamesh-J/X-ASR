@@ -11,11 +11,11 @@
     <Window.Resources>
         <ResourceDictionary Source="Styles.xaml"/>
     </Window.Resources>
-    <Border CornerRadius="16" Background="{StaticResource Surface}" BorderBrush="{StaticResource Hairline}" BorderThickness="1" Margin="12">
-        <Border.Effect><DropShadowEffect BlurRadius="28" ShadowDepth="4" Opacity="0.55" Color="#000000"/></Border.Effect>
+    <Border CornerRadius="16" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Hairline}" BorderThickness="1" Margin="12"
+            Effect="{DynamicResource Shadow3}">
         <StackPanel Margin="22,20,22,18">
             <StackPanel Orientation="Horizontal">
-                <Border Width="40" Height="40" CornerRadius="11" Background="{StaticResource AccentGrad}">
+                <Border Width="40" Height="40" CornerRadius="11" Background="{DynamicResource AccentGrad}">
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
                         <Rectangle Width="3" Height="11" Fill="White" RadiusX="1.5" RadiusY="1.5" Margin="1.5,0"/>
                         <Rectangle Width="3" Height="18" Fill="White" RadiusX="1.5" RadiusY="1.5" Margin="1.5,0"/>
@@ -23,13 +23,18 @@
                     </StackPanel>
                 </Border>
                 <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
-                    <TextBlock x:Name="TitleText" Foreground="{StaticResource Text}" FontSize="14.5" FontWeight="SemiBold"/>
-                    <TextBlock x:Name="DetailText" Foreground="{StaticResource TextMuted}" FontSize="11" FontFamily="Cascadia Mono, Consolas" Margin="0,3,0,0"/>
+                    <TextBlock x:Name="TitleText" Foreground="{DynamicResource Text}" FontSize="14.5" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="DetailText" Foreground="{DynamicResource TextMuted}" FontSize="11" FontFamily="Cascadia Mono, Consolas" Margin="0,3,0,0"/>
                 </StackPanel>
             </StackPanel>
 
-            <Border x:Name="Track" Height="6" CornerRadius="3" Background="{StaticResource Field}" Margin="0,18,0,0">
-                <Border x:Name="Fill" Height="6" CornerRadius="3" Background="{StaticResource AccentGrad}" HorizontalAlignment="Left" Width="0"/>
+            <Border x:Name="Track" Height="6" CornerRadius="3" Background="{DynamicResource Field}" Margin="0,18,0,0">
+                <!-- The fill spans the whole track and is scaled horizontally, so progress glides
+                     (a Width-driven bar can only jump between layout passes). -->
+                <Border x:Name="Fill" Height="6" CornerRadius="3" Background="{DynamicResource AccentGrad}"
+                        HorizontalAlignment="Stretch" RenderTransformOrigin="0,0.5">
+                    <Border.RenderTransform><ScaleTransform x:Name="FillScale" ScaleX="0" ScaleY="1"/></Border.RenderTransform>
+                </Border>
             </Border>
 
             <Button x:Name="CancelBtn" Style="{StaticResource Ghost}" HorizontalAlignment="Right" Margin="0,16,0,0"/>

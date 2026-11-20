@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Win32;   // SystemEvents: live theme-change notifications
 using System.Windows.Forms;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
@@ -46,7 +47,6 @@ public sealed class TrayApp : IDisposable, IAppController
     private Ui.Wpf.TrayPopupWindow? _popup;
     private Ui.Wpf.LauncherWindow? _launcher;
     private Ui.Wpf.SettingsWindow? _settingsWpf;
-    private Ui.Wpf.HistoryWindow? _historyWpf;
     private OnCallSessionForm? _onCallSessionForm;
     private OnboardingForm? _onboarding;
     private Ui.Wpf.DownloadWindow? _dl;
@@ -59,16 +59,30 @@ public sealed class TrayApp : IDisposable, IAppController
     private readonly List<HistoryEntry> _onCallSession = new();
 
     private SynchronizationContext _ui = null!;
+    // Hidden control that owns the tray's UI thread message queue. RunOnUi/Updater marshal through its
+    // handle instead of trusting whatever SynchronizationContext.Current happened to be at Start():
+    // a context whose Post() has no destination control silently falls back to the THREAD POOL, which
+    // is how a normal launch used to die with "calling thread must be STA" the moment it opened the
+    // launcher pill (see UiThreadContext).
+    private Control? _uiMarshaller;
     private string _typedSoFar = string.Empty;
     // Post-insert actions (撤销 / 换模板重润色): the last inserted text + the raw ASR that produced it.
     private string _lastInsertText = string.Empty;
+    private IntPtr _lastTargetHwnd;   // window that received _lastInsertText (undo/repolish must match it)
     private string _lastRawText = string.Empty;
+    // The on-device rule edits for the utterance currently being polished — filled by
+    // ApplyCorrectionsForCloud and consumed by BuildCloudSystem's {{changes}} slot (prompt rule 5).
+    private string _cloudChanges = "";
     private volatile bool _engineReady;
     private volatile bool _engineSwapping;
     private bool _dictationEnabled = true;
     private volatile bool _listening;
     private volatile bool _engineError;    // engine/model load failed → tray shows the error tint
     private volatile float _holdPeakRms;   // loudest mic level seen during the current hold (diagnostics)
+    private DateTime _holdStartedAt;       // when the current hold began (a tap must not nag about a silent mic)
+    private float _lastHoldPeakRms;        // that hold's peak level + length, snapshotted at release so the
+    private double _lastHoldMs;            // empty-result hint can decide with both facts in hand
+    private bool _micSilentHintShown;      // the "no audio was captured" balloon, at most once per launch
     private bool _announcedReady;          // show the "ready" tray prompt once per launch
 
     public TrayApp()
@@ -77,13 +91,25 @@ public sealed class TrayApp : IDisposable, IAppController
         _tierBeforeSwap = _settings.Tier;
         _models = new ModelManager(_settings);
         L10n.Current = L10n.FromCode(_settings.Language);
-        Theme.IsDark = true; // dark-first like macOS; respect system below
-        Theme.IsDark = DetectDark();
+        ApplyTheme();   // both UI stacks resolve the same decision from the saved preference
+        // Windows broadcasts WM_SETTINGCHANGE ("ImmersiveColorSet") when the user flips the app theme.
+        // Without this the two UI stacks drift apart until the next launch. With an explicit
+        // "dark"/"light" preference the broadcast is still received but the resolution ignores it.
+        SystemEvents.UserPreferenceChanged += (_, e) =>
+        {
+            if (e.Category != UserPreferenceCategory.General) return;
+            RunOnUi(ApplyTheme);
+        };
     }
 
     public void Start()
     {
-        _ui = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
+        var inherited = SynchronizationContext.Current;
+        _uiMarshaller = new Control();          // never shown: it exists only to own the UI thread's queue
+        _ = _uiMarshaller.Handle;               // force the handle now, on this (STA) thread
+        _ui = new UiThreadContext(_uiMarshaller);
+        Diag.Log($"ui: SynchronizationContext.Current was {inherited?.GetType().Name ?? "null"} -> " +
+                 $"marshalling through own control (handle={_uiMarshaller.Handle})");
 
         _overlay = new Ui.Wpf.OverlayWindow();
         _overlay.SetStaySeconds(_settings.HudStaySeconds);
@@ -92,7 +118,7 @@ public sealed class TrayApp : IDisposable, IAppController
         _overlay.ViewRequested += (_, _) => OpenOnCallSession();
         _overlay.PauseRequested += (_, _) => TogglePause();
         _overlay.UndoRequested += (_, _) => UndoLastInsert();
-        _overlay.RepolishRequested += (_, id) => RepolishLast(id);
+        _overlay.RepolishRequested += (_, id) => _ = RepolishLastAsync(id);
         // Realize the overlay handle so cross-thread BeginInvoke works immediately.
         _ = _overlay.Handle;
 
@@ -121,7 +147,7 @@ public sealed class TrayApp : IDisposable, IAppController
         var openArg = openRaw is not null && openRaw.Contains(':') ? openRaw.Split(':', 2)[1] : null;
         // Normal launch starts the engine; "popup"/"rebind" also do (they need real engine state).
         // settings/history/overlay hooks skip it for clean screenshots.
-        if (string.IsNullOrEmpty(open) || open is "popup" or "rebind")
+        if (string.IsNullOrEmpty(open) || open is "popup" or "rebind" or "holdtest")
             _ = EnsureEngineAsync(swapping: false);
         // Auto-update (WinSparkle): start automatic daily checks on a normal launch only —
         // never during the screenshot/test hooks (settings/history/overlay/selftest…).
@@ -143,6 +169,7 @@ public sealed class TrayApp : IDisposable, IAppController
             case "rebind": SetHotkey(int.TryParse(openArg, out var vk) ? vk : 0x78, 0); break; // live-rebind self-test
             case "selftest": _ = SelfTestAsync(openArg); break; // feed a WAV through the engine
             case "mictest": _ = MicTestAsync(); break; // capture real mic → save WAV → run ASR
+            case "holdtest": _ = HoldTestAsync(); break; // one empty PTT hold (silent-mic branch)
             case "checkupdate": Updater.Initialize(_ui, Quit); Updater.CheckForUpdatesUi(); break; // WinSparkle UI
             case "onboard": ShowOnboarding(); break; // preview the first-run guide
             case "dicttest": RunDictTest(); break; // 词典 post-processor validation
@@ -389,6 +416,30 @@ public sealed class TrayApp : IDisposable, IAppController
         catch (Exception ex) { Diag.Log("selftest FAILED: " + ex); }
     }
 
+    /// <summary>
+    /// Diagnostic: run ONE push-to-talk hold with nothing spoken, so the "captured pure digital silence"
+    /// branch is exercised without a physical key press (an injected SendInput key can never reach the
+    /// hook — it drops LLKHF_INJECTED events on purpose). VIBEXASR_OPEN=holdtest.
+    /// Logs the peak RMS, the hint decision, and the empty OnFinal.
+    /// </summary>
+    private async Task HoldTestAsync()
+    {
+        try
+        {
+            var wait = System.Diagnostics.Stopwatch.StartNew();
+            while (!_engineReady && wait.ElapsedMilliseconds < 30000) await Task.Delay(150);
+            Diag.Log($"holdtest: engineReady={_engineReady}");
+            if (!_engineReady) return;
+
+            RunOnUi(() => { if (!StartDictation()) Diag.Log("holdtest: StartDictation refused"); });
+            await Task.Delay(1400);            // a realistic hold length, with nothing spoken
+            RunOnUi(StopDictation);
+            await Task.Delay(900);             // let the worker finalize + the balloon fire
+            Diag.Log($"holdtest: done (peak={_lastHoldPeakRms:F6} holdMs={_lastHoldMs:F0} hintShown={_micSilentHintShown})");
+        }
+        catch (Exception ex) { Diag.Log("holdtest FAILED: " + ex); }
+    }
+
     /// <summary>Once per launch, tell the user the app is live + how to use it (tray prompt),
     /// since otherwise it just sits silently in the notification area.</summary>
     private void AnnounceReady()
@@ -471,7 +522,10 @@ public sealed class TrayApp : IDisposable, IAppController
         {
             var samples = new List<float>();
             int frames = 0; float peak = 0;
-            var mic = new MicCapture();
+            // The diagnostic has to listen to the SAME endpoint the app dictates from, otherwise it
+            // "proves" a device the user is not using (it used to pass no id at all, so a user who had
+            // picked the built-in array in Settings still had the silent headset tested).
+            var mic = new MicCapture(_settings.MicDeviceId);
             mic.FrameAvailable += (_, f) =>
             {
                 frames++;
@@ -622,6 +676,7 @@ public sealed class TrayApp : IDisposable, IAppController
         if (_listening) return true;
         _typedSoFar = string.Empty;
         _holdPeakRms = 0;
+        _holdStartedAt = DateTime.UtcNow;
         _listening = true;
         UpdateTrayIcon();
         _engine?.BeginHold();
@@ -638,8 +693,51 @@ public sealed class TrayApp : IDisposable, IAppController
         _listening = false;
         UpdateTrayIcon();
         Diag.Log($"StopDictation; peak mic RMS={_holdPeakRms:F4}");
+        RecordHoldLevel();
         _engine?.EndHold();
         if (_settings.CueEnabled) CueSound.Shared.Play(_settings.CueTheme, start: false);  // 提示音: stop chime
+    }
+
+    /// <summary>
+    /// Remember how loud (or rather how silent) this hold was, so the END of the utterance can decide
+    /// whether to explain the empty result. Snapshotting here is what keeps the hint honest: it fires
+    /// only for "held long enough + nothing recognized + the mic returned essentially no signal", and
+    /// never for a quiet-but-real utterance that did produce text.
+    /// </summary>
+    private void RecordHoldLevel()
+    {
+        _lastHoldPeakRms = _holdPeakRms;
+        _lastHoldMs = (DateTime.UtcNow - _holdStartedAt).TotalMilliseconds;
+        if (_lastHoldMs >= 700 && !_settings.MicMuted && _lastHoldPeakRms < MicSilentRms)
+            Diag.Log($"mic: hold captured digital silence (peak RMS {_lastHoldPeakRms:F6}) — device muted, asleep, or not the one the user speaks into");
+    }
+
+    /// <summary>
+    /// Floor below which a hold carried no usable signal: -70 dBFS. A live microphone always has a noise
+    /// floor well above it (the built-in array idles at ~1.6e-3 here, i.e. 16x this); a Bluetooth headset
+    /// whose mic stream is asleep returns round zeros. Measured on this machine: 0.0000 (headset asleep,
+    /// the case that produced the silent transcripts), 0.0001 (headset awake but quiet), 0.0016 (array).
+    /// </summary>
+    private const float MicSilentRms = 3e-4f;
+
+    /// <summary>
+    /// The user held the key, nothing was recognized, and the capture was silent: say so once instead of
+    /// doing nothing. Without this the only trace is a log line the user will never read. Skipped when the
+    /// user muted the mic on purpose (that silence is the feature working).
+    /// </summary>
+    private void HintIfMicWasSilent()
+    {
+        if (_settings.MicMuted || _micSilentHintShown) return;
+        if (_lastHoldMs < 700 || _lastHoldPeakRms >= MicSilentRms) return;
+        _micSilentHintShown = true;   // a hint, not a nag — once per launch
+        bool zh = L10n.Resolved is Lang.Zh or Lang.Hant;
+        // Two causes produce the same silence — nobody spoke, or the capture path is dead — and the level
+        // alone cannot tell them apart, so the message names both instead of accusing the hardware.
+        _tray?.ShowBalloonTip(9000,
+            zh ? "没有听到任何声音" : "No audio was captured",
+            zh ? "这次按住时没有录到声音：可能还没开口，也可能麦克风没在工作。若你确实说了话，请检查系统默认录音设备、是否被静音，或在 设置 › 听写 里换一个设备。"
+               : "Nothing was recorded during that hold: either you had not started speaking yet, or the microphone is not working. If you did speak, check the Windows default recording device and mute state, or pick another device in Settings › Dictation.",
+            ToolTipIcon.Warning);
     }
 
     // ---- engine events (raised on the engine worker thread) ----
@@ -669,6 +767,9 @@ public sealed class TrayApp : IDisposable, IAppController
         if (string.IsNullOrEmpty(e.Text))
         {
             if (_settings.Mode != DictationMode.OnCall) _overlay?.HideOverlay();
+            // Nothing recognized: only now do we know the hold really came up empty, so this is where a
+            // dead capture path gets explained to the user (see HintIfMicWasSilent).
+            HintIfMicWasSilent();
             return;
         }
 
@@ -681,8 +782,11 @@ public sealed class TrayApp : IDisposable, IAppController
         {
             // Feed the cloud the text WITHOUT local 数字规整/去口水 (cloud handles them) so its 改口
             // edits aren't rejected by the digit guardrail. Pinyin/replacements/口令 still apply.
-            var cloudIn = ApplyCorrections(e.Text, isFinal: true, forCloud: true);
-            _ = RefineAndInsertAsync(e.Text, cloudIn);
+            var (cloudIn, cloudChanges) = ApplyCorrectionsForCloud(e.Text);
+            _cloudChanges = cloudChanges;
+            // The insert happens after the network round-trip; remember who had focus NOW.
+            var target = Input.TextInserter.ForegroundWindow;
+            _ = RefineAndInsertAsync(e.Text, cloudIn, target);
             return;
         }
 
@@ -695,6 +799,7 @@ public sealed class TrayApp : IDisposable, IAppController
                 TextInserter.InsertText(text);
                 MaybeOverwriteClipboard(text);
                 _lastInsertText = text; _lastRawText = e.Text;
+                _lastTargetHwnd = Input.TextInserter.ForegroundWindow;
                 _overlay?.SetText(text);     // so the "已插入 · N 字" count reflects the inserted text
                 _overlay?.ShowInserted(withUndo: true);
                 break;
@@ -702,6 +807,7 @@ public sealed class TrayApp : IDisposable, IAppController
                 // 逐字: converge to the streaming-level text (no tail rewrite); history + clipboard keep the full correction.
                 StreamTypeDiff(ApplyCorrections(e.Text, isFinal: false));
                 _lastInsertText = _typedSoFar; _lastRawText = e.Text;   // actual on-screen text (post-繁体)
+                _lastTargetHwnd = Input.TextInserter.ForegroundWindow;
                 _typedSoFar = string.Empty;
                 MaybeOverwriteClipboard(text);
                 _overlay?.SetText(text);
@@ -719,7 +825,7 @@ public sealed class TrayApp : IDisposable, IAppController
 
     /// <summary>Cloud-refine the final text (Beta), then insert. Paste mode only. Shows the 润色中 HUD;
     /// any error/timeout/guardrail-reject falls back to the rule-version text (never drops text).</summary>
-    private async Task RefineAndInsertAsync(string rawAsr, string ruleText)
+    private async Task RefineAndInsertAsync(string rawAsr, string ruleText, IntPtr target)
     {
         CloudRequestLog.Shared.PendingOriginal = rawAsr;   // log input = raw ASR (no rules)
         _overlay?.ShowRefining();
@@ -730,14 +836,44 @@ public sealed class TrayApp : IDisposable, IAppController
         RunOnUi(() =>
         {
             _history.Append(finalText, "paste", ephemeral: !_settings.HistoryEnabled);
-            TextInserter.InsertText(finalText);
+            _cloudChanges = "";
+            if (!InsertIntoSnapshotWindow(finalText, target))
+            {
+                // Focus moved while the model was working: copy instead of typing into a stranger.
+                _lastInsertText = ""; _lastRawText = rawAsr;
+                _overlay?.SetRepolishTemplates(RepolishTemplateList());
+                _overlay?.SetText(L10n.Loc("已复制到剪贴板(目标窗口已切换)", "Copied — the target window changed",
+                    "クリップボードにコピー(入力先が変更されました)", "클립보드에 복사됨(대상 창이 바뀜)"));
+                _overlay?.ShowInserted(withUndo: false, withRepolish: true);
+                RefreshOpenWindows();
+                return;
+            }
             MaybeOverwriteClipboard(finalText);
-            _lastInsertText = finalText; _lastRawText = rawAsr;
+            _lastInsertText = finalText; _lastRawText = rawAsr; _lastTargetHwnd = target;
             _overlay?.SetRepolishTemplates(RepolishTemplateList());
             _overlay?.SetText(finalText);
             _overlay?.ShowInserted(withUndo: true, withRepolish: true);
             RefreshOpenWindows();
         });
+    }
+
+    /// <summary>
+    /// Type into <paramref name="target"/> only if it is still the foreground window; otherwise put the text on
+    /// the clipboard and return false. Cloud polish can take 25 s, which is plenty of time for the user to have
+    /// moved on — typing the sentence into whatever window is in front by then is worse than not typing at all.
+    /// </summary>
+    private bool InsertIntoSnapshotWindow(string text, IntPtr target, int backspaceFirst = 0)
+    {
+        // A zero snapshot means the probe failed rather than "focus moved" — fall through and insert.
+        if (target == IntPtr.Zero || Input.TextInserter.StillForeground(target))
+        {
+            if (backspaceFirst > 0) TextInserter.Backspace(backspaceFirst);
+            TextInserter.InsertText(text);
+            return true;
+        }
+        Diag.Log($"insert deferred to clipboard: focus changed (target={target}, now={Input.TextInserter.ForegroundWindow})");
+        try { Clipboard.SetText(text); } catch { /* clipboard busy: the HUD still shows the text */ }
+        return false;
     }
 
     /// <summary>撤销: delete the just-inserted text (backspace its length) and dismiss the HUD.</summary>
@@ -760,34 +896,53 @@ public sealed class TrayApp : IDisposable, IAppController
 
     /// <summary>换模板重润色: re-run cloud 润色 on the SAME original ASR text with the CHOSEN template,
     /// then replace the inserted text. The user picks the template from the HUD menu (macOS parity).</summary>
-    private async void RepolishLast(string templateId)
+    private async Task RepolishLastAsync(string templateId)
     {
         if (string.IsNullOrEmpty(_lastRawText) || !Refiner.Active) return;
+
+        var target = _lastTargetHwnd;   // the window the original insert landed in
+        int replaced = _lastInsertText.Length;
 
         _settings.CloudActiveTemplate = string.IsNullOrEmpty(templateId) ? "auto" : templateId;
         _settings.Save(); ConfigureRefiner();   // BuildCloudSystem now uses the chosen template's prompt
         _popup?.Invalidate();
-
-        if (_lastInsertText.Length > 0) Input.TextInserter.Backspace(_lastInsertText.Length);
         _overlay?.ShowRefining();
 
         // feed the cloud the ORIGINAL raw ASR (context) routed through the chosen template's prompt
-        var ruleText = ApplyCorrections(_lastRawText, isFinal: true, forCloud: true);
+        var (ruleText, changes) = ApplyCorrectionsForCloud(_lastRawText);
+        _cloudChanges = changes;
         CloudRequestLog.Shared.PendingOriginal = _lastRawText;
         string outText;
         try { outText = await Refiner.PolishAsync(ruleText); }
         catch (Exception ex) { Diag.Log("re-polish failed: " + ex.Message); outText = ruleText; }
         outText = MaybeTraditional(outText);
+
+        // The old text is only retracted once the replacement is in hand (and only from the same window):
+        // a failed or slow re-polish used to delete the sentence first and put it back later.
         RunOnUi(() =>
         {
-            _history.Append(outText, "paste", ephemeral: !_settings.HistoryEnabled);
-            Input.TextInserter.InsertText(outText);
-            MaybeOverwriteClipboard(outText);
-            _lastInsertText = outText;
-            _overlay?.SetRepolishTemplates(RepolishTemplateList());
-            _overlay?.SetText(outText);
-            _overlay?.ShowInserted(withUndo: true, withRepolish: true);
-            RefreshOpenWindows();
+            try
+            {
+                _history.Append(outText, "paste", ephemeral: !_settings.HistoryEnabled);
+                _cloudChanges = "";
+                if (!InsertIntoSnapshotWindow(outText, target, replaced))
+                {
+                    _lastInsertText = ""; _lastTargetHwnd = IntPtr.Zero;
+                    _overlay?.SetRepolishTemplates(RepolishTemplateList());
+                    _overlay?.SetText(L10n.Loc("已复制到剪贴板(目标窗口已切换)", "Copied — the target window changed",
+                        "クリップボードにコピー(入力先が変更されました)", "클립보드에 복사됨(대상 창이 바뀜)"));
+                    _overlay?.ShowInserted(withUndo: false, withRepolish: true);
+                    RefreshOpenWindows();
+                    return;
+                }
+                MaybeOverwriteClipboard(outText);
+                _lastInsertText = outText; _lastTargetHwnd = target;
+                _overlay?.SetRepolishTemplates(RepolishTemplateList());
+                _overlay?.SetText(outText);
+                _overlay?.ShowInserted(withUndo: true, withRepolish: true);
+                RefreshOpenWindows();
+            }
+            catch (Exception ex) { Diag.Log("repolish UI failed: " + ex.Message); }
         });
     }
 
@@ -810,8 +965,7 @@ public sealed class TrayApp : IDisposable, IAppController
             if (_engine is not null) _engine.Mode = DictationMode.Paste;
         }
 
-        if (_settings.CloudEnabled && !string.IsNullOrWhiteSpace(_settings.CloudApiKey)
-            && !string.IsNullOrWhiteSpace(_settings.CloudBaseURL) && !string.IsNullOrWhiteSpace(_settings.CloudModel))
+        if (_settings.CloudEnabled && CloudRefiner.Configured(_settings.CloudBaseURL, _settings.CloudModel, _settings.CloudApiKey))
         {
             DisposeLocalRefiner();                             // free the local model's RAM when cloud is the backend
             Refiner.Backend = new CloudRefiner(_settings.CloudBaseURL, _settings.CloudModel, _settings.CloudApiKey,
@@ -930,7 +1084,8 @@ public sealed class TrayApp : IDisposable, IAppController
                 : CloudPrompt.BuildAuto(_settings.CloudNumbers, _settings.CloudFillers, _settings.CloudRestate, _settings.CloudHotwords);
         }
         var hotwords = _settings.HotwordsEnabled ? _settings.HotwordsText.Replace("\n", "、") : "";
-        return CloudPrompt.FillStatic(sys, hotwords, DateTime.Now.ToString("yyyy-MM-dd"));
+        // The fourth argument is the one that used to be silently omitted (default "(无)").
+        return CloudPrompt.FillStatic(sys, hotwords, DateTime.Now.ToString("yyyy-MM-dd"), _cloudChanges);
     }
 
     /// <summary>Apply changed 润色 settings: persist + reconfigure the backend. (IAppController)</summary>
@@ -940,6 +1095,29 @@ public sealed class TrayApp : IDisposable, IAppController
     /// pinyin homophone correction → text replacements → 去口水词 → 数字规整 (ITN) → 口令 expansion.
     /// Each step no-ops unless enabled + populated. Runs on FINAL text only (not streaming partials,
     /// where ITN digits would jump as you speak).</summary>
+    /// <summary>
+    /// The cloud variant of <see cref="ApplyCorrections"/> (same stages, same order) that ALSO reports what it
+    /// changed, so the prompt's {{changes}} slot can show the model the edits it is being asked to double-check.
+    /// Before this existed the slot was always "(无)" and that rule was dead.
+    /// </summary>
+    private (string Text, string Changes) ApplyCorrectionsForCloud(string raw)
+    {
+        var lines = new List<string>();
+        var text = raw ?? "";
+        void Step(string label, Func<string, string> apply)
+        {
+            var next = apply(text);
+            if (next == text) return;
+            var d = Refine.TextDiff.Describe(text, next);
+            if (!string.IsNullOrWhiteSpace(d)) lines.Add(label + ": " + d);
+            text = next;
+        }
+        if (_settings.PinyinFuzzyEnabled && _pinyin.IsActive) Step(L10n.Loc("同音字纠正", "homophones", "同音語の修正", "동음어 교정"), t => _pinyin.Normalize(t));
+        if (_settings.ReplacementsEnabled && _replaceRules.Count > 0) Step(L10n.Loc("替换规则", "replacements", "置換ルール", "치환 규칙"), t => Replacements.Apply(t, _replaceRules));
+        if (_settings.SnippetsEnabled && _snippetRules.Count > 0) Step(L10n.Loc("口令展开", "snippets", "スニペット展開", "스니펫 확장"), t => Replacements.Expand(t, _snippetRules));
+        return (text, string.Join("\n", lines));
+    }
+
     private string ApplyCorrections(string textIn, bool isFinal = true, bool forCloud = false)
     {
         var text = textIn;
@@ -1156,7 +1334,6 @@ public sealed class TrayApp : IDisposable, IAppController
         {
             if (_tray?.ContextMenuStrip is { } cm) RebuildTrayMenu(cm);
             if (_settingsWpf is { } sw) sw.Title = L10n.T("win.settings");
-            if (_historyWpf is { } hw) hw.Title = "Vibe XASR · " + L10n.T("history.title");
             if (_promptStudio is { } ps) ps.Title = L10n.T("studio.window");
         });
     }
@@ -1463,19 +1640,51 @@ public sealed class TrayApp : IDisposable, IAppController
         else action();
     }
 
+    /// <summary>
+    /// Marshals back to the thread that owns the tray (the only STA thread). Posts through a real
+    /// WinForms control handle, so the callbacks provably land on that thread — unlike
+    /// <c>WindowsFormsSynchronizationContext</c> grabbed from <c>SynchronizationContext.Current</c>,
+    /// whose <c>Post</c> quietly degrades to the thread pool when it has no destination control.
+    /// That degradation put WPF window construction on an MTA pool thread and killed every normal
+    /// launch with <c>InvalidOperationException: the calling thread must be STA</c>.
+    /// </summary>
+    private sealed class UiThreadContext(Control marshaller) : SynchronizationContext
+    {
+        public override void Post(SendOrPostCallback d, object? state)
+        {
+            try
+            {
+                if (marshaller.IsHandleCreated && marshaller.InvokeRequired) marshaller.BeginInvoke(d, state);
+                else d(state);   // already on the UI thread: run inline, no need to round-trip
+            }
+            catch (ObjectDisposedException) { /* shutting down */ }
+            catch (InvalidOperationException) { /* handle destroyed mid-shutdown */ }
+        }
+
+        public override void Send(SendOrPostCallback d, object? state) => Post(d, state);
+    }
+
     private static string Trunc(string? s, int n = 40)
         => string.IsNullOrEmpty(s) ? "" : (s.Length <= n ? s : s[..n] + "…");
 
-    private static bool DetectDark()
+    // There used to be a second copy of this registry read here. Two copies of the same probe is how
+    // the two UI stacks end up disagreeing, so this now delegates to the one in Theme.
+    private static bool DetectDark() => Theme.DetectDarkMode();
+
+    /// <summary>Resolve the saved theme preference and push it into both UI stacks.
+    /// <c>Theme.IsDark</c> drives WinForms (which copies colours onto controls, so each live form
+    /// needs an explicit re-apply); <c>Palette.Apply</c> swaps the WPF token dictionary, whose
+    /// DynamicResource consumers re-resolve on their own and whose code-built surfaces subscribe to
+    /// <c>Palette.Changed</c>.</summary>
+    private void ApplyTheme() =>
+        Theme.ApplyPreference(_settings.Theme, _ => _onCallSessionForm?.ApplyScheme());
+
+    /// <summary>Settings → 通用 → 外观. "auto" follows Windows; "dark"/"light" pin the scheme.</summary>
+    public void SetTheme(string preference)
     {
-        try
-        {
-            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
-                @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
-            if (key?.GetValue("AppsUseLightTheme") is int v) return v == 0;
-        }
-        catch { }
-        return true;
+        _settings.Theme = preference is "dark" or "light" ? preference : "auto";
+        _settings.Save();
+        ApplyTheme();
     }
 
     public void Dispose()
@@ -1488,5 +1697,6 @@ public sealed class TrayApp : IDisposable, IAppController
         _dl?.Close(); _dl = null; _engineDlCts?.Dispose();
         _launcher?.Close(); _launcher = null;
         if (_tray is not null) { _tray.Visible = false; _tray.Dispose(); _tray = null; }
+        _uiMarshaller?.Dispose(); _uiMarshaller = null;
     }
 }

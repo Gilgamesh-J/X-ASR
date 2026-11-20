@@ -33,14 +33,23 @@ public sealed class PromptStudioWindow : Window
     private string _copiedId = "";   // briefly-highlighted "copied" chip
     private readonly StackPanel _root = new() { Margin = new Thickness(20) };
 
-    private static SolidColorBrush Hex(string h) => new((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(h));
-    private static readonly Brush Bg = Hex("#15151B"), Surface = Hex("#1A1A22"), Surface2 = Hex("#1E1E26"),
-        AccentA = Hex("#7C5CFF"), AccentSoft = Hex("#262036"), AccentB = Hex("#38E1D6"),
-        TextB = Hex("#ECECF1"), Muted = Hex("#8A8A99"), Hair = Hex("#26FFFFFF"), Ok = Hex("#34D399"), Danger = Hex("#FF6B6B");
+    private static Brush Bg => Palette.Get("Surface");
+    private static Brush Surface => Palette.Get("Surface");
+    private static Brush Surface2 => Palette.Get("Surface2");
+    private static Brush AccentA => Palette.Get("AccentText");
+    private static Brush AccentSoft => Palette.Get("AccentSoft");
+    private static Brush AccentB => Palette.Get("AccentB");
+    private static Brush TextB => Palette.Get("Text");
+    private static Brush Muted => Palette.Get("TextMuted");
+    private static Brush Hair => Palette.Get("Hairline");
+    private static Brush Ok => Palette.Get("SuccessFill");
+    private static Brush Danger => Palette.Get("Danger");
 
     public PromptStudioWindow(IAppController app)
     {
         _app = app;
+        Palette.Attach(this);
+        Palette.Changed += OnPaletteChanged;
         Title = L10n.T("studio.window");
         Width = 580; Height = 600; MinWidth = 460; MinHeight = 420;
         Background = Bg; WindowStartupLocation = WindowStartupLocation.CenterScreen;
@@ -48,6 +57,12 @@ public sealed class PromptStudioWindow : Window
         Content = scroll;
         SourceInitialized += (_, _) => DarkTitleBar();
         Rebuild();
+    }
+
+    private void OnPaletteChanged()
+    {
+        if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(OnPaletteChanged); return; }
+        if (IsVisible) Rebuild();
     }
 
     private void Rebuild()
@@ -207,7 +222,5 @@ public sealed class PromptStudioWindow : Window
         _app.ApplyCloudSettings();
         if (rebuild) Rebuild();
     }
-
-    [System.Runtime.InteropServices.DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(IntPtr h, int attr, ref int v, int size);
-    private void DarkTitleBar() { try { var h = new System.Windows.Interop.WindowInteropHelper(this).Handle; int on = 1; DwmSetWindowAttribute(h, 20, ref on, sizeof(int)); } catch { } }
+    private void DarkTitleBar() => Theme.ApplyDarkTitleBar(new System.Windows.Interop.WindowInteropHelper(this).Handle);
 }

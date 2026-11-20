@@ -33,10 +33,10 @@
     <!-- Windows tracks the macOS base version (1.4.0) + a Windows patch suffix (.1), labelled
          "-beta". AssemblyVersion/FileVersion stay numeric (1.4.0.1) for WinSparkle + MSI version
          comparison; InformationalVersion carries the "-beta" shown on the About page. -->
-    <Version>2.0.0.4-beta</Version>
-    <FileVersion>2.0.0.4</FileVersion>
-    <AssemblyVersion>2.0.0.4</AssemblyVersion>
-    <InformationalVersion>2.0.0.4-beta</InformationalVersion>
+    <Version>2.0.0.5-beta</Version>
+    <FileVersion>2.0.0.5</FileVersion>
+    <AssemblyVersion>2.0.0.5</AssemblyVersion>
+    <InformationalVersion>2.0.0.5-beta</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 
@@ -80,7 +80,7 @@
   <!-- WinSparkle (auto-update) native DLL, x64. Copied beside the exe in publish + install dir;
        loaded via a DllImportResolver from AppContext.BaseDirectory. MIT (third_party/winsparkle/COPYING). -->
   <ItemGroup>
-    <None Include="..\..\third_party\winsparkle\WinSparkle.dll">
+    <None Include="..\..\third_party\winsparkle\WinSparkle.dll" Condition="Exists('..\..\third_party\winsparkle\WinSparkle.dll')">
       <Link>WinSparkle.dll</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
@@ -90,12 +90,25 @@
     </None>
     <!-- FireRedVAD native shim (default VAD). Loose beside the exe; loaded via NativeLoader.
          Its onnxruntime.dll import resolves to sherpa-onnx's (already loaded by the ASR). -->
-    <None Include="..\..\third_party\firered\firered_vad.dll">
+    <None Include="..\..\third_party\firered\firered_vad.dll" Condition="Exists('..\..\third_party\firered\firered_vad.dll')">
       <Link>firered_vad.dll</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </None>
   </ItemGroup>
+
+  <!-- Native DLL provenance: WinSparkle.dll comes from the WinSparkle release zip; firered_vad.dll is
+       built by third_party/firered/build-firered.ps1 (its sources + script are in-tree). BOTH are
+       committed, so a clean clone builds the complete app. The Exists guards and the check below are the
+       safety net for a checkout that strips binaries (source-only archive, a partial export): the build
+       stays green, auto-update logs "updater: init failed" and the VAD falls back to silero, instead of
+       dying at MSB3030 with no explanation. -->
+  <Target Name="_VibeXasrNativeDllCheck" BeforeTargets="Build">
+    <Warning Condition="!Exists('..\..\third_party\winsparkle\WinSparkle.dll')"
+             Text="third_party/winsparkle/WinSparkle.dll is missing — auto-update will be disabled in this build." />
+    <Warning Condition="!Exists('..\..\third_party\firered\firered_vad.dll')"
+             Text="third_party/firered/firered_vad.dll is missing — FireRed VAD will fall back to silero." />
+  </Target>
 
 </Project>
